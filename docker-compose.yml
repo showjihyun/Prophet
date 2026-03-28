@@ -27,9 +27,24 @@ services:
       timeout: 3s
       retries: 5
 
-  # Ollama (local SLM/LLM)
+  # Ollama (local SLM/LLM) — CPU mode by default, GPU via profile
   ollama:
     image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Ollama with GPU (use: docker compose --profile gpu up)
+  ollama-gpu:
+    image: ollama/ollama:latest
+    profiles: ["gpu"]
     ports:
       - "11434:11434"
     volumes:
@@ -41,6 +56,12 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # Backend (FastAPI)
   backend:
@@ -58,11 +79,17 @@ services:
       DEFAULT_LLM_PROVIDER: ollama
       LLM_TIER3_RATIO: "0.1"
       LLM_CACHE_TTL: "3600"
+      CORS_ALLOW_ORIGINS: '["http://localhost:5173","http://localhost:3000"]'
     depends_on:
       db:
         condition: service_healthy
       valkey:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Frontend (Vite dev server)
   frontend:
@@ -74,7 +101,8 @@ services:
     environment:
       VITE_API_URL: http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   pgdata:

@@ -5,7 +5,7 @@
  * Shows search input, community list with color dots, agent counts,
  * sentiment bars, and total agent count.
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Search } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 
@@ -17,7 +17,15 @@ interface CommunityItem {
   sentiment: { positive: number; neutral: number; negative: number };
 }
 
-const COMMUNITIES: CommunityItem[] = [
+const COMMUNITY_COLOR_MAP: Record<string, string> = {
+  alpha: "var(--community-alpha)",
+  beta: "var(--community-beta)",
+  gamma: "var(--community-gamma)",
+  delta: "var(--community-delta)",
+  bridge: "var(--community-bridge)",
+};
+
+const MOCK_COMMUNITIES: CommunityItem[] = [
   {
     id: "alpha",
     name: "Alpha Community",
@@ -60,12 +68,33 @@ export default function CommunityPanel() {
   const highlightedCommunity = useSimulationStore(
     (s) => s.highlightedCommunity,
   );
+  const steps = useSimulationStore((s) => s.steps);
+  const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
 
-  const filtered = COMMUNITIES.filter((c) =>
+  // Build communities from live data or fall back to mock
+  const communities = useMemo<CommunityItem[]>(() => {
+    if (!latestStep?.community_metrics) return MOCK_COMMUNITIES;
+
+    return Object.entries(latestStep.community_metrics).map(([id, metrics]) => {
+      const belief = metrics.mean_belief;
+      const positive = Math.round(Math.max(0, belief) * 100);
+      const negative = Math.round(Math.max(0, -belief) * 100);
+      const neutral = 100 - positive - negative;
+      return {
+        id: metrics.community_id,
+        name: `${id.charAt(0).toUpperCase()}${id.slice(1)} Community`,
+        color: COMMUNITY_COLOR_MAP[id.toLowerCase()] ?? "var(--community-alpha)",
+        agents: metrics.adoption_count,
+        sentiment: { positive, neutral, negative },
+      };
+    });
+  }, [latestStep]);
+
+  const filtered = communities.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const totalAgents = COMMUNITIES.reduce((sum, c) => sum + c.agents, 0);
+  const totalAgents = communities.reduce((sum, c) => sum + c.agents, 0);
 
   return (
     <div
