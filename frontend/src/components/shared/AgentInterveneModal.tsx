@@ -101,8 +101,7 @@ export default function AgentInterveneModal({
       return;
     }
 
-    console.log(`[Intervene] Applying intervention to ${agentLabel}:`, state);
-    // TODO: call apiClient.simulations.step(simulationId) or future intervention API
+    // Future: call apiClient intervention endpoint when available
     onClose();
   }, [state, agentLabel, onClose]);
 
