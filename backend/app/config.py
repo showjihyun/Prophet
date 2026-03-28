@@ -11,8 +11,8 @@ class Settings(BaseSettings):
 
     # LLM Providers
     ollama_base_url: str = "http://localhost:11434"
-    ollama_default_model: str = "llama3.2"
-    slm_model: str = "phi4"
+    ollama_default_model: str = "llama3.1:8b"
+    slm_model: str = "llama3.1:8b"
     anthropic_api_key: str = ""
     anthropic_default_model: str = "claude-sonnet-4-6"
     openai_api_key: str = ""

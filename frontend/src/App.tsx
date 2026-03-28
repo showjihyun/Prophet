@@ -11,6 +11,8 @@ import TopInfluencersPage from "./pages/TopInfluencersPage";
 import AgentDetailPage from "./pages/AgentDetailPage";
 import GlobalMetricsPage from "./pages/GlobalMetricsPage";
 import CampaignSetupPage from "./pages/CampaignSetupPage";
+import ProjectsListPage from "./pages/ProjectsListPage";
+import ProjectScenariosPage from "./pages/ProjectScenariosPage";
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -48,6 +50,8 @@ function App() {
     <BrowserRouter>
       <ErrorBoundary>
         <Routes>
+          <Route path="/projects" element={<ProjectsListPage />} />
+          <Route path="/projects/:projectId" element={<ProjectScenariosPage />} />
           <Route path="/" element={<SimulationPage />} />
           <Route path="/communities" element={<CommunitiesDetailPage />} />
           <Route path="/communities/:communityId" element={<CommunitiesDetailPage />} />

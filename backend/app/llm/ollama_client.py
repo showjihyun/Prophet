@@ -38,12 +38,12 @@ class OllamaAdapter(LLMAdapter):
         self,
         base_url: str = "http://localhost:11434",
         default_model: str = "llama3.2",
-        embed_model: str = "nomic-embed-text",
+        embed_model: str | None = None,  # defaults to default_model if not set
     ) -> None:
         """SPEC: docs/spec/05_LLM_SPEC.md#3-provider-implementations"""
         self._base_url = base_url
         self._default_model = default_model
-        self._embed_model = embed_model
+        self._embed_model = embed_model or default_model
 
     async def complete(
         self,

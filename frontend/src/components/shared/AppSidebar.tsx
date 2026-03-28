@@ -1,0 +1,75 @@
+/**
+ * AppSidebar — Shared sidebar navigation for project-level pages.
+ * @spec docs/spec/ui/UI_06_PROJECTS_LIST.md#app-sidebar
+ * @spec docs/spec/ui/UI_07_PROJECT_SCENARIOS.md#app-sidebar
+ */
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  Brain,
+  FolderOpen,
+  Play,
+  BarChart3,
+  Settings,
+} from "lucide-react";
+
+interface AppSidebarProps {
+  activePath?: string;
+}
+
+const NAV_ITEMS = [
+  { icon: FolderOpen, label: "Projects", href: "/projects" },
+  { icon: Play, label: "Simulation", href: "/" },
+  { icon: BarChart3, label: "Global Insights", href: "/metrics" },
+  { icon: Settings, label: "Settings", href: "/settings" },
+];
+
+export default function AppSidebar({ activePath }: AppSidebarProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const currentPath = activePath ?? location.pathname;
+
+  function isActive(href: string): boolean {
+    if (href === "/projects") {
+      return currentPath === "/projects" || currentPath.startsWith("/projects/");
+    }
+    return currentPath === href;
+  }
+
+  return (
+    <aside
+      data-testid="app-sidebar"
+      className="flex flex-col shrink-0 border-r border-[#e5e5e5] bg-white"
+      style={{ width: 256 }}
+    >
+      {/* Logo */}
+      <div className="flex items-center gap-2.5 px-4 h-14 border-b border-[#e5e5e5]">
+        <Brain className="w-5 h-5 text-[#0a0a0a]" />
+        <span className="text-base font-bold text-[#0a0a0a]">MCASP Prophet</span>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex flex-col gap-1 p-3 flex-1">
+        {NAV_ITEMS.map((item) => {
+          const active = isActive(item.href);
+          return (
+            <button
+              key={item.href}
+              onClick={() => navigate(item.href)}
+              className={[
+                "flex items-center gap-3 rounded-md text-sm font-medium transition-colors",
+                "h-10 px-3",
+                active
+                  ? "bg-[#f4f4f5] text-[#0a0a0a]"
+                  : "text-[#737373] hover:bg-[#f4f4f5] hover:text-[#0a0a0a]",
+              ].join(" ")}
+            >
+              <item.icon className="w-4 h-4" />
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+}
