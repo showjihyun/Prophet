@@ -23,8 +23,13 @@ from app.engine.diffusion.exposure_model import ExposureModel
 from app.engine.diffusion.schema import CampaignEvent, EmergentEvent, RecSysConfig
 from app.engine.diffusion.sentiment_model import SentimentModel
 from app.engine.network.evolution import NetworkEvolver
-from app.engine.network.schema import SocialNetwork
+from app.engine.network.schema import CommunityConfig, SocialNetwork
 
+from app.engine.simulation.community_orchestrator import (
+    BridgePropagator,
+    CommunityOrchestrator,
+    CommunityTickResult,
+)
 from app.engine.simulation.schema import (
     CampaignConfig,
     CommunityStepMetrics,
@@ -188,14 +193,88 @@ class StepRunner:
         self._cascade_detector = CascadeDetector()
         self._network_evolver = NetworkEvolver()
 
+    def _build_community_orchestrators(
+        self,
+        state: SimulationState,
+    ) -> list[CommunityOrchestrator]:
+        """Split agents into community groups and create per-community orchestrators.
+        SPEC: docs/spec/04_SIMULATION_SPEC.md#communityorchestrator
+        """
+        network = state.network
+        G = network.graph
+
+        # Build agent_id -> node_id mapping from the full graph
+        agent_to_node: dict[UUID, int] = {}
+        for node, data in G.nodes(data=True):
+            aid = data.get("agent_id")
+            if aid is not None:
+                agent_to_node[aid] = node
+
+        # Collect bridge node IDs from bridge edges
+        bridge_node_set: set[int] = set()
+        for u, v in network.bridge_edge_ids:
+            bridge_node_set.add(u)
+            bridge_node_set.add(v)
+
+        # Group agents by community_id
+        community_agents: dict[UUID, list[AgentState]] = {}
+        for agent in state.agents:
+            community_agents.setdefault(agent.community_id, []).append(agent)
+
+        orchestrators: list[CommunityOrchestrator] = []
+        for comm_id, agents in community_agents.items():
+            # Extract subgraph for this community
+            node_ids = [
+                agent_to_node[a.agent_id]
+                for a in agents
+                if a.agent_id in agent_to_node
+            ]
+            subgraph = G.subgraph(node_ids).copy()
+
+            # Agent-node map for this community only
+            comm_agent_node_map = {
+                a.agent_id: agent_to_node[a.agent_id]
+                for a in agents
+                if a.agent_id in agent_to_node
+            }
+
+            # Bridge nodes that belong to this community
+            comm_bridge_nodes = bridge_node_set & set(node_ids)
+
+            # Find matching CommunityConfig (fallback to a default)
+            comm_config = CommunityConfig(
+                id=str(comm_id), name=str(comm_id), size=len(agents), agent_type="consumer",
+            )
+            for cc in state.config.communities:
+                if cc.id == str(comm_id):
+                    comm_config = cc
+                    break
+
+            orchestrators.append(CommunityOrchestrator(
+                community_id=comm_id,
+                community_config=comm_config,
+                agents=agents,
+                subgraph=subgraph,
+                agent_node_map=comm_agent_node_map,
+                bridge_node_ids=comm_bridge_nodes,
+                llm_adapter=self._agent_tick._llm_adapter,
+            ))
+
+        return orchestrators
+
     async def execute_step(
         self,
         state: SimulationState,
         step_num: int,
     ) -> StepResult:
-        """Execute one full simulation step.
+        """Execute one full simulation step using 3-phase community approach.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+
+        Phases:
+            1. Intra-Community: each community runs its agents in parallel
+            2. Cross-Community Bridge: BridgePropagator reduces trust on cross edges
+            3. Global Aggregation: merge results, cascade detection, metrics, evolution
         """
         start_time = time.perf_counter()
 
@@ -203,9 +282,6 @@ class StepRunner:
         agents = state.agents
         network = state.network
         seed = (config.random_seed or 0) + step_num
-
-        # O(1) agent lookup by UUID
-        agent_map: dict[UUID, AgentState] = {a.agent_id: a for a in agents}
 
         # Step 1: Campaign events
         campaign_events = _build_campaign_events(config, step_num, agents)
@@ -216,79 +292,77 @@ class StepRunner:
             env_events.extend(state.injected_events)
             state.injected_events.clear()
 
-        # Step 2: Exposure (skip if no agents — shouldn't happen)
-        # ExposureModel needs agents, but we can skip if no campaign
-        # For simplicity, we pass exposure info via environment events
-
-        # Step 3: Tier assignment
+        # Tier config for communities
         tier_config = TierConfig(
             max_tier3_ratio=config.llm_tier3_ratio,
-            max_tier2_ratio=config.llm_tier3_ratio,  # Use same ratio for tier2
+            max_tier2_ratio=config.llm_tier3_ratio,
         )
-        tier_assignments = self._tier_selector.assign_tiers(agents, tier_config, seed)
 
-        # Step 4: Build graph context
-        graph_context = _build_graph_context(network, agents)
-
-        # Step 5: Execute agent ticks
-        # Build neighbor actions from previous step
-        neighbor_actions_map: dict[UUID, list[NeighborAction]] = {}
-        for agent in agents:
-            nids = graph_context.neighbor_ids.get(agent.agent_id, [])
-            na_list = []
-            for nid in nids:
-                # O(1) neighbor lookup
-                other = agent_map.get(nid)
-                if other is not None and other.action != AgentAction.IGNORE:
-                    na_list.append(
-                        NeighborAction(
-                            agent_id=nid,
-                            action=other.action,
-                            content_id=uuid4(),
-                            step=step_num,
-                        )
-                    )
-            neighbor_actions_map[agent.agent_id] = na_list
-
-        # Run all agent ticks
-        tick_results: list[AgentTickResult] = []
-        all_propagation_events = []
-
-        for agent in agents:
-            tier = tier_assignments.get(agent.agent_id, 1)
-            neighbor_actions = neighbor_actions_map.get(agent.agent_id, [])
-
-            result = self._agent_tick.tick(
-                agent=agent,
-                environment_events=env_events,
-                neighbor_actions=neighbor_actions,
-                cognition_tier=tier,
+        # ── Phase 1: Intra-Community (parallel) ──
+        community_orchs = self._build_community_orchestrators(state)
+        community_results: list[CommunityTickResult] = await asyncio.gather(*[
+            co.tick(
+                step=step_num,
+                campaign_events=campaign_events,
+                env_events=env_events,
+                tier_config=tier_config,
                 seed=seed,
-                graph_context=graph_context,
             )
-            tick_results.append(result)
-            all_propagation_events.extend(result.propagation_events)
+            for co in community_orchs
+        ])
 
-        # Step 6: Update agent states
+        # ── Phase 2: Cross-Community Bridge ──
+        bridge_propagator = BridgePropagator()
+        cross_events = bridge_propagator.propagate(
+            community_results,
+            network.bridge_edge_ids,
+            network.graph,
+        )
+
+        # ── Phase 3: Global Aggregation ──
+        # Merge all updated agents from community results
         updated_agents: list[AgentState] = []
-        for tr in tick_results:
-            updated = replace(tr.updated_state, step=step_num + 1)
-            # Increment exposure_count if the agent saw campaign content
-            if env_events and tr.action != AgentAction.IGNORE:
-                updated = replace(updated, exposure_count=updated.exposure_count + 1)
-            updated_agents.append(updated)
+        all_propagation_events = []
+        total_llm_calls = 0
+        action_dist: dict[str, int] = {}
+
+        for cr in community_results:
+            for ua in cr.updated_agents:
+                updated_agent = replace(ua, step=step_num + 1)
+                if env_events and ua.action != AgentAction.IGNORE:
+                    updated_agent = replace(
+                        updated_agent,
+                        exposure_count=updated_agent.exposure_count + 1,
+                    )
+                updated_agents.append(updated_agent)
+
+            all_propagation_events.extend(cr.propagation_events)
+            total_llm_calls += cr.llm_calls
+
+            for action_name, count in cr.action_distribution.items():
+                action_dist[action_name] = action_dist.get(action_name, 0) + count
+
+        # Include cross-community events in propagation
+        all_propagation_events.extend(cross_events)
+
         state.agents = updated_agents
 
-        # Step 7: Sentiment per community
-        community_ids = list({a.community_id for a in updated_agents})
-        community_sentiments = {}
-        for cid in community_ids:
-            cs = self._sentiment_model.update_community_sentiment(
-                cid, updated_agents, []
-            )
-            community_sentiments[cid] = cs
+        # Sentiment per community (already computed per-community, reuse)
+        community_sentiments: dict[UUID, object] = {}
+        for cr in community_results:
+            if cr.community_sentiment is not None:
+                community_sentiments[cr.community_id] = cr.community_sentiment
 
-        # Step 8: Cascade detection
+        # Fill in any missing communities via SentimentModel
+        community_ids = list({a.community_id for a in updated_agents})
+        for cid in community_ids:
+            if cid not in community_sentiments:
+                cs = self._sentiment_model.update_community_sentiment(
+                    cid, updated_agents, []
+                )
+                community_sentiments[cid] = cs
+
+        # Cascade detection
         total_agents = len(updated_agents)
         adopted_count = sum(1 for a in updated_agents if a.adopted)
         adoption_rate = adopted_count / total_agents if total_agents > 0 else 0.0
@@ -329,25 +403,13 @@ class StepRunner:
 
         emergent_events = self._cascade_detector.detect(cascade_step, cascade_history)
 
-        # Step 9: Network evolution
+        # Network evolution
         if config.enable_dynamic_edges:
-            # Build simple action results for evolver
-            action_results = []
-            for tr in tick_results:
-                action_results.append(tr.updated_state)
+            action_results = [a for a in updated_agents]
             state.network = self._network_evolver.evolve(network, action_results, step_num)
 
-        # Step 10: Build StepResult
-        action_dist: dict[str, int] = {}
+        # Tier distribution (approximate from community results)
         tier_dist: dict[int, int] = {}
-        llm_calls = 0
-        for tr in tick_results:
-            action_name = tr.action.value
-            action_dist[action_name] = action_dist.get(action_name, 0) + 1
-            if tr.llm_tier_used is not None:
-                tier_dist[tr.llm_tier_used] = tier_dist.get(tr.llm_tier_used, 0) + 1
-                if tr.llm_tier_used >= 2:
-                    llm_calls += 1
 
         # Compute mean sentiment and variance across all agents
         all_beliefs = [a.belief for a in updated_agents]
@@ -376,11 +438,9 @@ class StepRunner:
             comm_adopted = sum(1 for a in comm_agents if a.adopted)
             comm_rate = comm_adopted / len(comm_agents) if comm_agents else 0.0
 
-            # Dominant action
             comm_actions = Counter(a.action for a in comm_agents)
             dominant = comm_actions.most_common(1)[0][0] if comm_actions else AgentAction.IGNORE
 
-            # Propagation count for this community
             comm_agent_ids = {a.agent_id for a in comm_agents}
             new_prop = sum(
                 1 for pe in all_propagation_events
@@ -409,7 +469,7 @@ class StepRunner:
             community_metrics=community_metrics,
             emergent_events=emergent_events,
             action_distribution=action_dist,
-            llm_calls_this_step=llm_calls,
+            llm_calls_this_step=total_llm_calls,
             llm_tier_distribution=tier_dist,
             step_duration_ms=elapsed_ms,
         )
