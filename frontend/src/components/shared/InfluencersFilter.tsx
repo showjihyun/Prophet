@@ -99,17 +99,17 @@ export default function InfluencersFilter({
         style={{
           width: 600,
           maxHeight: 700,
-          backgroundColor: "var(--card, #fff)",
-          borderColor: "var(--border, #e5e5e5)",
+          backgroundColor: "var(--card)",
+          borderColor: "var(--border)",
           boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
         }}
       >
         {/* Header */}
         <div
           className="flex items-center justify-between border-b px-6 py-4"
-          style={{ borderColor: "var(--border, #e5e5e5)" }}
+          style={{ borderColor: "var(--border)" }}
         >
-          <h3 className="text-base font-semibold" style={{ color: "var(--foreground, #0a0a0a)" }}>
+          <h3 className="text-base font-semibold" style={{ color: "var(--foreground)" }}>
             Filter Influencers
           </h3>
           <button
@@ -137,7 +137,7 @@ export default function InfluencersFilter({
         <div className="overflow-y-auto p-6 flex flex-col gap-6" style={{ maxHeight: 560 }}>
           {/* Community */}
           <div className="flex flex-col gap-3">
-            <label className="text-sm font-medium" style={{ color: "var(--foreground, #0a0a0a)" }}>
+            <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
               Community
             </label>
             <div className="flex flex-col gap-3">
@@ -161,7 +161,7 @@ export default function InfluencersFilter({
 
           {/* Status */}
           <div className="flex flex-col gap-3">
-            <label className="text-sm font-medium" style={{ color: "var(--foreground, #0a0a0a)" }}>
+            <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
               Status
             </label>
             <div className="flex gap-4">
@@ -181,12 +181,12 @@ export default function InfluencersFilter({
 
           {/* Influence Score Range */}
           <div className="flex flex-col gap-3">
-            <label className="text-sm font-medium" style={{ color: "var(--foreground, #0a0a0a)" }}>
+            <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
               Influence Score Range
             </label>
             <div className="flex gap-4">
               <div className="flex flex-col gap-1 flex-1">
-                <span className="text-xs" style={{ color: "var(--muted-foreground, #737373)" }}>
+                <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
                   Min
                 </span>
                 <input
@@ -200,13 +200,13 @@ export default function InfluencersFilter({
                   className="h-10 w-full rounded-md border px-3 text-sm"
                   style={{
                     borderColor: scoreInvalid
-                      ? "var(--sentiment-negative, #ef4444)"
-                      : "var(--border, #e5e5e5)",
+                      ? "var(--sentiment-negative)"
+                      : "var(--border)",
                   }}
                 />
               </div>
               <div className="flex flex-col gap-1 flex-1">
-                <span className="text-xs" style={{ color: "var(--muted-foreground, #737373)" }}>
+                <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
                   Max
                 </span>
                 <input
@@ -220,8 +220,8 @@ export default function InfluencersFilter({
                   className="h-10 w-full rounded-md border px-3 text-sm"
                   style={{
                     borderColor: scoreInvalid
-                      ? "var(--sentiment-negative, #ef4444)"
-                      : "var(--border, #e5e5e5)",
+                      ? "var(--sentiment-negative)"
+                      : "var(--border)",
                   }}
                 />
               </div>
@@ -230,14 +230,14 @@ export default function InfluencersFilter({
 
           {/* Sentiment */}
           <div className="flex flex-col gap-3">
-            <label className="text-sm font-medium" style={{ color: "var(--foreground, #0a0a0a)" }}>
+            <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
               Sentiment
             </label>
             <select
               value={draft.sentiment}
               onChange={(e) => setDraft((prev) => ({ ...prev, sentiment: e.target.value }))}
               className="h-10 w-full rounded-md border px-3 text-sm"
-              style={{ borderColor: "var(--border, #e5e5e5)" }}
+              style={{ borderColor: "var(--border)" }}
             >
               <option value="all">All</option>
               <option value="Positive">Positive</option>
@@ -248,7 +248,7 @@ export default function InfluencersFilter({
 
           {/* Min Connections */}
           <div className="flex flex-col gap-3">
-            <label className="text-sm font-medium" style={{ color: "var(--foreground, #0a0a0a)" }}>
+            <label className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
               Min Connections
             </label>
             <input
@@ -262,7 +262,7 @@ export default function InfluencersFilter({
                 }))
               }
               className="h-10 w-full rounded-md border px-3 text-sm"
-              style={{ borderColor: "var(--border, #e5e5e5)" }}
+              style={{ borderColor: "var(--border)" }}
             />
           </div>
         </div>
@@ -270,19 +270,19 @@ export default function InfluencersFilter({
         {/* Footer */}
         <div
           className="flex items-center justify-between border-t px-6 py-4"
-          style={{ borderColor: "var(--border, #e5e5e5)" }}
+          style={{ borderColor: "var(--border)" }}
         >
           <button
             onClick={handleReset}
             className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-gray-50"
-            style={{ borderColor: "var(--border, #e5e5e5)" }}
+            style={{ borderColor: "var(--border)" }}
           >
             Reset
           </button>
           <button
             onClick={handleApply}
             className="rounded-md px-4 py-2 text-sm font-medium text-white"
-            style={{ backgroundColor: "var(--primary, #0a0a0a)" }}
+            style={{ backgroundColor: "var(--primary)" }}
           >
             Apply Filters
           </button>

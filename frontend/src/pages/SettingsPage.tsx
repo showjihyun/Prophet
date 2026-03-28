@@ -156,7 +156,7 @@ export default function SettingsPage() {
         data-testid={testId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full h-9 rounded-md border border-[#d4d4d4] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20"
+        className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
       >
         {/* Always include current value even if not in list */}
         {!models.includes(value) && <option value={value}>{value}</option>}
@@ -175,35 +175,35 @@ export default function SettingsPage() {
       <div className="flex h-screen">
         <AppSidebar activePath="/settings" />
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-[#737373]" />
+          <Loader2 className="w-6 h-6 animate-spin text-[var(--muted-foreground)]" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-[#fafafa]">
+    <div className="flex h-screen bg-[var(--background)]">
       <AppSidebar activePath="/settings" />
 
       <main className="flex-1 overflow-y-auto p-8">
-        <h1 className="text-2xl font-bold text-[#0a0a0a] mb-6">Settings</h1>
+        <h1 className="text-2xl font-bold font-display text-[var(--foreground)] mb-6">Settings</h1>
 
         {/* ---- LLM Provider Configuration ---- */}
-        <section className="bg-white rounded-lg border border-[#e5e5e5] p-6 mb-6">
-          <h2 className="text-lg font-semibold text-[#0a0a0a] mb-4">
+        <section className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 mb-6">
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
             LLM Provider Configuration
           </h2>
 
           {/* Default Provider */}
           <div className="mb-5">
-            <label className="block text-sm font-medium text-[#525252] mb-1.5">
+            <label className="block text-sm font-medium text-[var(--muted-foreground)] mb-1.5">
               Default Provider
             </label>
             <select
               data-testid="default-provider-select"
               value={defaultProvider}
               onChange={(e) => setDefaultProvider(e.target.value)}
-              className="w-64 h-9 rounded-md border border-[#d4d4d4] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20"
+              className="w-64 h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
             >
               <option value="ollama">Ollama (On-Premise)</option>
               <option value="claude">Claude API</option>
@@ -211,33 +211,33 @@ export default function SettingsPage() {
             </select>
           </div>
 
-          <hr className="my-5 border-[#e5e5e5]" />
+          <hr className="my-5 border-[var(--border)]" />
 
           {/* --- Ollama --- */}
-          <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">
+          <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
             Ollama (On-Premise)
           </h3>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-sm text-[#525252] mb-1">Base URL</label>
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Base URL</label>
               <input
                 data-testid="ollama-base-url"
                 type="text"
                 value={ollamaBaseUrl}
                 onChange={(e) => setOllamaBaseUrl(e.target.value)}
-                className="w-full h-9 rounded-md border border-[#d4d4d4] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20"
+                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               />
             </div>
             <div>
-              <label className="block text-sm text-[#525252] mb-1">Default Model</label>
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Default Model</label>
               {modelSelect("ollama-default-model", ollamaDefaultModel, setOllamaDefaultModel, ollamaModels)}
             </div>
             <div>
-              <label className="block text-sm text-[#525252] mb-1">SLM Model (Tier 1)</label>
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">SLM Model (Tier 1)</label>
               {modelSelect("ollama-slm-model", slmModel, setSlmModel, ollamaModels)}
             </div>
             <div>
-              <label className="block text-sm text-[#525252] mb-1">Embed Model</label>
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Embed Model</label>
               {modelSelect("ollama-embed-model", ollamaEmbedModel, setOllamaEmbedModel, ollamaModels)}
             </div>
           </div>
@@ -247,7 +247,7 @@ export default function SettingsPage() {
             <button
               onClick={handleTestOllama}
               disabled={testing}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-[#d4d4d4] bg-white text-sm font-medium text-[#0a0a0a] hover:bg-[#f4f4f5] disabled:opacity-50"
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-[var(--border)] bg-[var(--card)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
             >
               {testing ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -277,31 +277,31 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <hr className="my-5 border-[#e5e5e5]" />
+          <hr className="my-5 border-[var(--border)]" />
 
           {/* --- Claude API --- */}
-          <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">
+          <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
             Claude API (External)
           </h3>
           <div className="grid grid-cols-2 gap-4 mb-5">
             <div>
-              <label className="block text-sm text-[#525252] mb-1">API Key</label>
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
               <input
                 data-testid="anthropic-api-key"
                 type="password"
                 value={anthropicApiKey}
                 onChange={(e) => setAnthropicApiKey(e.target.value)}
                 placeholder={anthropicKeySet ? "sk-ant-*******" : "Not set"}
-                className="w-full h-9 rounded-md border border-[#d4d4d4] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20"
+                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               />
             </div>
             <div>
-              <label className="block text-sm text-[#525252] mb-1">Model</label>
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
               <select
                 data-testid="anthropic-model"
                 value={anthropicModel}
                 onChange={(e) => setAnthropicModel(e.target.value)}
-                className="w-full h-9 rounded-md border border-[#d4d4d4] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20"
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               >
                 <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
                 <option value="claude-opus-4-6">claude-opus-4-6</option>
@@ -310,31 +310,31 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <hr className="my-5 border-[#e5e5e5]" />
+          <hr className="my-5 border-[var(--border)]" />
 
           {/* --- OpenAI API --- */}
-          <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">
+          <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
             OpenAI API (External)
           </h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-[#525252] mb-1">API Key</label>
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
               <input
                 data-testid="openai-api-key"
                 type="password"
                 value={openaiApiKey}
                 onChange={(e) => setOpenaiApiKey(e.target.value)}
                 placeholder={openaiKeySet ? "sk-*******" : "Not set"}
-                className="w-full h-9 rounded-md border border-[#d4d4d4] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20"
+                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               />
             </div>
             <div>
-              <label className="block text-sm text-[#525252] mb-1">Model</label>
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
               <select
                 data-testid="openai-model"
                 value={openaiModel}
                 onChange={(e) => setOpenaiModel(e.target.value)}
-                className="w-full h-9 rounded-md border border-[#d4d4d4] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20"
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               >
                 <option value="gpt-4o">gpt-4o</option>
                 <option value="gpt-4o-mini">gpt-4o-mini</option>
@@ -345,15 +345,15 @@ export default function SettingsPage() {
         </section>
 
         {/* ---- Simulation Defaults ---- */}
-        <section className="bg-white rounded-lg border border-[#e5e5e5] p-6 mb-6">
-          <h2 className="text-lg font-semibold text-[#0a0a0a] mb-4">
+        <section className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 mb-6">
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
             Simulation Defaults
           </h2>
 
           <div className="space-y-4">
             {/* SLM/LLM Ratio */}
             <div>
-              <label className="block text-sm text-[#525252] mb-1">
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">
                 SLM/LLM Ratio: <span className="font-mono">{slmLlmRatio.toFixed(2)}</span>
               </label>
               <input
@@ -364,13 +364,13 @@ export default function SettingsPage() {
                 step={0.01}
                 value={slmLlmRatio}
                 onChange={(e) => setSlmLlmRatio(Number(e.target.value))}
-                className="w-80 accent-[#0a0a0a]"
+                className="w-80 accent-[var(--foreground)]"
               />
             </div>
 
             {/* Tier 3 Ratio */}
             <div>
-              <label className="block text-sm text-[#525252] mb-1">LLM Tier 3 Ratio</label>
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">LLM Tier 3 Ratio</label>
               <input
                 data-testid="tier3-ratio"
                 type="number"
@@ -379,13 +379,13 @@ export default function SettingsPage() {
                 step={0.01}
                 value={tier3Ratio}
                 onChange={(e) => setTier3Ratio(Number(e.target.value))}
-                className="w-32 h-9 rounded-md border border-[#d4d4d4] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20"
+                className="w-32 h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               />
             </div>
 
             {/* Cache TTL */}
             <div>
-              <label className="block text-sm text-[#525252] mb-1">
+              <label className="block text-sm text-[var(--muted-foreground)] mb-1">
                 LLM Cache TTL (seconds)
               </label>
               <input
@@ -395,7 +395,7 @@ export default function SettingsPage() {
                 step={60}
                 value={cacheTtl}
                 onChange={(e) => setCacheTtl(Number(e.target.value))}
-                className="w-32 h-9 rounded-md border border-[#d4d4d4] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a0a0a]/20"
+                className="w-32 h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               />
             </div>
           </div>
@@ -406,7 +406,7 @@ export default function SettingsPage() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-2 h-10 px-6 rounded-md bg-[#0a0a0a] text-white text-sm font-medium hover:bg-[#262626] disabled:opacity-50"
+            className="inline-flex items-center gap-2 h-10 px-6 rounded-md bg-[var(--foreground)] text-white text-sm font-medium hover:bg-[var(--foreground)]/90 disabled:opacity-50"
           >
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />

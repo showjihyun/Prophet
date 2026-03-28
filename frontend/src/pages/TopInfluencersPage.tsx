@@ -181,7 +181,7 @@ export default function TopInfluencersPage() {
   return (
     <div
       data-testid="top-influencers-page"
-      className="min-h-screen bg-[#f8fafc] flex flex-col"
+      className="min-h-screen bg-[var(--muted)] flex flex-col"
     >
       <PageNav
         breadcrumbs={[
@@ -207,7 +207,7 @@ export default function TopInfluencersPage() {
             <div className="flex gap-3 relative">
               <div className="relative flex-1">
                 <svg
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#a3a3a3]"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
                   width="16"
                   height="16"
                   viewBox="0 0 24 24"
@@ -225,12 +225,12 @@ export default function TopInfluencersPage() {
                   placeholder="Search agents..."
                   value={search}
                   onChange={(e) => handleSearch(e.target.value)}
-                  className="w-full h-10 pl-9 pr-4 text-sm border border-[#e5e5e5] rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-[#a3a3a3]"
+                  className="w-full h-10 pl-9 pr-4 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                 />
               </div>
               <button
                 onClick={() => setFilterOpen(true)}
-                className="h-10 px-4 text-sm border border-[#e5e5e5] rounded-md bg-white hover:bg-gray-50 flex items-center gap-2"
+                className="h-10 px-4 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-gray-50 flex items-center gap-2"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
@@ -239,7 +239,7 @@ export default function TopInfluencersPage() {
                 {activeFilterCount > 0 && (
                   <span
                     className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-medium text-white"
-                    style={{ backgroundColor: "var(--primary, #0a0a0a)" }}
+                    style={{ backgroundColor: "var(--primary)" }}
                   >
                     {activeFilterCount}
                   </span>
@@ -256,28 +256,28 @@ export default function TopInfluencersPage() {
             </div>
 
             {/* Data Table */}
-            <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm overflow-hidden">
+            <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
-                  <tr className="border-b border-[#e5e5e5] bg-[#f8fafc]">
-                    <th className="text-right px-3 py-3 font-semibold text-[#737373] w-12">#</th>
-                    <th className="text-left px-3 py-3 font-semibold text-[#737373]">Agent ID</th>
-                    <th className="text-left px-3 py-3 font-semibold text-[#737373]">Community</th>
-                    <th className="text-left px-3 py-3 font-semibold text-[#737373] w-48">Influence Score</th>
-                    <th className="text-left px-3 py-3 font-semibold text-[#737373]">Sentiment</th>
-                    <th className="text-right px-3 py-3 font-semibold text-[#737373]">Chains</th>
-                    <th className="text-right px-3 py-3 font-semibold text-[#737373]">Connections</th>
-                    <th className="text-left px-3 py-3 font-semibold text-[#737373]">Status</th>
+                  <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
+                    <th className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)] w-12">#</th>
+                    <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)]">Agent ID</th>
+                    <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)]">Community</th>
+                    <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)] w-48">Influence Score</th>
+                    <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)]">Sentiment</th>
+                    <th className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)]">Chains</th>
+                    <th className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)]">Connections</th>
+                    <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)]">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedData.map((inf) => (
                     <tr
                       key={inf.agentId}
-                      className="border-b border-[#f1f5f9] hover:bg-[#f1f5f9] transition-colors cursor-pointer"
+                      className="interactive border-b border-[var(--border)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
                       onClick={() => navigate(`/agents/${inf.agentId}`)}
                     >
-                      <td className="text-right px-3 py-3 font-semibold text-[#737373]">
+                      <td className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)]">
                         {inf.rank}
                       </td>
                       <td className="px-3 py-3 font-medium text-blue-600 hover:underline">
@@ -294,7 +294,7 @@ export default function TopInfluencersPage() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 rounded-full bg-[#e2e8f0] overflow-hidden">
+                          <div className="flex-1 h-2 rounded-full bg-[var(--muted)] overflow-hidden">
                             <div
                               className="h-full rounded-full"
                               style={{ width: `${inf.influenceScore}%`, backgroundColor: inf.communityColor }}
@@ -333,14 +333,14 @@ export default function TopInfluencersPage() {
               {/* Pagination Bar (UI-08) */}
               <div
                 className="flex items-center justify-between border-t px-4 py-3"
-                style={{ borderColor: "var(--border, #e5e5e5)" }}
+                style={{ borderColor: "var(--border)" }}
               >
-                <span className="text-sm" style={{ color: "var(--muted-foreground, #737373)" }}>
+                <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                   Showing {total === 0 ? 0 : (safePage - 1) * rowsPerPage + 1}-{Math.min(safePage * rowsPerPage, total)} of {total} influencers
                 </span>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm" style={{ color: "var(--muted-foreground, #737373)" }}>
+                    <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                       Rows per page:
                     </span>
                     <select
@@ -350,7 +350,7 @@ export default function TopInfluencersPage() {
                         setCurrentPage(1);
                       }}
                       className="rounded-md border px-2 py-1 text-sm"
-                      style={{ borderColor: "var(--border, #e5e5e5)" }}
+                      style={{ borderColor: "var(--border)" }}
                     >
                       <option value={10}>10</option>
                       <option value={25}>25</option>
@@ -362,7 +362,7 @@ export default function TopInfluencersPage() {
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       disabled={safePage === 1}
                       className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
-                      style={{ borderColor: "var(--border, #e5e5e5)" }}
+                      style={{ borderColor: "var(--border)" }}
                     >
                       Previous
                     </button>
@@ -372,8 +372,8 @@ export default function TopInfluencersPage() {
                         onClick={() => setCurrentPage(page)}
                         className={`rounded-md px-3 py-1 text-sm ${page === safePage ? "font-bold" : ""}`}
                         style={{
-                          backgroundColor: page === safePage ? "var(--primary, #0a0a0a)" : "transparent",
-                          color: page === safePage ? "var(--primary-foreground, #fff)" : "var(--foreground, #0a0a0a)",
+                          backgroundColor: page === safePage ? "var(--primary)" : "transparent",
+                          color: page === safePage ? "var(--primary-foreground)" : "var(--foreground)",
                         }}
                       >
                         {page}
@@ -383,7 +383,7 @@ export default function TopInfluencersPage() {
                       onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                       disabled={safePage === totalPages}
                       className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
-                      style={{ borderColor: "var(--border, #e5e5e5)" }}
+                      style={{ borderColor: "var(--border)" }}
                     >
                       Next
                     </button>
@@ -395,8 +395,8 @@ export default function TopInfluencersPage() {
 
           {/* Right Sidebar */}
           <div className="w-[280px] shrink-0">
-            <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-[#0a0a0a] mb-4">
+            <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">
                 Influence Distribution
               </h3>
               <ResponsiveContainer width="100%" height={220}>

@@ -24,12 +24,12 @@ export default function PageNav({ breadcrumbs, actions }: PageNavProps) {
   return (
     <nav
       data-testid="page-nav"
-      className="h-14 flex items-center justify-between px-6 border-b border-[#e5e5e5] bg-white shrink-0"
+      className="h-14 flex items-center justify-between px-6 border-b border-[var(--border)] bg-[var(--card)] shrink-0"
     >
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-1 text-sm text-[#737373] hover:text-[#0a0a0a] transition-colors"
+          className="flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
           aria-label="Go back"
         >
           <svg
@@ -46,17 +46,17 @@ export default function PageNav({ breadcrumbs, actions }: PageNavProps) {
           </svg>
           Back
         </button>
-        <span className="text-[#e5e5e5]">/</span>
+        <span className="text-[var(--border)]">/</span>
         <ol className="flex items-center gap-1 text-sm">
           {breadcrumbs.map((item, i) => {
             const isLast = i === breadcrumbs.length - 1;
             return (
               <li key={i} className="flex items-center gap-1">
-                {i > 0 && <span className="text-[#a3a3a3] mx-1">&gt;</span>}
+                {i > 0 && <span className="text-[var(--muted-foreground)] mx-1">&gt;</span>}
                 {item.href && !isLast ? (
                   <button
                     onClick={() => navigate(item.href!)}
-                    className="text-[#737373] hover:text-[#0a0a0a] transition-colors"
+                    className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
                   >
                     {item.label}
                   </button>
@@ -64,8 +64,8 @@ export default function PageNav({ breadcrumbs, actions }: PageNavProps) {
                   <span
                     className={
                       isLast
-                        ? "text-[#0a0a0a] font-semibold"
-                        : "text-[#737373]"
+                        ? "text-[var(--foreground)] font-semibold"
+                        : "text-[var(--muted-foreground)]"
                     }
                   >
                     {item.label}

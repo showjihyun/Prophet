@@ -122,27 +122,27 @@ export default function AgentInterveneModal({
 
       {/* Modal Card */}
       <div
-        className="relative w-[560px] max-h-[700px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        className="relative w-[560px] max-h-[700px] bg-[var(--card)] rounded-xl shadow-2xl flex flex-col overflow-hidden"
         style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.2)" }}
       >
         {/* Header */}
         <div
           className="flex flex-col gap-1 px-6 pt-6 pb-4 border-b"
-          style={{ borderColor: "var(--border, #e5e5e5)" }}
+          style={{ borderColor: "var(--border)" }}
         >
           <div className="flex items-start justify-between">
-            <h2 className="text-lg font-semibold text-[#0a0a0a]">
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">
               Intervene on Agent #{agentId}
             </h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-md text-[#737373] hover:text-[#0a0a0a] hover:bg-gray-100 transition-colors"
+              className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-gray-100 transition-colors"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
-          <p className="text-sm text-[#737373]">
+          <p className="text-sm text-[var(--muted-foreground)]">
             Configure and apply an intervention to modify this agent's behavior
             during simulation.
           </p>
@@ -152,14 +152,14 @@ export default function AgentInterveneModal({
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
           {/* Intervention Type */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#0a0a0a]">
+            <label className="text-sm font-medium text-[var(--foreground)]">
               Intervention Type
             </label>
             <select
               value={state.type}
               onChange={(e) => updateField("type", e.target.value)}
-              className="w-full h-10 rounded-md border px-3 text-sm bg-white"
-              style={{ borderColor: "var(--input, #d4d4d4)" }}
+              className="w-full h-10 rounded-md border px-3 text-sm bg-[var(--card)]"
+              style={{ borderColor: "var(--input)" }}
             >
               {INTERVENTION_TYPES.map((opt) => (
                 <option key={opt.value} value={opt.value} disabled={opt.value === ""}>
@@ -171,14 +171,14 @@ export default function AgentInterveneModal({
 
           {/* Target Scope */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#0a0a0a]">
+            <label className="text-sm font-medium text-[var(--foreground)]">
               Target Scope
             </label>
             <select
               value={state.targetScope}
               onChange={(e) => updateField("targetScope", e.target.value)}
-              className="w-full h-10 rounded-md border px-3 text-sm bg-white"
-              style={{ borderColor: "var(--input, #d4d4d4)" }}
+              className="w-full h-10 rounded-md border px-3 text-sm bg-[var(--card)]"
+              style={{ borderColor: "var(--input)" }}
             >
               {TARGET_SCOPES.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -191,7 +191,7 @@ export default function AgentInterveneModal({
           {/* Parameters Row */}
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-[#0a0a0a]">
+              <label className="text-sm font-medium text-[var(--foreground)]">
                 Duration (steps)
               </label>
               <input
@@ -202,11 +202,11 @@ export default function AgentInterveneModal({
                   updateField("duration", Math.max(1, parseInt(e.target.value) || 1))
                 }
                 className="w-full h-10 rounded-md border px-3 text-sm"
-                style={{ borderColor: "var(--input, #d4d4d4)" }}
+                style={{ borderColor: "var(--input)" }}
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-[#0a0a0a]">
+              <label className="text-sm font-medium text-[var(--foreground)]">
                 Strength (0-1)
               </label>
               <input
@@ -224,7 +224,7 @@ export default function AgentInterveneModal({
                   borderColor:
                     state.strength < 0 || state.strength > 1
                       ? "#ef4444"
-                      : "var(--input, #d4d4d4)",
+                      : "var(--input)",
                 }}
               />
             </div>
@@ -232,7 +232,7 @@ export default function AgentInterveneModal({
 
           {/* Message / Prompt */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#0a0a0a]">
+            <label className="text-sm font-medium text-[var(--foreground)]">
               Intervention Message / Prompt
             </label>
             <textarea
@@ -242,14 +242,14 @@ export default function AgentInterveneModal({
               className="w-full rounded-md border px-3 py-2 text-sm resize-y"
               style={{
                 minHeight: "100px",
-                borderColor: "var(--input, #d4d4d4)",
+                borderColor: "var(--input)",
               }}
             />
           </div>
 
           {/* Options */}
           <div className="flex flex-col gap-3">
-            <label className="text-sm font-medium text-[#0a0a0a]">
+            <label className="text-sm font-medium text-[var(--foreground)]">
               Options
             </label>
 
@@ -259,9 +259,9 @@ export default function AgentInterveneModal({
                 type="checkbox"
                 checked={state.notifyConnected}
                 onChange={(e) => updateField("notifyConnected", e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 accent-[#0a0a0a]"
+                className="w-4 h-4 rounded border-gray-300 accent-[var(--foreground)]"
               />
-              <span className="text-sm text-[#0a0a0a]">
+              <span className="text-sm text-[var(--foreground)]">
                 Notify connected agents of intervention
               </span>
             </label>
@@ -272,9 +272,9 @@ export default function AgentInterveneModal({
                 type="checkbox"
                 checked={state.logIntervention}
                 onChange={(e) => updateField("logIntervention", e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 accent-[#0a0a0a]"
+                className="w-4 h-4 rounded border-gray-300 accent-[var(--foreground)]"
               />
-              <span className="text-sm text-[#0a0a0a]">
+              <span className="text-sm text-[var(--foreground)]">
                 Log intervention in cascade analytics
               </span>
             </label>
@@ -282,7 +282,7 @@ export default function AgentInterveneModal({
             {/* Tier Override toggle */}
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
-                <span className="text-sm text-[#0a0a0a]">
+                <span className="text-sm text-[var(--foreground)]">
                   Override Prophet Tier (force LLM)
                 </span>
                 {state.overrideTier && (
@@ -297,11 +297,11 @@ export default function AgentInterveneModal({
                 aria-checked={state.overrideTier}
                 onClick={() => updateField("overrideTier", !state.overrideTier)}
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                  state.overrideTier ? "bg-[#0a0a0a]" : "bg-gray-200"
+                  state.overrideTier ? "bg-[var(--foreground)]" : "bg-gray-200"
                 }`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform ${
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-[var(--card)] shadow-sm ring-0 transition-transform ${
                     state.overrideTier ? "translate-x-5" : "translate-x-0"
                   }`}
                 />
@@ -313,17 +313,17 @@ export default function AgentInterveneModal({
         {/* Footer */}
         <div
           className="flex items-center justify-end gap-3 px-6 py-4 border-t"
-          style={{ borderColor: "var(--border, #e5e5e5)" }}
+          style={{ borderColor: "var(--border)" }}
         >
           <button
             onClick={onClose}
-            className="h-10 px-4 text-sm font-medium rounded-md border border-[#d4d4d4] text-[#0a0a0a] hover:bg-gray-50 transition-colors"
+            className="h-10 px-4 text-sm font-medium rounded-md border border-[var(--border)] text-[var(--foreground)] hover:bg-gray-50 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleApply}
-            className="h-10 px-4 text-sm font-medium rounded-md bg-[#0a0a0a] text-white hover:bg-[#262626] transition-colors flex items-center gap-2"
+            className="h-10 px-4 text-sm font-medium rounded-md bg-[var(--foreground)] text-white hover:bg-[var(--foreground)]/90 transition-colors flex items-center gap-2"
           >
             <Zap className="w-4 h-4" />
             Apply Intervention

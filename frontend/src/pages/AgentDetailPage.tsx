@@ -125,7 +125,7 @@ export default function AgentDetailPage() {
   return (
     <div
       data-testid="agent-detail-page"
-      className="min-h-screen bg-[#f8fafc] flex flex-col"
+      className="min-h-screen bg-[var(--muted)] flex flex-col"
     >
       <PageNav
         breadcrumbs={[
@@ -146,7 +146,7 @@ export default function AgentDetailPage() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel - Agent Profile */}
-        <aside className="w-[360px] shrink-0 border-r border-[#e5e5e5] bg-white overflow-y-auto p-6 flex flex-col gap-6">
+        <aside className="w-[360px] shrink-0 border-r border-[var(--border)] bg-[var(--card)] overflow-y-auto p-6 flex flex-col gap-6">
           {/* Avatar */}
           <div className="flex flex-col items-center gap-3">
             <div
@@ -158,7 +158,7 @@ export default function AgentDetailPage() {
             >
               {agent.agentNumber}
             </div>
-            <h2 className="text-2xl font-bold text-[#0a0a0a]">
+            <h2 className="text-2xl font-bold font-display text-[var(--foreground)]">
               Agent #{agent.agentNumber}
             </h2>
             <span className="inline-flex items-center gap-1.5 text-sm bg-gray-100 px-3 py-1 rounded-full">
@@ -180,34 +180,34 @@ export default function AgentDetailPage() {
             ].map((stat) => (
               <div
                 key={stat.label}
-                className="bg-[#f8fafc] rounded-lg p-3 text-center"
+                className="bg-[var(--muted)] rounded-lg p-3 text-center"
               >
-                <div className="text-xl font-bold text-[#0a0a0a]">
+                <div className="text-xl font-bold text-[var(--foreground)]">
                   {stat.value}
                 </div>
-                <div className="text-xs text-[#737373]">{stat.label}</div>
+                <div className="text-xs text-[var(--muted-foreground)]">{stat.label}</div>
               </div>
             ))}
           </div>
 
           {/* Personality Traits */}
           <div>
-            <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">
+            <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
               Personality Traits
             </h3>
             <div className="space-y-3">
               {Object.entries(agent.personality).map(([trait, value]) => (
                 <div key={trait} className="flex items-center gap-2">
-                  <span className="text-[13px] text-[#737373] w-24 shrink-0">
+                  <span className="text-[13px] text-[var(--muted-foreground)] w-24 shrink-0">
                     {trait}
                   </span>
-                  <div className="flex-1 h-2 rounded-full bg-[#e2e8f0] overflow-hidden">
+                  <div className="flex-1 h-2 rounded-full bg-[var(--muted)] overflow-hidden">
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${value}%`, backgroundColor: agent.communityColor }}
                     />
                   </div>
-                  <span className="text-xs font-semibold text-[#0a0a0a] w-10 text-right">
+                  <span className="text-xs font-semibold text-[var(--foreground)] w-10 text-right">
                     {value}%
                   </span>
                 </div>
@@ -217,10 +217,10 @@ export default function AgentDetailPage() {
 
           {/* Memory Summary */}
           <div>
-            <h3 className="text-sm font-semibold text-[#0a0a0a] mb-3">
+            <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
               Memory Summary
             </h3>
-            <div className="bg-[#f8fafc] rounded-lg p-3 text-[13px] text-[#737373] leading-relaxed border border-[#e5e5e5]">
+            <div className="bg-[var(--muted)] rounded-lg p-3 text-[13px] text-[var(--muted-foreground)] leading-relaxed border border-[var(--border)]">
               {agent.memorySummary}
             </div>
           </div>
@@ -229,20 +229,20 @@ export default function AgentDetailPage() {
         {/* Right Panel - Activity & Interactions */}
         <main className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
           {/* Tab Bar */}
-          <div className="flex border-b border-[#e5e5e5]">
+          <div className="flex border-b border-[var(--border)]">
             {TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 text-sm font-medium transition-colors relative ${
                   activeTab === tab
-                    ? "text-[#0a0a0a]"
-                    : "text-[#737373] hover:text-[#0a0a0a]"
+                    ? "text-[var(--foreground)]"
+                    : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                 }`}
               >
                 {tab}
                 {activeTab === tab && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0a0a0a]" />
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--foreground)]" />
                 )}
               </button>
             ))}
@@ -251,8 +251,8 @@ export default function AgentDetailPage() {
           {activeTab === "Activity" && (
             <>
               {/* Sentiment Over Time */}
-              <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4">
-                <h3 className="text-sm font-semibold text-[#0a0a0a] mb-4">
+              <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+                <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">
                   Sentiment Over Time
                 </h3>
                 <ResponsiveContainer width="100%" height={200}>
@@ -270,28 +270,28 @@ export default function AgentDetailPage() {
               </div>
 
               {/* Recent Interactions */}
-              <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-[#e5e5e5]">
-                  <h3 className="text-sm font-semibold text-[#0a0a0a]">
+              <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-[var(--border)]">
+                  <h3 className="text-sm font-semibold text-[var(--foreground)]">
                     Recent Interactions
                   </h3>
                 </div>
                 <table className="w-full text-[13px]">
                   <thead>
-                    <tr className="border-b border-[#e5e5e5] bg-[#f8fafc]">
-                      <th className="text-left px-4 py-3 font-semibold text-[#737373]">
+                    <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
+                      <th className="text-left px-4 py-3 font-semibold text-[var(--muted-foreground)]">
                         Target Agent
                       </th>
-                      <th className="text-left px-4 py-3 font-semibold text-[#737373]">
+                      <th className="text-left px-4 py-3 font-semibold text-[var(--muted-foreground)]">
                         Type
                       </th>
-                      <th className="text-left px-4 py-3 font-semibold text-[#737373]">
+                      <th className="text-left px-4 py-3 font-semibold text-[var(--muted-foreground)]">
                         Sentiment
                       </th>
-                      <th className="text-left px-4 py-3 font-semibold text-[#737373]">
+                      <th className="text-left px-4 py-3 font-semibold text-[var(--muted-foreground)]">
                         Message Preview
                       </th>
-                      <th className="text-right px-4 py-3 font-semibold text-[#737373]">
+                      <th className="text-right px-4 py-3 font-semibold text-[var(--muted-foreground)]">
                         Time
                       </th>
                     </tr>
@@ -300,7 +300,7 @@ export default function AgentDetailPage() {
                     {MOCK_INTERACTIONS.map((interaction, i) => (
                       <tr
                         key={i}
-                        className="border-b border-[#f1f5f9] hover:bg-[#f1f5f9] transition-colors"
+                        className="border-b border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
                       >
                         <td className="px-4 py-3">
                           <button
@@ -326,10 +326,10 @@ export default function AgentDetailPage() {
                             {interaction.sentiment}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-[#737373] max-w-xs truncate">
+                        <td className="px-4 py-3 text-[var(--muted-foreground)] max-w-xs truncate">
                           {interaction.message}
                         </td>
-                        <td className="text-right px-4 py-3 text-[#a3a3a3]">
+                        <td className="text-right px-4 py-3 text-[var(--muted-foreground)]">
                           {interaction.time}
                         </td>
                       </tr>
@@ -362,14 +362,14 @@ export default function AgentDetailPage() {
               </div>
               {/* Top Connections Sidebar */}
               <div
-                className="w-[280px] shrink-0 border-l bg-white overflow-y-auto p-4 flex flex-col gap-3"
-                style={{ borderColor: "var(--border, #e5e5e5)" }}
+                className="w-[280px] shrink-0 border-l bg-[var(--card)] overflow-y-auto p-4 flex flex-col gap-3"
+                style={{ borderColor: "var(--border)" }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-sm text-[#0a0a0a]">
+                  <span className="font-semibold text-sm text-[var(--foreground)]">
                     Top Connections
                   </span>
-                  <span className="text-xs text-[#a3a3a3]">
+                  <span className="text-xs text-[var(--muted-foreground)]">
                     {agent.connections}
                   </span>
                 </div>
@@ -378,7 +378,7 @@ export default function AgentDetailPage() {
                   value={connSearch}
                   onChange={(e) => setConnSearch(e.target.value)}
                   className="rounded-md border px-3 py-1.5 text-sm w-full"
-                  style={{ borderColor: "var(--input, #d4d4d4)" }}
+                  style={{ borderColor: "var(--input)" }}
                 />
                 <div className="flex flex-col gap-2 overflow-y-auto flex-1">
                   {filteredConnections.map((conn) => (
@@ -387,7 +387,7 @@ export default function AgentDetailPage() {
                       onClick={() =>
                         navigate(`/agents/${conn.name.replace("Agent #", "")}`)
                       }
-                      className="flex items-center gap-3 p-2 rounded-md hover:bg-[#f1f5f9] text-left transition-colors"
+                      className="interactive flex items-center gap-3 p-2 rounded-md hover:bg-[var(--accent)] text-left transition-colors"
                     >
                       <div
                         className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
@@ -396,15 +396,15 @@ export default function AgentDetailPage() {
                         {conn.name.slice(-4)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate text-[#0a0a0a]">
+                        <div className="text-sm font-medium truncate text-[var(--foreground)]">
                           {conn.name}
                         </div>
-                        <div className="text-xs text-[#737373]">
+                        <div className="text-xs text-[var(--muted-foreground)]">
                           {conn.community} &middot; Trust: {conn.trust.toFixed(2)}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-xs font-semibold text-[#0a0a0a]">
+                        <div className="text-xs font-semibold text-[var(--foreground)]">
                           {conn.influence.toFixed(2)}
                         </div>
                       </div>
@@ -416,7 +416,7 @@ export default function AgentDetailPage() {
           )}
 
           {activeTab === "Messages" && (
-            <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-8 flex items-center justify-center text-[#a3a3a3] min-h-[400px]">
+            <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-8 flex items-center justify-center text-[var(--muted-foreground)] min-h-[400px]">
               <div className="text-center">
                 <p className="text-sm">
                   Chronological message feed will load here

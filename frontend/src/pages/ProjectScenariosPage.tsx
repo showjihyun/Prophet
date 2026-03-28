@@ -155,7 +155,7 @@ export default function ProjectScenariosPage() {
   return (
     <div
       data-testid="project-scenarios-page"
-      className="min-h-screen flex bg-[#f8fafc]"
+      className="min-h-screen flex bg-[var(--background)]"
     >
       <AppSidebar />
 
@@ -165,28 +165,28 @@ export default function ProjectScenariosPage() {
         <nav className="flex items-center gap-1.5 text-sm mb-6">
           <button
             onClick={() => navigate("/projects")}
-            className="text-[#737373] hover:text-[#0a0a0a] transition-colors"
+            className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
           >
             Projects
           </button>
-          <span className="text-[#a3a3a3]">&gt;</span>
-          <span className="text-[#0a0a0a] font-medium">{project.name}</span>
+          <span className="text-[var(--muted-foreground)]">&gt;</span>
+          <span className="text-[var(--foreground)] font-medium">{project.name}</span>
         </nav>
 
         {/* Project Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-[#0a0a0a]">
+            <h1 className="text-2xl font-bold font-display text-[var(--foreground)]">
               {project.name}
             </h1>
-            <p className="text-sm text-[#737373] mt-1">{project.description}</p>
+            <p className="text-sm text-[var(--muted-foreground)] mt-1">{project.description}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button className="inline-flex items-center gap-2 h-9 px-3 text-sm font-medium text-[#737373] hover:text-[#0a0a0a] hover:bg-[#f4f4f5] rounded-md transition-colors">
+            <button className="inline-flex items-center gap-2 h-9 px-3 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors">
               <Settings className="w-4 h-4" />
               Settings
             </button>
-            <button className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[#0a0a0a] rounded-md hover:bg-[#1a1a1a] transition-colors">
+            <button className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors">
               <Plus className="w-4 h-4" />
               New Scenario
             </button>
@@ -194,9 +194,9 @@ export default function ProjectScenariosPage() {
         </div>
 
         {/* Project Info Bar */}
-        <div className="flex items-center gap-6 bg-[#f4f4f5] rounded-lg px-5 py-3 mb-6 flex-wrap">
+        <div className="flex items-center gap-6 bg-[var(--muted)] rounded-lg px-5 py-3 mb-6 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#737373]">Status</span>
+            <span className="text-xs text-[var(--muted-foreground)]">Status</span>
             <ProjectStatusBadge />
           </div>
           <Divider />
@@ -213,7 +213,7 @@ export default function ProjectScenariosPage() {
         </div>
 
         {/* Scenarios Section */}
-        <h2 className="text-lg font-semibold text-[#0a0a0a] mb-4">
+        <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
           Scenarios
         </h2>
 
@@ -221,18 +221,18 @@ export default function ProjectScenariosPage() {
           {MOCK_SCENARIOS.map((scenario) => (
             <div
               key={scenario.id}
-              className="bg-white border border-[#e5e5e5] rounded-lg p-5"
+              className="interactive bg-[var(--card)] border border-[var(--border)] rounded-lg p-5"
             >
               {/* Header: name + status */}
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-base font-semibold text-[#0a0a0a]">
+                <h3 className="text-base font-semibold text-[var(--foreground)]">
                   {scenario.name}
                 </h3>
                 <ScenarioStatusBadge status={scenario.status} />
               </div>
 
               {/* Description */}
-              <p className="text-sm text-[#737373] mb-3">
+              <p className="text-sm text-[var(--muted-foreground)] mb-3">
                 {scenario.description}
               </p>
 
@@ -240,7 +240,7 @@ export default function ProjectScenariosPage() {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 {/* Metadata */}
                 <div className="flex items-center gap-4 flex-wrap">
-                  <span className="inline-flex items-center gap-1.5 text-xs text-[#737373]">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                     <Users className="w-3.5 h-3.5" />
                     Agents: {scenario.agents.toLocaleString()}
                   </span>
@@ -253,7 +253,7 @@ export default function ProjectScenariosPage() {
                   <span className="text-xs" style={{ color: TIER_COLORS.tier3 }}>
                     Tier 3: {scenario.tier3.toLocaleString()}
                   </span>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-[#737373]">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                     <Clock className="w-3.5 h-3.5" />
                     Run time: {scenario.runTime}
                   </span>
@@ -264,7 +264,7 @@ export default function ProjectScenariosPage() {
                   {scenario.status === "completed" && (
                     <button
                       onClick={() => navigate("/")}
-                      className="h-8 px-3 text-sm font-medium border border-[#e5e5e5] rounded-md bg-white hover:bg-gray-50 transition-colors"
+                      className="h-8 px-3 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-gray-50 transition-colors"
                     >
                       Results
                     </button>
@@ -278,13 +278,13 @@ export default function ProjectScenariosPage() {
                   {scenario.status === "draft" && (
                     <button
                       onClick={() => navigate("/")}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-white bg-[#0a0a0a] rounded-md hover:bg-[#1a1a1a] transition-colors"
+                      className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors"
                     >
                       <Play className="w-3.5 h-3.5" />
                       Run
                     </button>
                   )}
-                  <button className="h-8 w-8 flex items-center justify-center text-[#737373] hover:text-[#0a0a0a] hover:bg-[#f4f4f5] rounded-md transition-colors">
+                  <button className="h-8 w-8 flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors">
                     <MoreHorizontal className="w-4 h-4" />
                   </button>
                 </div>
@@ -302,14 +302,14 @@ export default function ProjectScenariosPage() {
 /* ------------------------------------------------------------------ */
 
 function Divider() {
-  return <div className="h-4 w-px bg-[#d4d4d8]" />;
+  return <div className="h-4 w-px bg-[var(--border)]" />;
 }
 
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-xs text-[#737373]">{label}</span>
-      <span className="text-sm font-semibold text-[#0a0a0a]">{value}</span>
+      <span className="text-xs text-[var(--muted-foreground)]">{label}</span>
+      <span className="text-sm font-semibold text-[var(--foreground)]">{value}</span>
     </div>
   );
 }

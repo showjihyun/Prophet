@@ -107,7 +107,7 @@ export default function ConversationPanel() {
   return (
     <div
       data-testid="conversation-panel"
-      className="flex border-t border-[var(--border)] bg-white"
+      className="flex border-t border-[var(--border)] bg-[var(--card)]"
       style={{ height: "calc(var(--bottom-area-height) - var(--timeline-height))" }}
     >
       {/* Expert Agent Analysis */}
@@ -138,7 +138,7 @@ export default function ConversationPanel() {
           {conversations.map((conv) => (
             <div
               key={conv.id}
-              className="shrink-0 w-[240px] rounded-lg border border-[var(--border)] bg-white p-2.5 flex flex-col gap-1.5 hover:shadow-sm transition-shadow cursor-pointer"
+              className="shrink-0 w-[240px] rounded-lg border border-[var(--border)] bg-[var(--card)] p-2.5 flex flex-col gap-1.5 hover:shadow-sm transition-shadow cursor-pointer"
             >
               <div className="flex items-center gap-1.5">
                 <span

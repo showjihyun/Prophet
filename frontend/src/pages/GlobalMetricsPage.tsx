@@ -42,12 +42,12 @@ export default function GlobalMetricsPage() {
   return (
     <div
       data-testid="global-metrics-page"
-      className="min-h-screen bg-[#f8fafc] flex flex-col"
+      className="min-h-screen bg-[var(--background)] flex flex-col"
     >
       <PageNav
         breadcrumbs={[{ label: "Back to Simulation", href: "/" }, { label: "Global Insight & Metrics" }]}
         actions={
-          <button className="h-9 px-4 text-sm font-medium border border-[#e5e5e5] rounded-md bg-white hover:bg-gray-50 flex items-center gap-2">
+          <button className="h-9 px-4 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-gray-50 flex items-center gap-2">
             <DownloadIcon />
             Export Data
           </button>
@@ -95,8 +95,8 @@ export default function GlobalMetricsPage() {
         {/* Charts Area - 2 column */}
         <div className="grid grid-cols-2 gap-6">
           {/* Polarization Trend */}
-          <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4">
-            <h3 className="text-base font-semibold text-[#0a0a0a] mb-4">
+          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+            <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">
               Polarization Trend
             </h3>
             <ResponsiveContainer width="100%" height={300}>
@@ -122,8 +122,8 @@ export default function GlobalMetricsPage() {
           </div>
 
           {/* Sentiment by Community */}
-          <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4">
-            <h3 className="text-base font-semibold text-[#0a0a0a] mb-4">
+          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+            <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">
               Sentiment by Community
             </h3>
             <ResponsiveContainer width="100%" height={300}>
@@ -172,8 +172,8 @@ export default function GlobalMetricsPage() {
         {/* Bottom Area - 2 column */}
         <div className="grid grid-cols-2 gap-6">
           {/* Prophet 3-Tier Cost Optimization */}
-          <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4">
-            <h3 className="text-base font-semibold text-[#0a0a0a] mb-4">
+          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+            <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">
               Prophet 3-Tier Cost Optimization
             </h3>
             <div className="space-y-3">
@@ -206,7 +206,7 @@ export default function GlobalMetricsPage() {
                 <div style={{ width: "26.2%", backgroundColor: "var(--sentiment-warning)" }} />
                 <div style={{ width: "0%", backgroundColor: "var(--community-delta)" }} />
               </div>
-              <div className="flex justify-between text-[10px] text-[#a3a3a3] mt-1">
+              <div className="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-1">
                 <span>Tier 1 (73.8%)</span>
                 <span>Tier 2 (26.2%)</span>
                 <span>Tier 3 (0%)</span>
@@ -215,8 +215,8 @@ export default function GlobalMetricsPage() {
           </div>
 
           {/* Cascade Analytics */}
-          <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4">
-            <h3 className="text-base font-semibold text-[#0a0a0a] mb-4">
+          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+            <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">
               Cascade Analytics
             </h3>
             <div className="grid grid-cols-2 gap-3">
@@ -269,14 +269,14 @@ function TierCard({
 }) {
   return (
     <div
-      className="flex items-center gap-3 p-3 rounded-lg border border-[#e5e5e5] hover:shadow-sm transition-shadow"
+      className="flex items-center gap-3 p-3 rounded-lg border border-[var(--border)] hover:shadow-sm transition-shadow"
       style={{ borderLeftColor: color, borderLeftWidth: 3 }}
     >
       <span style={{ color }}>{icon}</span>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-[#0a0a0a]">{tier}</div>
-        <div className="text-xl font-bold text-[#0a0a0a]">{count}</div>
-        <div className="text-xs text-[#a3a3a3]">{description}</div>
+        <div className="text-sm font-semibold text-[var(--foreground)]">{tier}</div>
+        <div className="text-xl font-bold text-[var(--foreground)]">{count}</div>
+        <div className="text-xs text-[var(--muted-foreground)]">{description}</div>
       </div>
     </div>
   );
@@ -294,10 +294,10 @@ function CascadeStat({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="p-3 rounded-lg border border-[#e5e5e5] flex flex-col gap-1">
+    <div className="p-3 rounded-lg border border-[var(--border)] flex flex-col gap-1">
       <span style={{ color }}>{icon}</span>
-      <span className="text-2xl font-bold text-[#0a0a0a]">{value}</span>
-      <span className="text-xs text-[#737373]">{label}</span>
+      <span className="text-2xl font-bold text-[var(--foreground)]">{value}</span>
+      <span className="text-xs text-[var(--muted-foreground)]">{label}</span>
     </div>
   );
 }

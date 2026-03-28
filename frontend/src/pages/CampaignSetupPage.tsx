@@ -80,7 +80,7 @@ export default function CampaignSetupPage() {
   return (
     <div
       data-testid="campaign-setup-page"
-      className="min-h-screen bg-[#f8fafc] flex flex-col"
+      className="min-h-screen bg-[var(--background)] flex flex-col"
     >
       <PageNav
         breadcrumbs={[
@@ -94,13 +94,13 @@ export default function CampaignSetupPage() {
           onSubmit={handleSubmit}
           className="w-full max-w-2xl flex flex-col gap-6"
         >
-          <h1 className="text-xl font-bold text-[#0a0a0a]">
+          <h1 className="text-xl font-bold font-display text-[var(--foreground)]">
             Create New Simulation
           </h1>
 
           {/* Campaign Name */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#0a0a0a]">
+            <label className="text-sm font-medium text-[var(--foreground)]">
               Campaign Name
             </label>
             <input
@@ -109,13 +109,13 @@ export default function CampaignSetupPage() {
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Q4 Product Launch"
               required
-              className="h-10 px-3 text-sm border border-[#e5e5e5] rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-[#a3a3a3]"
+              className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
             />
           </div>
 
           {/* Budget */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#0a0a0a]">
+            <label className="text-sm font-medium text-[var(--foreground)]">
               Budget ($)
             </label>
             <input
@@ -124,13 +124,13 @@ export default function CampaignSetupPage() {
               onChange={(e) => setBudget(e.target.value)}
               placeholder="10000"
               min="0"
-              className="h-10 px-3 text-sm border border-[#e5e5e5] rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-[#a3a3a3]"
+              className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
             />
           </div>
 
           {/* Channels */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#0a0a0a]">
+            <label className="text-sm font-medium text-[var(--foreground)]">
               Channels
             </label>
             <div className="flex flex-wrap gap-3">
@@ -143,7 +143,7 @@ export default function CampaignSetupPage() {
                     type="checkbox"
                     checked={channels.has(ch)}
                     onChange={() => toggleChannel(ch)}
-                    className="w-4 h-4 rounded border-[#e5e5e5] text-[#171717] focus:ring-[#a3a3a3]"
+                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--foreground)] focus:ring-[var(--ring)]"
                   />
                   {ch}
                 </label>
@@ -153,7 +153,7 @@ export default function CampaignSetupPage() {
 
           {/* Message */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#0a0a0a]">
+            <label className="text-sm font-medium text-[var(--foreground)]">
               Campaign Message
             </label>
             <textarea
@@ -161,13 +161,13 @@ export default function CampaignSetupPage() {
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Enter the campaign message to simulate..."
               rows={4}
-              className="px-3 py-2 text-sm border border-[#e5e5e5] rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-[#a3a3a3] resize-y"
+              className="px-3 py-2 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] resize-y"
             />
           </div>
 
           {/* Target Communities */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#0a0a0a]">
+            <label className="text-sm font-medium text-[var(--foreground)]">
               Target Communities
             </label>
             <div className="flex flex-wrap gap-2">
@@ -181,7 +181,7 @@ export default function CampaignSetupPage() {
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
                       selected
                         ? "border-transparent text-white"
-                        : "border-[#e5e5e5] text-[#737373] bg-white hover:bg-gray-50"
+                        : "border-[var(--border)] text-[var(--muted-foreground)] bg-[var(--card)] hover:bg-gray-50"
                     }`}
                     style={selected ? { backgroundColor: c.color } : undefined}
                   >
@@ -199,14 +199,14 @@ export default function CampaignSetupPage() {
           </div>
 
           {/* Advanced Settings */}
-          <details className="border border-[#e5e5e5] rounded-lg bg-white">
-            <summary className="px-4 py-3 text-sm font-medium text-[#0a0a0a] cursor-pointer select-none">
+          <details className="border border-[var(--border)] rounded-lg bg-[var(--card)]">
+            <summary className="px-4 py-3 text-sm font-medium text-[var(--foreground)] cursor-pointer select-none">
               Advanced Settings
             </summary>
-            <div className="px-4 pb-4 flex flex-col gap-4 border-t border-[#e5e5e5] pt-4">
+            <div className="px-4 pb-4 flex flex-col gap-4 border-t border-[var(--border)] pt-4">
               {/* Max Steps */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[#737373]">
+                <label className="text-sm font-medium text-[var(--muted-foreground)]">
                   Max Steps (simulation days)
                 </label>
                 <input
@@ -215,26 +215,26 @@ export default function CampaignSetupPage() {
                   onChange={(e) => setMaxSteps(Number(e.target.value))}
                   min="1"
                   max="1000"
-                  className="h-10 px-3 text-sm border border-[#e5e5e5] rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-[#a3a3a3]"
+                  className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                 />
               </div>
 
               {/* Random Seed */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[#737373]">
+                <label className="text-sm font-medium text-[var(--muted-foreground)]">
                   Random Seed
                 </label>
                 <input
                   type="number"
                   value={randomSeed}
                   onChange={(e) => setRandomSeed(Number(e.target.value))}
-                  className="h-10 px-3 text-sm border border-[#e5e5e5] rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-[#a3a3a3]"
+                  className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                 />
               </div>
 
               {/* SLM/LLM Ratio */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[#737373]">
+                <label className="text-sm font-medium text-[var(--muted-foreground)]">
                   SLM / LLM Ratio: {slmLlmRatio}% SLM / {100 - slmLlmRatio}%
                   LLM
                 </label>
@@ -244,9 +244,9 @@ export default function CampaignSetupPage() {
                   max="100"
                   value={slmLlmRatio}
                   onChange={(e) => setSlmLlmRatio(Number(e.target.value))}
-                  className="w-full accent-[#171717]"
+                  className="w-full accent-[var(--foreground)]"
                 />
-                <div className="flex justify-between text-[10px] text-[#a3a3a3]">
+                <div className="flex justify-between text-[10px] text-[var(--muted-foreground)]">
                   <span>100% LLM</span>
                   <span>100% SLM</span>
                 </div>
@@ -265,7 +265,7 @@ export default function CampaignSetupPage() {
           <button
             type="submit"
             disabled={submitting || !name}
-            className="h-11 px-6 text-sm font-medium text-white bg-[#171717] rounded-md hover:bg-[#262626] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="h-11 px-6 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {submitting ? "Creating..." : "Create Simulation"}
           </button>

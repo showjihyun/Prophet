@@ -77,7 +77,7 @@ export default function ControlPanel() {
   return (
     <div
       data-testid="control-panel"
-      className="shrink-0 flex items-center justify-between px-4 border-b border-[var(--border)] bg-white"
+      className="shrink-0 flex items-center justify-between px-4 border-b border-[var(--border)] bg-[var(--card)]"
       style={{ height: "var(--control-bar-height)" }}
     >
       {/* Left: Logo + Status */}
@@ -88,7 +88,7 @@ export default function ControlPanel() {
             MCASP Prophet Engine
           </span>
         </div>
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-white">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--card)]">
           <span
             className={`w-2 h-2 rounded-full ${
               isRunning
@@ -121,7 +121,7 @@ export default function ControlPanel() {
         </button>
 
         <select
-          className="h-8 px-2 text-xs border border-[var(--border)] rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-gray-300"
+          className="h-8 px-2 text-xs border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-1 focus:ring-gray-300"
           defaultValue="default"
         >
           <option value="default">Default Scenario</option>

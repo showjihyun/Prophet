@@ -113,7 +113,7 @@ export default function CommunityPanel() {
             placeholder="Filter communities..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-8 pl-8 pr-3 text-xs border border-[var(--border)] rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-gray-300"
+            className="w-full h-8 pl-8 pr-3 text-xs border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-1 focus:ring-gray-300"
           />
         </div>
       </div>
@@ -162,7 +162,7 @@ function CommunityRow({
   return (
     <div
       onClick={onClick}
-      className={`flex items-center gap-3 px-4 cursor-pointer transition-colors hover:bg-[var(--secondary)] ${
+      className={`interactive flex items-center gap-3 px-4 cursor-pointer transition-colors hover:bg-[var(--secondary)] ${
         isHighlighted ? "bg-[var(--secondary)]" : ""
       }`}
       style={{ height: "var(--community-item-height, 48px)" }}

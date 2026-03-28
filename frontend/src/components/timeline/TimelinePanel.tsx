@@ -41,7 +41,7 @@ export default function TimelinePanel() {
   return (
     <div
       data-testid="timeline-panel"
-      className="flex items-center gap-4 px-4 border-t border-[var(--border)] bg-white"
+      className="flex items-center gap-4 px-4 border-t border-[var(--border)] bg-[var(--card)]"
       style={{ height: "var(--timeline-height)" }}
     >
       {/* Left: Day counter */}

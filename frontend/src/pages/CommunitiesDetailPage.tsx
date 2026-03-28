@@ -108,7 +108,7 @@ export default function CommunitiesDetailPage() {
   return (
     <div
       data-testid="communities-detail-page"
-      className="min-h-screen bg-[#f8fafc] flex flex-col"
+      className="min-h-screen bg-[var(--background)] flex flex-col"
     >
       <PageNav
         breadcrumbs={[
@@ -149,13 +149,13 @@ export default function CommunitiesDetailPage() {
           {COMMUNITIES.map((community) => (
             <div
               key={community.id}
-              className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-shadow cursor-pointer"
+              className="interactive bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-shadow cursor-pointer"
               style={{ borderTopColor: community.color, borderTopWidth: 3 }}
               onClick={() => navigate(`/communities/${community.id}`)}
             >
               {/* Header */}
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-[#0a0a0a]">
+                <h3 className="text-base font-semibold text-[var(--foreground)]">
                   {community.name}
                 </h3>
                 <span
@@ -168,7 +168,7 @@ export default function CommunitiesDetailPage() {
 
               {/* Sentiment Bar */}
               <div>
-                <span className="text-[11px] text-[#737373] font-medium">
+                <span className="text-[11px] text-[var(--muted-foreground)] font-medium">
                   Sentiment
                 </span>
                 <div className="flex h-2 rounded-full overflow-hidden mt-1">
@@ -182,7 +182,7 @@ export default function CommunitiesDetailPage() {
                     style={{ width: `${community.sentiment.negative}%`, backgroundColor: 'var(--sentiment-negative)' }}
                   />
                 </div>
-                <div className="flex justify-between text-[10px] text-[#a3a3a3] mt-0.5">
+                <div className="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-0.5">
                   <span>+{community.sentiment.positive}%</span>
                   <span>{community.sentiment.neutral}%</span>
                   <span>-{community.sentiment.negative}%</span>
@@ -191,7 +191,7 @@ export default function CommunitiesDetailPage() {
 
               {/* Key Influencers */}
               <div>
-                <span className="text-[11px] text-[#737373] font-medium">
+                <span className="text-[11px] text-[var(--muted-foreground)] font-medium">
                   Key Influencers
                 </span>
                 <ul className="mt-1 space-y-0.5">
@@ -209,7 +209,7 @@ export default function CommunitiesDetailPage() {
                       >
                         {inf.id}
                       </button>
-                      <span className="text-[#737373]">{inf.score}</span>
+                      <span className="text-[var(--muted-foreground)]">{inf.score}</span>
                     </li>
                   ))}
                 </ul>
@@ -217,7 +217,7 @@ export default function CommunitiesDetailPage() {
 
               {/* Emotion Distribution */}
               <div>
-                <span className="text-[11px] text-[#737373] font-medium">
+                <span className="text-[11px] text-[var(--muted-foreground)] font-medium">
                   Emotion Distribution
                 </span>
                 <div className="flex h-2 rounded-full overflow-hidden mt-1">
@@ -245,7 +245,7 @@ export default function CommunitiesDetailPage() {
                             emotionColors[key as keyof typeof emotionColors],
                         }}
                       />
-                      <span className="text-[#737373] capitalize">
+                      <span className="text-[var(--muted-foreground)] capitalize">
                         {key} {val}%
                       </span>
                     </span>
@@ -264,8 +264,8 @@ export default function CommunitiesDetailPage() {
         </div>
 
         {/* Community Connections Matrix */}
-        <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4">
-          <h3 className="text-sm font-semibold text-[#0a0a0a] mb-4">
+        <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+          <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">
             Community Connections
           </h3>
           <div className="overflow-x-auto">
@@ -276,7 +276,7 @@ export default function CommunitiesDetailPage() {
                   {COMMUNITIES.map((c) => (
                     <th
                       key={c.id}
-                      className="text-xs font-medium text-[#737373] text-center p-2"
+                      className="text-xs font-medium text-[var(--muted-foreground)] text-center p-2"
                     >
                       <span className="flex items-center justify-center gap-1">
                         <span
@@ -292,7 +292,7 @@ export default function CommunitiesDetailPage() {
               <tbody>
                 {COMMUNITIES.map((row) => (
                   <tr key={row.id}>
-                    <td className="text-xs font-medium text-[#737373] p-2">
+                    <td className="text-xs font-medium text-[var(--muted-foreground)] p-2">
                       <span className="flex items-center gap-1">
                         <span
                           className="w-2 h-2 rounded-full"

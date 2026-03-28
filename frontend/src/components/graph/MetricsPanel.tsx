@@ -135,7 +135,7 @@ export default function MetricsPanel() {
               }}
             />
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-[var(--foreground)] shadow"
+              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[var(--card)] border-2 border-[var(--foreground)] shadow"
               style={{ left: `${Math.min(polarization * 100, 100)}%` }}
             />
           </div>
@@ -200,7 +200,7 @@ export default function MetricsPanel() {
 
 function MetricCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-white p-3">
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-3">
       {children}
     </div>
   );

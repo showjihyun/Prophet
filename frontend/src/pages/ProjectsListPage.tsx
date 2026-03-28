@@ -76,7 +76,7 @@ export default function ProjectsListPage() {
   return (
     <div
       data-testid="projects-list-page"
-      className="min-h-screen flex bg-[#f8fafc]"
+      className="min-h-screen flex bg-[var(--background)]"
     >
       <AppSidebar />
 
@@ -85,18 +85,18 @@ export default function ProjectsListPage() {
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-[#0a0a0a]">Projects</h1>
-            <p className="text-sm text-[#737373] mt-1">
+            <h1 className="text-2xl font-bold font-display text-[var(--foreground)]">Projects</h1>
+            <p className="text-sm text-[var(--muted-foreground)] mt-1">
               Manage your simulation projects and scenarios
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[#0a0a0a] rounded-md hover:bg-[#1a1a1a] transition-colors">
+            <button className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors">
               <Plus className="w-4 h-4" />
               New Project
             </button>
             {/* Avatar placeholder */}
-            <div className="w-8 h-8 rounded-full bg-[#e5e5e5] flex items-center justify-center text-xs font-medium text-[#737373]">
+            <div className="w-8 h-8 rounded-full bg-[var(--border)] flex items-center justify-center text-xs font-medium text-[var(--muted-foreground)]">
               U
             </div>
           </div>
@@ -107,24 +107,24 @@ export default function ProjectsListPage() {
           {MOCK_PROJECTS.map((project) => (
             <div
               key={project.id}
-              className="bg-white border border-[#e5e5e5] rounded-lg p-5 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-shadow"
+              className="interactive bg-[var(--card)] border border-[var(--border)] rounded-lg p-5 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-shadow"
             >
               {/* Top row */}
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0 mr-4">
                   <button
                     onClick={() => navigate(`/projects/${project.id}`)}
-                    className="text-base font-semibold text-[#0a0a0a] hover:underline text-left"
+                    className="text-base font-semibold text-[var(--foreground)] hover:underline text-left"
                   >
                     {project.name}
                   </button>
-                  <p className="text-sm text-[#737373] mt-1 line-clamp-2">
+                  <p className="text-sm text-[var(--muted-foreground)] mt-1 line-clamp-2">
                     {project.description}
                   </p>
                 </div>
                 <button
                   onClick={() => navigate(`/projects/${project.id}`)}
-                  className="shrink-0 h-8 px-3 text-sm font-medium border border-[#e5e5e5] rounded-md bg-white hover:bg-gray-50 transition-colors"
+                  className="shrink-0 h-8 px-3 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-gray-50 transition-colors"
                 >
                   Open
                 </button>
@@ -132,15 +132,15 @@ export default function ProjectsListPage() {
 
               {/* Metadata row */}
               <div className="flex items-center gap-4 mt-3 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 text-xs text-[#737373]">
+                <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                   <Layers className="w-3.5 h-3.5" />
                   Scenarios: {project.scenarios}
                 </span>
-                <span className="inline-flex items-center gap-1.5 text-xs text-[#737373]">
+                <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                   <Users className="w-3.5 h-3.5" />
                   Total Agents: {project.totalAgents.toLocaleString()}
                 </span>
-                <span className="inline-flex items-center gap-1.5 text-xs text-[#737373]">
+                <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                   <Clock className="w-3.5 h-3.5" />
                   Last Run: {project.lastRun}
                 </span>

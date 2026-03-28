@@ -516,7 +516,7 @@ function GraphButton({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="w-8 h-8 flex items-center justify-center rounded-md bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors"
+      className="w-8 h-8 flex items-center justify-center rounded-md bg-[var(--card)]/10 text-white/70 hover:bg-[var(--card)]/20 hover:text-white transition-colors"
     >
       {icon}
     </button>

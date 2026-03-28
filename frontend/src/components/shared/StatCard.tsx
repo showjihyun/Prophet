@@ -30,13 +30,13 @@ export default function StatCard({
   return (
     <div
       data-testid="stat-card"
-      className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4 flex flex-col gap-2 hover:scale-[1.02] transition-transform"
+      className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4 flex flex-col gap-2 hover:scale-[1.02] transition-transform"
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-normal text-[#737373]">{label}</span>
-        {icon && <span className="text-[#737373]">{icon}</span>}
+        <span className="text-xs font-normal text-[var(--muted-foreground)]">{label}</span>
+        {icon && <span className="text-[var(--muted-foreground)]">{icon}</span>}
       </div>
-      <span className="text-[28px] font-bold leading-tight text-[#0a0a0a]">
+      <span className="text-[28px] font-bold leading-tight text-[var(--foreground)]">
         {value}
       </span>
       {change && (

@@ -39,13 +39,13 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
   return (
     <aside
       data-testid="app-sidebar"
-      className="flex flex-col shrink-0 border-r border-[#e5e5e5] bg-white"
+      className="flex flex-col shrink-0 border-r border-[var(--border)] bg-[var(--card)]"
       style={{ width: 256 }}
     >
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 h-14 border-b border-[#e5e5e5]">
-        <Brain className="w-5 h-5 text-[#0a0a0a]" />
-        <span className="text-base font-bold text-[#0a0a0a]">MCASP Prophet</span>
+      <div className="flex items-center gap-2.5 px-4 h-14 border-b border-[var(--border)]">
+        <Brain className="w-5 h-5 text-[var(--foreground)]" />
+        <span className="text-base font-bold text-[var(--foreground)]">MCASP Prophet</span>
       </div>
 
       {/* Navigation */}
@@ -57,11 +57,11 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
               key={item.href}
               onClick={() => navigate(item.href)}
               className={[
-                "flex items-center gap-3 rounded-md text-sm font-medium transition-colors",
+                "interactive flex items-center gap-3 rounded-md text-sm font-medium transition-colors",
                 "h-10 px-3",
                 active
-                  ? "bg-[#f4f4f5] text-[#0a0a0a]"
-                  : "text-[#737373] hover:bg-[#f4f4f5] hover:text-[#0a0a0a]",
+                  ? "bg-[var(--accent)] text-[var(--foreground)]"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
               ].join(" ")}
             >
               <item.icon className="w-4 h-4" />
