@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: secret
       POSTGRES_DB: prophet
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

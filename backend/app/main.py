@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import agents, communities, llm_dashboard, network, simulations, ws
 from app.config import settings
+import sqlalchemy
 from app.database import engine, Base
 
 
@@ -18,6 +19,8 @@ import app.models  # noqa: F401 — register all models for Base.metadata
 async def lifespan(app: FastAPI):
     """Create DB tables on startup (dev mode). Production uses Alembic migrations."""
     async with engine.begin() as conn:
+        await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""))
         await conn.run_sync(Base.metadata.create_all)
     yield
     await engine.dispose()

@@ -11,11 +11,11 @@ build/
 
 # Node
 node_modules/
-dist/
 
-# Environment
+# Environment (all variants)
 .env
-.env.local
+.env.*
+!.env.example
 
 # IDE
 .idea/
