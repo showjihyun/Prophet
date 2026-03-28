@@ -114,6 +114,12 @@ LLM calls are abstracted behind `LLMAdapter` interface — provider is swappable
 | UI-03 | [UI_03_TOP_INFLUENCERS.md](./ui/UI_03_TOP_INFLUENCERS.md) | Top influencers screen (Pencil sync) | DRAFT |
 | UI-04 | [UI_04_AGENT_DETAIL.md](./ui/UI_04_AGENT_DETAIL.md) | Agent detail screen (Pencil sync) | DRAFT |
 | UI-05 | [UI_05_GLOBAL_METRICS.md](./ui/UI_05_GLOBAL_METRICS.md) | Global insight & metrics screen (Pencil sync) | DRAFT |
+| UI-06 | [UI_06_PROJECTS_LIST.md](./ui/UI_06_PROJECTS_LIST.md) | Projects list screen (Pencil sync) | DRAFT |
+| UI-07 | [UI_07_PROJECT_SCENARIOS.md](./ui/UI_07_PROJECT_SCENARIOS.md) | Project scenarios screen (Pencil sync) | DRAFT |
+| UI-08 | [UI_08_INFLUENCERS_PAGINATION.md](./ui/UI_08_INFLUENCERS_PAGINATION.md) | Influencers with pagination (Pencil sync) | DRAFT |
+| UI-09 | [UI_09_INFLUENCERS_FILTER.md](./ui/UI_09_INFLUENCERS_FILTER.md) | Influencers filter popover (Pencil sync) | DRAFT |
+| UI-10 | [UI_10_AGENT_INTERVENE.md](./ui/UI_10_AGENT_INTERVENE.md) | Agent intervention modal (Pencil sync) | DRAFT |
+| UI-11 | [UI_11_AGENT_CONNECTIONS.md](./ui/UI_11_AGENT_CONNECTIONS.md) | Agent connections tab (Pencil sync) | DRAFT |
 
 ---
 

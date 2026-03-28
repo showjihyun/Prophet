@@ -22,26 +22,54 @@ Pencil (.pen) 파일의 디자인 시스템과 5개 화면 SPEC을 연결하며,
 ## 2. 화면 구성 (Screen Map)
 
 ```
-                    ┌─────────────────────────────────────┐
-                    │   UI_01: AI Social World Engine      │
-                    │   (메인 시뮬레이션 - 1440x900)         │
-                    │   Frame: FuHqi                       │
-                    └─────────┬───────────────────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-   ┌──────────▼──┐  ┌────────▼───────┐  ┌────▼──────────┐
-   │  UI_02:     │  │  UI_03:        │  │  UI_05:       │
-   │ Communities │  │ Top Influencers│  │ Global Metrics│
-   │  Detail     │  │                │  │               │
-   │  LRkh8      │  │  V99cE         │  │  fjP3Z        │
-   └──────┬──────┘  └────────────────┘  └───────────────┘
-          │
-   ┌──────▼──────┐
-   │  UI_04:     │
-   │ Agent Detail│
-   │  pkFYA      │
-   └─────────────┘
+  ┌─────────────────────────────────────┐
+  │   UI_06: Projects List              │
+  │   (프로젝트 관리 - 1440x900)          │
+  │   Frame: 2Efo9                      │
+  └─────────┬───────────────────────────┘
+            │ Open project
+  ┌─────────▼───────────────────────────┐
+  │   UI_07: Project Scenarios          │
+  │   (시나리오 관리 - 1440x900)          │
+  │   Frame: d4eOq                      │
+  └─────────┬───────────────────────────┘
+            │ Run scenario / Results
+  ┌─────────▼───────────────────────────┐
+  │   UI_01: AI Social World Engine     │
+  │   (메인 시뮬레이션 - 1440x900)        │
+  │   Frame: FuHqi                      │
+  └─────────┬───────────────────────────┘
+            │
+┌───────────┼───────────────┐
+│           │               │
+▼           ▼               ▼
+┌──────────────┐ ┌─────────────────┐ ┌───────────────┐
+│  UI_02:      │ │  UI_08:         │ │  UI_05:       │
+│ Communities  │ │ Influencers     │ │ Global Metrics│
+│  Detail      │ │ (w/ Pagination) │ │               │
+│  LRkh8       │ │  iodBY          │ │  fjP3Z        │
+└──────┬───────┘ └──────┬──────────┘ └───────────────┘
+       │                │
+       ▼                │ Filter btn
+┌─────────────┐  ┌──────▼──────────┐
+│  UI_04:     │  │  UI_09:         │
+│ Agent Detail│  │ Filter Popover  │
+│  pkFYA      │  │  9fgvc          │
+└──┬──────┬───┘  └─────────────────┘
+   │      │
+   │      ▼ Intervene btn
+   │  ┌──────────────────┐
+   │  │  UI_10:          │
+   │  │ Agent Intervene  │
+   │  │  Modal (XLwVu)   │
+   │  └──────────────────┘
+   │
+   ▼ Connections tab
+┌─────────────────┐
+│  UI_11:         │
+│ Agent Connections│
+│  Tab (vJLFD)    │
+└─────────────────┘
 ```
 
 ### 화면-SPEC 매핑
@@ -53,6 +81,12 @@ Pencil (.pen) 파일의 디자인 시스템과 5개 화면 SPEC을 연결하며,
 | 인플루언서 목록 | `docs/spec/ui/UI_03_TOP_INFLUENCERS.md` | `V99cE` | 1440x900 | 데이터 테이블 + 분포 차트 |
 | 에이전트 상세 | `docs/spec/ui/UI_04_AGENT_DETAIL.md` | `pkFYA` | 1440x900 | 프로필 + 활동 차트 + 인터랙션 |
 | 글로벌 메트릭 | `docs/spec/ui/UI_05_GLOBAL_METRICS.md` | `fjP3Z` | 1440x900 | Polarization + Sentiment + 3-Tier Cost |
+| 프로젝트 목록 | `docs/spec/ui/UI_06_PROJECTS_LIST.md` | `2Efo9` | 1440x900 | 프로젝트 대시보드 + 카드 그리드 |
+| 프로젝트 시나리오 | `docs/spec/ui/UI_07_PROJECT_SCENARIOS.md` | `d4eOq` | 1440x900 | 시나리오 관리 + 실행/중지 |
+| 인플루언서 (페이지네이션) | `docs/spec/ui/UI_08_INFLUENCERS_PAGINATION.md` | `iodBY` | 1440x900 | UI-03 확장 + 페이지네이션 바 |
+| 인플루언서 필터 | `docs/spec/ui/UI_09_INFLUENCERS_FILTER.md` | `9fgvc` | 600x700 | 필터 팝오버 (커뮤니티/상태/점수) |
+| 에이전트 개입 | `docs/spec/ui/UI_10_AGENT_INTERVENE.md` | `XLwVu` | 560x700 | 개입 모달 (메시지 주입/감정 변경) |
+| 에이전트 커넥션 | `docs/spec/ui/UI_11_AGENT_CONNECTIONS.md` | `vJLFD` | 1440x900 | Ego 네트워크 그래프 + 커넥션 목록 |
 
 ---
 
@@ -373,6 +407,12 @@ docs/spec/ui/UI_XX_*.md 업데이트
 | `TopInfluencersPage.tsx` | `V99cE` | UI_03 |
 | `AgentDetailPage.tsx` | `pkFYA` | UI_04 |
 | `GlobalMetricsPage.tsx` | `fjP3Z` | UI_05 |
+| `ProjectsListPage.tsx` | `2Efo9` | UI_06 |
+| `ProjectScenariosPage.tsx` | `d4eOq` | UI_07 |
+| `TopInfluencersPaginatedPage.tsx` | `iodBY` | UI_08 |
+| `InfluencersFilterPopover.tsx` | `9fgvc` | UI_09 |
+| `AgentInterveneModal.tsx` | `XLwVu` | UI_10 |
+| `AgentConnectionsTab.tsx` | `vJLFD` | UI_11 |
 
 ---
 
@@ -386,5 +426,11 @@ docs/spec/ui/UI_XX_*.md 업데이트
 | UI_03 Top Influencers | 화면 SPEC | `docs/spec/ui/UI_03_TOP_INFLUENCERS.md` |
 | UI_04 Agent Detail | 화면 SPEC | `docs/spec/ui/UI_04_AGENT_DETAIL.md` |
 | UI_05 Global Metrics | 화면 SPEC | `docs/spec/ui/UI_05_GLOBAL_METRICS.md` |
+| UI_06 Projects List | 화면 SPEC | `docs/spec/ui/UI_06_PROJECTS_LIST.md` |
+| UI_07 Project Scenarios | 화면 SPEC | `docs/spec/ui/UI_07_PROJECT_SCENARIOS.md` |
+| UI_08 Influencers Pagination | 화면 SPEC | `docs/spec/ui/UI_08_INFLUENCERS_PAGINATION.md` |
+| UI_09 Influencers Filter | 화면 SPEC | `docs/spec/ui/UI_09_INFLUENCERS_FILTER.md` |
+| UI_10 Agent Intervene | 화면 SPEC | `docs/spec/ui/UI_10_AGENT_INTERVENE.md` |
+| UI_11 Agent Connections | 화면 SPEC | `docs/spec/ui/UI_11_AGENT_CONNECTIONS.md` |
 | Frontend SPEC | 기술 SPEC | `docs/spec/07_FRONTEND_SPEC.md` |
 | API SPEC | 데이터 계약 | `docs/spec/06_API_SPEC.md` |
