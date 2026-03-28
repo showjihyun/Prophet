@@ -1,8 +1,10 @@
 /**
  * TopInfluencersPage — Ranked influencer table with distribution sidebar.
  * @spec docs/spec/ui/UI_03_TOP_INFLUENCERS.md
+ * @spec docs/spec/ui/UI_08_INFLUENCERS_PAGINATION.md
+ * @spec docs/spec/ui/UI_09_INFLUENCERS_FILTER.md
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   BarChart,
@@ -15,6 +17,10 @@ import {
 } from "recharts";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
+import InfluencersFilter, {
+  DEFAULT_FILTERS,
+  type FilterState,
+} from "../components/shared/InfluencersFilter";
 
 interface Influencer {
   rank: number;
@@ -28,17 +34,47 @@ interface Influencer {
   status: "Active" | "Idle";
 }
 
+/* ---------- expanded mock data (30 records for pagination demo) ---------- */
+
+const COMMUNITY_COLORS: Record<string, string> = {
+  Alpha: "var(--community-alpha)",
+  Beta: "var(--community-beta)",
+  Gamma: "var(--community-gamma)",
+  Delta: "var(--community-delta)",
+  Bridge: "var(--community-bridge)",
+};
+
 const MOCK_INFLUENCERS: Influencer[] = [
-  { rank: 1, agentId: "A-0042", community: "Alpha", communityColor: "var(--community-alpha)", influenceScore: 98.2, sentiment: "Positive", chains: 24, connections: 247, status: "Active" },
-  { rank: 2, agentId: "BR-0012", community: "Bridge", communityColor: "var(--community-bridge)", influenceScore: 96.5, sentiment: "Neutral", chains: 31, connections: 189, status: "Active" },
-  { rank: 3, agentId: "B-0091", community: "Beta", communityColor: "var(--community-beta)", influenceScore: 94.7, sentiment: "Positive", chains: 19, connections: 203, status: "Active" },
-  { rank: 4, agentId: "D-0067", community: "Delta", communityColor: "var(--community-delta)", influenceScore: 92.1, sentiment: "Positive", chains: 17, connections: 178, status: "Active" },
-  { rank: 5, agentId: "A-0187", community: "Alpha", communityColor: "var(--community-alpha)", influenceScore: 91.5, sentiment: "Neutral", chains: 15, connections: 156, status: "Active" },
-  { rank: 6, agentId: "BR-0034", community: "Bridge", communityColor: "var(--community-bridge)", influenceScore: 90.2, sentiment: "Negative", chains: 22, connections: 134, status: "Idle" },
-  { rank: 7, agentId: "B-0203", community: "Beta", communityColor: "var(--community-beta)", influenceScore: 88.3, sentiment: "Positive", chains: 12, connections: 145, status: "Active" },
-  { rank: 8, agentId: "D-0145", community: "Delta", communityColor: "var(--community-delta)", influenceScore: 86.8, sentiment: "Neutral", chains: 14, connections: 121, status: "Active" },
-  { rank: 9, agentId: "G-0055", community: "Gamma", communityColor: "var(--community-gamma)", influenceScore: 85.9, sentiment: "Positive", chains: 11, connections: 132, status: "Idle" },
-  { rank: 10, agentId: "A-0334", community: "Alpha", communityColor: "var(--community-alpha)", influenceScore: 87.1, sentiment: "Neutral", chains: 13, connections: 118, status: "Active" },
+  { rank: 1, agentId: "A-0042", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 98.2, sentiment: "Positive", chains: 24, connections: 247, status: "Active" },
+  { rank: 2, agentId: "BR-0012", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 96.5, sentiment: "Neutral", chains: 31, connections: 189, status: "Active" },
+  { rank: 3, agentId: "B-0091", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 94.7, sentiment: "Positive", chains: 19, connections: 203, status: "Active" },
+  { rank: 4, agentId: "D-0067", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 92.1, sentiment: "Positive", chains: 17, connections: 178, status: "Active" },
+  { rank: 5, agentId: "A-0187", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 91.5, sentiment: "Neutral", chains: 15, connections: 156, status: "Active" },
+  { rank: 6, agentId: "BR-0034", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 90.2, sentiment: "Negative", chains: 22, connections: 134, status: "Idle" },
+  { rank: 7, agentId: "B-0203", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 88.3, sentiment: "Positive", chains: 12, connections: 145, status: "Active" },
+  { rank: 8, agentId: "D-0145", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 86.8, sentiment: "Neutral", chains: 14, connections: 121, status: "Active" },
+  { rank: 9, agentId: "G-0055", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 85.9, sentiment: "Positive", chains: 11, connections: 132, status: "Idle" },
+  { rank: 10, agentId: "A-0334", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 87.1, sentiment: "Neutral", chains: 13, connections: 118, status: "Active" },
+  { rank: 11, agentId: "G-0102", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 84.5, sentiment: "Positive", chains: 10, connections: 115, status: "Active" },
+  { rank: 12, agentId: "A-0501", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 83.2, sentiment: "Neutral", chains: 9, connections: 108, status: "Active" },
+  { rank: 13, agentId: "B-0312", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 82.7, sentiment: "Positive", chains: 8, connections: 99, status: "Active" },
+  { rank: 14, agentId: "D-0289", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 81.3, sentiment: "Negative", chains: 7, connections: 95, status: "Idle" },
+  { rank: 15, agentId: "BR-0056", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 80.1, sentiment: "Neutral", chains: 18, connections: 142, status: "Active" },
+  { rank: 16, agentId: "G-0178", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 79.4, sentiment: "Positive", chains: 6, connections: 88, status: "Active" },
+  { rank: 17, agentId: "A-0623", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 78.6, sentiment: "Neutral", chains: 5, connections: 82, status: "Active" },
+  { rank: 18, agentId: "B-0445", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 77.9, sentiment: "Positive", chains: 7, connections: 91, status: "Active" },
+  { rank: 19, agentId: "D-0401", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 76.3, sentiment: "Neutral", chains: 4, connections: 76, status: "Idle" },
+  { rank: 20, agentId: "G-0234", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 75.8, sentiment: "Negative", chains: 3, connections: 68, status: "Active" },
+  { rank: 21, agentId: "A-0745", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 74.2, sentiment: "Positive", chains: 6, connections: 72, status: "Active" },
+  { rank: 22, agentId: "BR-0078", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 73.5, sentiment: "Neutral", chains: 14, connections: 128, status: "Active" },
+  { rank: 23, agentId: "B-0567", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 72.1, sentiment: "Positive", chains: 5, connections: 65, status: "Active" },
+  { rank: 24, agentId: "D-0512", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 71.4, sentiment: "Neutral", chains: 3, connections: 59, status: "Idle" },
+  { rank: 25, agentId: "G-0311", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 70.9, sentiment: "Positive", chains: 4, connections: 61, status: "Active" },
+  { rank: 26, agentId: "A-0889", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 69.7, sentiment: "Negative", chains: 2, connections: 54, status: "Active" },
+  { rank: 27, agentId: "B-0689", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 68.3, sentiment: "Neutral", chains: 3, connections: 48, status: "Idle" },
+  { rank: 28, agentId: "D-0634", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 67.5, sentiment: "Positive", chains: 2, connections: 42, status: "Active" },
+  { rank: 29, agentId: "G-0423", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 66.1, sentiment: "Neutral", chains: 1, connections: 37, status: "Active" },
+  { rank: 30, agentId: "BR-0091", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 65.4, sentiment: "Positive", chains: 10, connections: 112, status: "Active" },
 ];
 
 const DISTRIBUTION_DATA = [
@@ -64,11 +100,83 @@ export default function TopInfluencersPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
 
-  const filtered = MOCK_INFLUENCERS.filter(
-    (i) =>
-      i.agentId.toLowerCase().includes(search.toLowerCase()) ||
-      i.community.toLowerCase().includes(search.toLowerCase())
+  // Pagination state (UI-08)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // Filter state (UI-09)
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({ ...DEFAULT_FILTERS });
+
+  // Apply search + filters
+  const filtered = useMemo(() => {
+    return MOCK_INFLUENCERS.filter((i) => {
+      // Search
+      if (
+        search &&
+        !i.agentId.toLowerCase().includes(search.toLowerCase()) &&
+        !i.community.toLowerCase().includes(search.toLowerCase())
+      ) {
+        return false;
+      }
+      // Community filter
+      if (!filters.communities.includes(i.community)) return false;
+      // Status filter
+      if (filters.status !== "all" && i.status.toLowerCase() !== filters.status) return false;
+      // Score range
+      if (i.influenceScore < filters.scoreMin || i.influenceScore > filters.scoreMax) return false;
+      // Sentiment
+      if (filters.sentiment !== "all" && i.sentiment !== filters.sentiment) return false;
+      // Min connections
+      if (i.connections < filters.minConnections) return false;
+      return true;
+    });
+  }, [search, filters]);
+
+  // Pagination derived values
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / rowsPerPage));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedData = filtered.slice(
+    (safePage - 1) * rowsPerPage,
+    safePage * rowsPerPage
   );
+
+  // Reset to page 1 on search change
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    setCurrentPage(1);
+  };
+
+  // Filter apply handler
+  const handleApplyFilters = (newFilters: FilterState) => {
+    setFilters(newFilters);
+    setFilterOpen(false);
+    setCurrentPage(1);
+  };
+
+  // Count active filters (for badge)
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.communities.length < 5) count++;
+    if (filters.status !== "all") count++;
+    if (filters.scoreMin > 0 || filters.scoreMax < 100) count++;
+    if (filters.sentiment !== "all") count++;
+    if (filters.minConnections > 0) count++;
+    return count;
+  }, [filters]);
+
+  // Page numbers to display (window of up to 5)
+  const pageNumbers = useMemo(() => {
+    const pages: number[] = [];
+    let start = Math.max(1, safePage - 2);
+    const end = Math.min(totalPages, start + 4);
+    start = Math.max(1, end - 4);
+    for (let p = start; p <= end; p++) {
+      pages.push(p);
+    }
+    return pages;
+  }, [safePage, totalPages]);
 
   return (
     <div
@@ -83,20 +191,12 @@ export default function TopInfluencersPage() {
       />
 
       <div className="flex-1 p-6 flex flex-col gap-6 overflow-auto">
-        {/* Summary Stats */}
+        {/* Summary Stats — updated per UI-08 SPEC */}
         <div className="grid grid-cols-4 gap-4">
-          <StatCard label="Influencers Tracked" value="342" icon={<CrownIcon />} />
-          <StatCard label="Avg Influence Score" value="74.3" icon={<BarChartIcon />} />
-          <StatCard
-            label="Top Community"
-            value="Alpha"
-            icon={
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--community-alpha)' }} />
-              </span>
-            }
-          />
-          <StatCard label="Active Cascades" value="89" icon={<ZapIcon />} />
+          <StatCard label="Total Influencers" value="120" icon={<CrownIcon />} />
+          <StatCard label="Avg Score" value="72.4" icon={<BarChartIcon />} />
+          <StatCard label="Active Influencers" value="98" icon={<UsersIcon />} />
+          <StatCard label="Cross-Community Bridges" value="23" icon={<GitBranchIcon />} />
         </div>
 
         {/* Content area: table + sidebar */}
@@ -104,7 +204,7 @@ export default function TopInfluencersPage() {
           {/* Main table area */}
           <div className="flex-1 flex flex-col gap-4">
             {/* Search + Filter */}
-            <div className="flex gap-3">
+            <div className="flex gap-3 relative">
               <div className="relative flex-1">
                 <svg
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-[#a3a3a3]"
@@ -124,16 +224,35 @@ export default function TopInfluencersPage() {
                   type="text"
                   placeholder="Search agents..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => handleSearch(e.target.value)}
                   className="w-full h-10 pl-9 pr-4 text-sm border border-[#e5e5e5] rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-[#a3a3a3]"
                 />
               </div>
-              <button className="h-10 px-4 text-sm border border-[#e5e5e5] rounded-md bg-white hover:bg-gray-50 flex items-center gap-2">
+              <button
+                onClick={() => setFilterOpen(true)}
+                className="h-10 px-4 text-sm border border-[#e5e5e5] rounded-md bg-white hover:bg-gray-50 flex items-center gap-2"
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                 </svg>
                 Filter
+                {activeFilterCount > 0 && (
+                  <span
+                    className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-medium text-white"
+                    style={{ backgroundColor: "var(--primary, #0a0a0a)" }}
+                  >
+                    {activeFilterCount}
+                  </span>
+                )}
               </button>
+
+              {/* Filter Popover (UI-09) */}
+              <InfluencersFilter
+                isOpen={filterOpen}
+                onClose={() => setFilterOpen(false)}
+                onApply={handleApplyFilters}
+                currentFilters={filters}
+              />
             </div>
 
             {/* Data Table */}
@@ -152,7 +271,7 @@ export default function TopInfluencersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((inf) => (
+                  {paginatedData.map((inf) => (
                     <tr
                       key={inf.agentId}
                       className="border-b border-[#f1f5f9] hover:bg-[#f1f5f9] transition-colors cursor-pointer"
@@ -210,6 +329,67 @@ export default function TopInfluencersPage() {
                   ))}
                 </tbody>
               </table>
+
+              {/* Pagination Bar (UI-08) */}
+              <div
+                className="flex items-center justify-between border-t px-4 py-3"
+                style={{ borderColor: "var(--border, #e5e5e5)" }}
+              >
+                <span className="text-sm" style={{ color: "var(--muted-foreground, #737373)" }}>
+                  Showing {total === 0 ? 0 : (safePage - 1) * rowsPerPage + 1}-{Math.min(safePage * rowsPerPage, total)} of {total} influencers
+                </span>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm" style={{ color: "var(--muted-foreground, #737373)" }}>
+                      Rows per page:
+                    </span>
+                    <select
+                      value={rowsPerPage}
+                      onChange={(e) => {
+                        setRowsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="rounded-md border px-2 py-1 text-sm"
+                      style={{ borderColor: "var(--border, #e5e5e5)" }}
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage === 1}
+                      className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
+                      style={{ borderColor: "var(--border, #e5e5e5)" }}
+                    >
+                      Previous
+                    </button>
+                    {pageNumbers.map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`rounded-md px-3 py-1 text-sm ${page === safePage ? "font-bold" : ""}`}
+                        style={{
+                          backgroundColor: page === safePage ? "var(--primary, #0a0a0a)" : "transparent",
+                          color: page === safePage ? "var(--primary-foreground, #fff)" : "var(--foreground, #0a0a0a)",
+                        }}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage === totalPages}
+                      className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
+                      style={{ borderColor: "var(--border, #e5e5e5)" }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -270,10 +450,18 @@ function BarChartIcon() {
   );
 }
 
-function ZapIcon() {
+function UsersIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function GitBranchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" />
     </svg>
   );
 }

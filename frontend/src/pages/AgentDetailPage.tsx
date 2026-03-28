@@ -2,7 +2,7 @@
  * AgentDetailPage — Agent profile, personality, activity chart, and interactions.
  * @spec docs/spec/ui/UI_04_AGENT_DETAIL.md
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   LineChart,
@@ -15,6 +15,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import PageNav from "../components/shared/PageNav";
+import AgentInterveneModal from "../components/shared/AgentInterveneModal";
+import EgoGraph from "../components/graph/EgoGraph";
 
 const MOCK_AGENT = {
   id: "A-0042",
@@ -76,14 +78,49 @@ const TYPE_STYLES: Record<string, React.CSSProperties> = {
   Influence: { color: "var(--community-delta)" },
 };
 
+// ---------------------------------------------------------------------------
+// Mock connections data for the Connections tab sidebar
+// ---------------------------------------------------------------------------
+interface ConnectionItem {
+  id: string;
+  name: string;
+  community: string;
+  color: string;
+  trust: number;
+  influence: number;
+}
+
+const MOCK_CONNECTIONS: ConnectionItem[] = [
+  { id: "a1", name: "Agent #1043", community: "Alpha", color: "#3b82f6", trust: 0.92, influence: 0.85 },
+  { id: "a2", name: "Agent #4214", community: "Beta", color: "#22c55e", trust: 0.87, influence: 0.72 },
+  { id: "a3", name: "Agent #0891", community: "Alpha", color: "#3b82f6", trust: 0.84, influence: 0.68 },
+  { id: "a4", name: "Agent #2301", community: "Gamma", color: "#f97316", trust: 0.79, influence: 0.61 },
+  { id: "a5", name: "Agent #7782", community: "Delta", color: "#a855f7", trust: 0.75, influence: 0.55 },
+  { id: "a6", name: "Agent #0012", community: "Bridge", color: "#ef4444", trust: 0.73, influence: 0.90 },
+  { id: "a7", name: "Agent #5567", community: "Beta", color: "#22c55e", trust: 0.71, influence: 0.48 },
+  { id: "a8", name: "Agent #3344", community: "Alpha", color: "#3b82f6", trust: 0.68, influence: 0.52 },
+];
+
 const TABS = ["Activity", "Connections", "Messages"] as const;
 
 export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Activity");
+  const [interveneOpen, setInterveneOpen] = useState(false);
+  const [connSearch, setConnSearch] = useState("");
 
   const agent = { ...MOCK_AGENT, id: agentId ?? MOCK_AGENT.id };
+
+  const filteredConnections = useMemo(
+    () =>
+      MOCK_CONNECTIONS.filter(
+        (c) =>
+          c.name.toLowerCase().includes(connSearch.toLowerCase()) ||
+          c.community.toLowerCase().includes(connSearch.toLowerCase()),
+      ),
+    [connSearch],
+  );
 
   return (
     <div
@@ -97,7 +134,11 @@ export default function AgentDetailPage() {
           { label: `Agent #${agent.agentNumber}` },
         ]}
         actions={
-          <button className="h-9 px-4 text-sm font-medium text-white rounded-md transition-colors" style={{ backgroundColor: 'var(--sentiment-positive)' }}>
+          <button
+            onClick={() => setInterveneOpen(true)}
+            className="h-9 px-4 text-sm font-medium text-white rounded-md transition-colors"
+            style={{ backgroundColor: 'var(--sentiment-positive)' }}
+          >
             Intervene
           </button>
         }
@@ -300,14 +341,76 @@ export default function AgentDetailPage() {
           )}
 
           {activeTab === "Connections" && (
-            <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-8 flex items-center justify-center text-[#a3a3a3] min-h-[400px]">
-              <div className="text-center">
-                <p className="text-sm">
-                  Ego network graph will render here via Cytoscape.js
-                </p>
-                <p className="text-xs mt-1">
-                  {agent.connections} direct connections
-                </p>
+            <div className="flex gap-0 flex-1 min-h-[500px]">
+              {/* Ego Graph */}
+              <div
+                className="flex-1 relative rounded-lg overflow-hidden"
+                style={{
+                  background:
+                    "radial-gradient(ellipse at center, #0f172a 0%, #020617 100%)",
+                }}
+              >
+                <EgoGraph agentId={String(agent.agentNumber)} />
+                <div className="absolute top-3 left-4 z-10 pointer-events-none">
+                  <span className="text-white text-sm font-semibold">
+                    Ego Network Graph
+                  </span>
+                  <span className="text-gray-400 text-xs block">
+                    {agent.connections} connections found
+                  </span>
+                </div>
+              </div>
+              {/* Top Connections Sidebar */}
+              <div
+                className="w-[280px] shrink-0 border-l bg-white overflow-y-auto p-4 flex flex-col gap-3"
+                style={{ borderColor: "var(--border, #e5e5e5)" }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sm text-[#0a0a0a]">
+                    Top Connections
+                  </span>
+                  <span className="text-xs text-[#a3a3a3]">
+                    {agent.connections}
+                  </span>
+                </div>
+                <input
+                  placeholder="Search connections..."
+                  value={connSearch}
+                  onChange={(e) => setConnSearch(e.target.value)}
+                  className="rounded-md border px-3 py-1.5 text-sm w-full"
+                  style={{ borderColor: "var(--input, #d4d4d4)" }}
+                />
+                <div className="flex flex-col gap-2 overflow-y-auto flex-1">
+                  {filteredConnections.map((conn) => (
+                    <button
+                      key={conn.id}
+                      onClick={() =>
+                        navigate(`/agents/${conn.name.replace("Agent #", "")}`)
+                      }
+                      className="flex items-center gap-3 p-2 rounded-md hover:bg-[#f1f5f9] text-left transition-colors"
+                    >
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                        style={{ backgroundColor: conn.color }}
+                      >
+                        {conn.name.slice(-4)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate text-[#0a0a0a]">
+                          {conn.name}
+                        </div>
+                        <div className="text-xs text-[#737373]">
+                          {conn.community} &middot; Trust: {conn.trust.toFixed(2)}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-xs font-semibold text-[#0a0a0a]">
+                          {conn.influence.toFixed(2)}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -324,6 +427,14 @@ export default function AgentDetailPage() {
           )}
         </main>
       </div>
+
+      {/* Agent Intervene Modal (UI-10) */}
+      <AgentInterveneModal
+        isOpen={interveneOpen}
+        onClose={() => setInterveneOpen(false)}
+        agentId={String(agent.agentNumber)}
+        agentLabel={`Agent #${agent.agentNumber}`}
+      />
     </div>
   );
 }
