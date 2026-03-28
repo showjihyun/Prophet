@@ -1,5 +1,20 @@
 # 07 — Frontend SPEC (React 18)
-Version: 0.1.1 | Status: DRAFT
+Version: 0.1.2 | Status: DRAFT
+
+---
+
+## 0. Related Documents
+
+| 문서 | 역할 |
+|------|------|
+| **DESIGN.md** | UI 디자인 총괄 — 디자인 토큰, 컴포넌트 라이브러리, 그래프 엔진 시각 규칙 |
+| **UI_01_SIMULATION_MAIN.md** | 메인 시뮬레이션 화면 (Pencil Frame: `FuHqi`) |
+| **UI_02_COMMUNITIES_DETAIL.md** | 커뮤니티 상세 화면 (Pencil Frame: `LRkh8`) |
+| **UI_03_TOP_INFLUENCERS.md** | 인플루언서 목록 화면 (Pencil Frame: `V99cE`) |
+| **UI_04_AGENT_DETAIL.md** | 에이전트 상세 화면 (Pencil Frame: `pkFYA`) |
+| **UI_05_GLOBAL_METRICS.md** | 글로벌 메트릭 화면 (Pencil Frame: `fjP3Z`) |
+
+구현 시 **이 SPEC의 컴포넌트 인터페이스** + **UI_XX SPEC의 레이아웃/디자인**을 모두 참조한다.
 
 ---
 

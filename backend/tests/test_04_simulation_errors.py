@@ -9,7 +9,8 @@ from uuid import uuid4
 
 
 def _make_sim_config(n_communities=2):
-    from app.engine.simulation.schema import SimulationConfig, CommunityConfig
+    from app.engine.simulation.schema import SimulationConfig
+    from app.engine.network.schema import CommunityConfig
     return SimulationConfig(
         communities=[
             CommunityConfig(id=chr(65 + i), name=f"comm_{i}", size=50,
@@ -118,30 +119,32 @@ class TestSimulationCapacity:
 class TestSimulationRecovery:
     """SPEC: 04_SIMULATION_SPEC.md#error-specification — recovery behavior"""
 
-    def test_step_crash_sets_status_failed(self):
+    @pytest.mark.asyncio
+    async def test_step_crash_sets_status_failed(self):
         """Step loop crash → status FAILED, last valid step persisted."""
         from app.engine.simulation.orchestrator import SimulationOrchestrator
-        from unittest.mock import patch
+        from unittest.mock import patch, AsyncMock
         orch = SimulationOrchestrator()
         sim = orch.create_simulation(_make_sim_config())
-        with patch.object(orch, '_execute_step', side_effect=RuntimeError("crash")):
-            import asyncio
+        orch.start(sim.simulation_id)
+        with patch.object(
+            orch._step_runner, 'execute_step',
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("crash"),
+        ):
             with pytest.raises(RuntimeError):
-                asyncio.get_event_loop().run_until_complete(
-                    orch.run_step(sim.simulation_id)
-                )
-        assert sim.status == "FAILED"
+                await orch.run_step(sim.simulation_id)
+        assert sim.status == "failed"
 
-    def test_websocket_disconnect_continues_step(self):
+    @pytest.mark.asyncio
+    async def test_websocket_disconnect_continues_step(self):
         """WebSocket disconnect during step → step continues, events buffered."""
         from app.engine.simulation.orchestrator import SimulationOrchestrator
         orch = SimulationOrchestrator()
         sim = orch.create_simulation(_make_sim_config())
+        orch.start(sim.simulation_id)
         # Simulate WS disconnect by setting no active connection
         sim.ws_connected = False
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(
-            orch.run_step(sim.simulation_id)
-        )
+        await orch.run_step(sim.simulation_id)
         # Step should complete regardless
         assert sim.current_step >= 1

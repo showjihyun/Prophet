@@ -39,22 +39,30 @@
 ### frontend-agent
 **담당:** React 18 프론트엔드 구현
 
-| 모듈 | SPEC 문서 | 디렉토리 |
-|------|-----------|----------|
-| Pages | `07_FRONTEND_SPEC.md` §2 | `frontend/src/pages/` |
-| Graph Panel | `07_FRONTEND_SPEC.md` §4 | `frontend/src/components/graph/` |
-| Timeline Panel | `07_FRONTEND_SPEC.md` §4 | `frontend/src/components/timeline/` |
-| Control Panel | `07_FRONTEND_SPEC.md` §4 | `frontend/src/components/control/` |
-| LLM Dashboard | `07_FRONTEND_SPEC.md` §4 | `frontend/src/components/llm/` |
-| Zustand Store | `07_FRONTEND_SPEC.md` §5 | `frontend/src/store/` |
-| API Client | `07_FRONTEND_SPEC.md` §8 | `frontend/src/api/` |
-| TypeScript Types | `07_FRONTEND_SPEC.md` §7 | `frontend/src/types/` |
+**디자인 총괄:** `DESIGN.md` (Pencil 연동, 디자인 토큰, 컴포넌트 매핑)
+
+| 모듈 | SPEC 문서 | UI SPEC (Pencil) | 디렉토리 |
+|------|-----------|-----------------|----------|
+| Simulation Page | `07_FRONTEND_SPEC.md` §2 | `ui/UI_01_SIMULATION_MAIN.md` | `frontend/src/pages/` |
+| Communities Page | `07_FRONTEND_SPEC.md` §2 | `ui/UI_02_COMMUNITIES_DETAIL.md` | `frontend/src/pages/` |
+| Influencers Page | `07_FRONTEND_SPEC.md` §2 | `ui/UI_03_TOP_INFLUENCERS.md` | `frontend/src/pages/` |
+| Agent Detail Page | `07_FRONTEND_SPEC.md` §2 | `ui/UI_04_AGENT_DETAIL.md` | `frontend/src/pages/` |
+| Global Metrics Page | `07_FRONTEND_SPEC.md` §2 | `ui/UI_05_GLOBAL_METRICS.md` | `frontend/src/pages/` |
+| Graph Panel | `07_FRONTEND_SPEC.md` §4 | `DESIGN.md` §5 Graph Engine | `frontend/src/components/graph/` |
+| Timeline Panel | `07_FRONTEND_SPEC.md` §4 | — | `frontend/src/components/timeline/` |
+| Control Panel | `07_FRONTEND_SPEC.md` §4 | — | `frontend/src/components/control/` |
+| LLM Dashboard | `07_FRONTEND_SPEC.md` §4 | — | `frontend/src/components/llm/` |
+| Zustand Store | `07_FRONTEND_SPEC.md` §5 | — | `frontend/src/store/` |
+| API Client | `07_FRONTEND_SPEC.md` §8 | — | `frontend/src/api/` |
+| TypeScript Types | `07_FRONTEND_SPEC.md` §7 | — | `frontend/src/types/` |
 
 **규칙:**
 - TypeScript strict mode
 - `interface` 우선 (`type` 은 유니온/인터섹션에만)
 - 컴포넌트 props는 SPEC에 정의된 인터페이스를 그대로 사용
 - Cytoscape.js 그래프는 1000 노드에서 30fps 이상 유지
+- 디자인 토큰은 `DESIGN.md` §3의 CSS Variables 사용 (하드코딩 금지)
+- Pencil Frame ID와 React 컴포넌트 매핑은 `DESIGN.md` §10 참조
 
 ---
 

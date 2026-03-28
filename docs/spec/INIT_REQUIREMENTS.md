@@ -48,6 +48,9 @@ Version: 0.1.0 | Status: BASELINE | Date: 2026-03-27
 | 7 | `에이전트 엔진 및 확산 엔진 비교 분석.md` | 전략 결정 섹션 + §12 핵심 기술 |
 | 8 | `Prophet의 3-Tier Viral Cascade 설계 보완 설계안.txt` | 전략 결정 섹션 (SLM Tier) |
 | 9 | `OASIS 에 Prophet 결합 전략.txt` | 전략 결정 섹션 (하이브리드 근거) |
+| 10 | `UI 설계안/MCASP UI 설계안.txt` | §7 UI 요구사항 (Miro Fish 스타일) |
+| 11 | `UI 설계안/MCASP UI 핵심 기능 10가지 설계안.txt` | §7 UI 요구사항 (10대 기능) |
+| 12 | `UI 설계안/AI Social World Engine 설계.txt` | §7 UI 요구사항 (렌더링 엔진) |
 
 ---
 
@@ -178,6 +181,8 @@ Version: 0.1.0 | Status: BASELINE | Date: 2026-03-27
 
 ## §7. UI 요구사항
 
+*원본: `prophet_요구사항 초안.txt` §7 + `UI 설계안/` 3개 문서*
+
 - **Graph Panel:** Agent/Community + Emergent Cluster
 - **Timeline Panel:** Step Metric + Emergent Behavior
 - **Control Panel:** Play / Pause / Step / Scenario
@@ -185,6 +190,35 @@ Version: 0.1.0 | Status: BASELINE | Date: 2026-03-27
 - **Community Filters:** 특정 Community Highlight
 - **Interactive Modification:** Personality, Emotion, Community 변경
 - **LLM Dashboard:** Prompt Preview, Quota, Step별 Response
+
+### UI 설계안 반영 사항 (Miro Fish 스타일 + AI Social World)
+
+| 기능 | 원본 설계안 | 구현 SPEC | Pencil Frame |
+|------|-----------|----------|-------------|
+| Living Social Map (AI Social World) | `MCASP UI 설계안.txt` §2-4 | `UI_01` GraphPanel | `KrXVA` |
+| Viral Diffusion Wave Animation | `MCASP UI 핵심 기능 10가지.txt` §2 | `UI_01` Timeline | `oLh4Q` |
+| Opinion Landscape Map | `MCASP UI 핵심 기능 10가지.txt` §3 | `UI_05` Polarization Trend | `fjP3Z` |
+| Community Territory Map | `MCASP UI 핵심 기능 10가지.txt` §4 | `UI_02` Communities Grid | `LRkh8` |
+| Cascade Tree Explorer | `MCASP UI 핵심 기능 10가지.txt` §5 | `UI_05` Cascade Analytics | `fjP3Z` |
+| AI Conversation Feed | `MCASP UI 핵심 기능 10가지.txt` §6 | `UI_01` Conversations | `AoCh3` |
+| Timeline Replay System | `MCASP UI 핵심 기능 10가지.txt` §7 | `UI_01` Control Bar | `ib0Jy` |
+| Interactive Social Engineering | `MCASP UI 핵심 기능 10가지.txt` §8 | `UI_04` Intervene | `pkFYA` |
+| Influence Network Analyzer | `MCASP UI 핵심 기능 10가지.txt` §9 | `UI_03` Influencer Table | `V99cE` |
+| Social Energy Heatmap | `MCASP UI 핵심 기능 10가지.txt` §10 | `UI_01` Metrics Panel | `MuKxh` |
+
+### 렌더링 엔진 요구사항 (AI Social World Engine 설계)
+
+| 요구사항 | 사양 | 구현 방법 |
+|---------|------|----------|
+| 대규모 렌더링 | 1,000~10,000 Agent | WebGL (Cytoscape.js / Sigma.js) |
+| LOD Rendering | Zoom에 따라 상세도 변경 | Zoom out=점, Zoom in=말풍선+Glow |
+| GPU Instancing | 동일 형태 Agent 대량 렌더링 | WebGL instanced rendering |
+| Web Worker | CPU 부하 분리 | Agent 상태 계산 → Worker |
+| Dynamic Edge | 중요 관계만 표시 | Cascade/Polarization 시 강조 |
+| Shader Animation | Pulse, Ripple, Glow | shader 기반 효과 |
+| 대상 성능 | 60fps @ 6,500 nodes | WebGL + requestAnimationFrame |
+
+> **디자인 총괄:** `DESIGN.md` 참조 — 디자인 토큰, 컴포넌트 라이브러리, 네비게이션 플로우 정의
 
 ---
 
@@ -1067,7 +1101,12 @@ agent/
 | §4 LLM 통합 | `05_LLM_SPEC.md` | Ollama + Claude + OpenAI |
 | §5 하네스 F18–F30 | `09_HARNESS_SPEC.md` | |
 | §6 비기능 요구사항 | `MASTER_SPEC.md` §4 | |
-| §7 UI 요구사항 | `07_FRONTEND_SPEC.md` | React 18 |
+| §7 UI 요구사항 | `07_FRONTEND_SPEC.md` + `DESIGN.md` | React 18 + shadcn/ui |
+| §7 Living Social Map | `ui/UI_01_SIMULATION_MAIN.md` | Pencil Frame: `FuHqi` |
+| §7 Community Territory | `ui/UI_02_COMMUNITIES_DETAIL.md` | Pencil Frame: `LRkh8` |
+| §7 Influence Analyzer | `ui/UI_03_TOP_INFLUENCERS.md` | Pencil Frame: `V99cE` |
+| §7 Agent Detail/Intervene | `ui/UI_04_AGENT_DETAIL.md` | Pencil Frame: `pkFYA` |
+| §7 Metrics/Heatmap | `ui/UI_05_GLOBAL_METRICS.md` | Pencil Frame: `fjP3Z` |
 | §8 마케팅 시나리오 | `03_DIFFUSION_SPEC.md`, `04_SIMULATION_SPEC.md` | 기본 시나리오 |
 | §9 네트워크 알고리즘 | `02_NETWORK_SPEC.md` | WS + BA Hybrid |
 | §10 확산 엔진 | `03_DIFFUSION_SPEC.md` | |

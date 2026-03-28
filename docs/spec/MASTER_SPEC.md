@@ -109,6 +109,11 @@ LLM calls are abstracted behind `LLMAdapter` interface — provider is swappable
 | 10 | [VALIDATION_SPEC.md](./10_VALIDATION_SPEC.md) | Validation methodology (Twitter15/16 reference) | DRAFT |
 | 11 | [SKILLS_SPEC.md](./11_SKILLS_SPEC.md) | Plugins & custom skills configuration | DRAFT |
 | -- | [INIT_REQUIREMENTS.md](./INIT_REQUIREMENTS.md) | 원본 기획서 9개 통합 (source of truth) | BASELINE |
+| UI-01 | [UI_01_SIMULATION_MAIN.md](./ui/UI_01_SIMULATION_MAIN.md) | Main simulation screen (Pencil sync) | DRAFT |
+| UI-02 | [UI_02_COMMUNITIES_DETAIL.md](./ui/UI_02_COMMUNITIES_DETAIL.md) | Communities detail screen (Pencil sync) | DRAFT |
+| UI-03 | [UI_03_TOP_INFLUENCERS.md](./ui/UI_03_TOP_INFLUENCERS.md) | Top influencers screen (Pencil sync) | DRAFT |
+| UI-04 | [UI_04_AGENT_DETAIL.md](./ui/UI_04_AGENT_DETAIL.md) | Agent detail screen (Pencil sync) | DRAFT |
+| UI-05 | [UI_05_GLOBAL_METRICS.md](./ui/UI_05_GLOBAL_METRICS.md) | Global insight & metrics screen (Pencil sync) | DRAFT |
 
 ---
 

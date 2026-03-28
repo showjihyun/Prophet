@@ -183,7 +183,7 @@ Phase 완료
 ```
 
 5. 각 Phase는 하네스 테스트가 통과해야 다음 Phase로 진행한다.
-6. LLM 의존 기능은 반드시 Rule Engine fallback을 가져야 한다.
+6. LLM 의존 기능은 반드시 SLM(Tier 1) fallback을 가져야 한다.
 
 ---
 
@@ -240,9 +240,11 @@ python -m pip install ...
 Prophet/
 ├── CLAUDE.md          ← 이 파일
 ├── AGENTS.md          ← 멀티 에이전트 작업 지침
+├── DESIGN.md          ← UI 디자인 총괄 (Pencil 연동)
 ├── docs/
-│   ├── init/          ← 원본 기획서 (읽기 전용)
+│   ├── init/          ← 원본 기획서 (읽기 전용, 12개 파일)
 │   └── spec/          ← SPEC 문서 (항상 먼저 확인)
+│       └── ui/        ← UI 화면별 SPEC (Pencil 동기화)
 ├── backend/           ← FastAPI 백엔드
 │   ├── app/
 │   ├── harness/       ← F18–F30 테스트 하네스
@@ -281,10 +283,10 @@ Prophet/
 
 | Phase | 내용 | 상태 |
 |-------|------|------|
-| **Phase 0** | SPEC 작성 | ✅ 완료 |
-| **Phase 1** | 프로젝트 구조 + 하네스 기반 | 대기 |
-| **Phase 2** | Agent Core | 대기 |
-| **Phase 3** | Network Generator | 대기 |
+| **Phase 0** | SPEC 작성 | ✅ 완료 (14개 SPEC + 5개 UI SPEC) |
+| **Phase 1** | 프로젝트 구조 + 하네스 기반 | ✅ 완료 (8/8 테스트) |
+| **Phase 2** | Agent Core (6-Layer) | ✅ 완료 (81/81 테스트) |
+| **Phase 3** | Network Generator | ✅ 완료 (19/19 테스트) |
 | **Phase 4** | Diffusion Engine | 대기 |
 | **Phase 5** | LLM Integration | 대기 |
 | **Phase 6** | Simulation Orchestrator | 대기 |
@@ -297,7 +299,7 @@ Prophet/
 - **⛔ SPEC 없이 구현하지 않는다** — `docs/spec/`에 SPEC이 없으면 SPEC부터 작성한다. 절대로 SPEC 없이 코드를 생성하지 않는다.
 - **⛔ SPEC 변경 시 테스트 필수 갱신** — Backend/Frontend SPEC이 변경되면 해당 테스트 코드를 반드시 생성/갱신한다.
 - **⛔ pip 사용 금지** — `uv` 만 사용
-- **LLM fallback 필수** — 모든 Tier 3 기능은 Tier 1/2 fallback 보유
+- **SLM fallback 필수** — 모든 Tier 3 (Elite LLM) 기능은 Tier 1 (Mass SLM) fallback 보유
 - **하네스 먼저** — 구현 전 하네스 픽스처/목 먼저 작성
 - **PostgreSQL이 source of truth** — 인메모리 상태는 캐시일 뿐
 - **SPEC 트레이서빌리티** — 모든 모듈 docstring에 SPEC 문서 참조를 명시한다
