@@ -287,10 +287,10 @@ Prophet/
 | **Phase 1** | 프로젝트 구조 + 하네스 기반 | ✅ 완료 (8/8 테스트) |
 | **Phase 2** | Agent Core (6-Layer) | ✅ 완료 (81/81 테스트) |
 | **Phase 3** | Network Generator | ✅ 완료 (19/19 테스트) |
-| **Phase 4** | Diffusion Engine | 대기 |
-| **Phase 5** | LLM Integration | 대기 |
-| **Phase 6** | Simulation Orchestrator | 대기 |
-| **Phase 7** | Visualization (Frontend) | 대기 |
+| **Phase 4** | Diffusion Engine | ✅ 완료 (78/78 테스트) |
+| **Phase 5** | LLM Integration | ✅ 완료 (92/92 테스트) |
+| **Phase 6** | Simulation Orchestrator + API | ✅ 완료 (127/127 테스트) |
+| **Phase 7** | Visualization (Frontend) | ✅ 완료 (tsc 0 errors, build OK) |
 
 ---
 
