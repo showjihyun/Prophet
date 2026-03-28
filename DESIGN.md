@@ -15,7 +15,7 @@ Pencil (.pen) 파일의 디자인 시스템과 5개 화면 SPEC을 연결하며,
 | **디자인 시스템 프레임** | `MzSDs` (shadcn: design system components) |
 | **UI 컴포넌트 라이브러리** | shadcn/ui (Tailwind CSS 기반) |
 | **아이콘** | Lucide Icons |
-| **폰트** | Inter (weight: 400–700) |
+| **폰트** | Geist (body) + Instrument Serif (display) + Geist Mono (code) |
 
 ---
 
@@ -146,24 +146,44 @@ Pencil 파일에서 추출한 shadcn/ui 디자인 토큰. 3개 테마 축 지원
 
 ### Typography
 
-| 용도 | Font | Size | Weight |
-|------|------|------|--------|
-| 페이지 타이틀 | Inter | 18px | 700 |
-| 섹션 타이틀 | Inter | 14-16px | 600 |
-| 본문 | Inter | 12-14px | 400-500 |
-| 라벨 | Inter | 11px | 500 |
-| 캡션/메타 | Inter | 9-10px | 400-600 |
-| 대형 숫자 (KPI) | Inter | 20-28px | 700 |
+**Font Stack:**
+| Role | Font | Fallback | Weight Range |
+|------|------|----------|-------------|
+| Display/Headings | Instrument Serif | Georgia, serif | 400-700 |
+| Body/UI | Geist | system-ui, -apple-system, sans-serif | 400-700 |
+| Data/Tables | Geist (tabular-nums) | system-ui, monospace | 400-600 |
+| Code/Mono | Geist Mono | JetBrains Mono, monospace | 400 |
 
-### Spacing
+**Type Scale:**
+| Level | Font | Size | Weight | Line Height | Use |
+|-------|------|------|--------|-------------|-----|
+| Display | Instrument Serif | 32px | 400 | 1.2 | Hero titles, page headers |
+| Heading 1 | Instrument Serif | 24px | 400 | 1.3 | Section titles |
+| Heading 2 | Geist | 18px | 600 | 1.4 | Panel headers |
+| Heading 3 | Geist | 16px | 600 | 1.4 | Card titles |
+| Body | Geist | 14px | 400 | 1.5 | Default text |
+| Body Small | Geist | 13px | 400 | 1.5 | Secondary text |
+| Label | Geist | 12px | 500 | 1.4 | Form labels, metadata |
+| Caption | Geist | 11px | 400 | 1.4 | Timestamps, helper text |
+| Micro | Geist | 10px | 500 | 1.3 | Badges, status indicators |
+| KPI Number | Geist | 28px | 700 | 1.1 | Large stat values |
 
-| 용도 | 값 |
-|------|-----|
-| 패널 패딩 | 16-24px |
-| 카드 패딩 | 8-20px |
-| 컴포넌트 간 갭 | 8-16px |
-| 리스트 아이템 갭 | 2-6px |
-| 버튼 패딩 | 6-8px vertical, 12-16px horizontal |
+### Spacing Scale
+
+Base unit: 4px. All spacing uses this scale.
+
+| Token | Value | Use |
+|-------|-------|-----|
+| `--space-1` | 4px | Tight gaps (icon+text) |
+| `--space-2` | 8px | List item padding, small gaps |
+| `--space-3` | 12px | Card internal gaps |
+| `--space-4` | 16px | Panel padding, section gaps |
+| `--space-5` | 20px | Card padding |
+| `--space-6` | 24px | Panel padding (large) |
+| `--space-8` | 32px | Page padding |
+| `--space-10` | 40px | Section spacing |
+| `--space-12` | 48px | Large section spacing |
+| `--space-16` | 64px | Page-level spacing |
 
 ### Borders & Radius
 
@@ -175,6 +195,27 @@ Pencil 파일에서 추출한 shadcn/ui 디자인 토큰. 3개 테마 축 지원
 | 아바타 | 9999px (circle) | — |
 | 입력 필드 | 6px | 1px `--input` |
 | 팝업/모달 | 8px | 1px `--border` |
+
+### Elevation (Shadows)
+
+| Level | Shadow | Use |
+|-------|--------|-----|
+| `--shadow-xs` | `0 1px 2px rgba(0,0,0,0.3)` | Buttons, badges |
+| `--shadow-sm` | `0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3)` | Cards, panels |
+| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3)` | Dropdowns, popovers |
+| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.4), 0 4px 6px rgba(0,0,0,0.3)` | Modals, dialogs |
+| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.4), 0 8px 10px rgba(0,0,0,0.3)` | Floating panels |
+
+Note: Dark mode shadows use higher opacity because dark surfaces need more contrast for depth perception.
+
+### Interaction States
+
+| State | Transform | Use |
+|-------|-----------|-----|
+| `hover` | `background: var(--accent)` | Clickable elements |
+| `active` | `opacity: 0.8, scale(0.98)` | Press feedback |
+| `focus-visible` | `outline: 2px solid var(--ring); outline-offset: 2px` | Keyboard focus |
+| `disabled` | `opacity: 0.5; pointer-events: none` | Inactive elements |
 
 ---
 
