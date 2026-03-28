@@ -151,14 +151,14 @@ This SPEC extends UI-04. The left panel (agent profile) is identical; only the r
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Graph title | Inter / system | 16px | 600 |
-| Connection count | Inter / system | 13px | 400 |
-| Connection item name | Inter / system | 14px | 500 |
-| Community badge text | Inter / system | 11px | 500 |
-| Trust/Influence score label | Inter / system | 11px | 400 |
-| Trust/Influence score value | JetBrains Mono / monospace | 12px | 500 |
-| Search placeholder | Inter / system | 13px | 400 |
-| Tab trigger | Inter / system | 14px | 500 |
+| Graph title | Instrument Serif | 16px | 600 |
+| Connection count | Geist | 13px | 400 |
+| Connection item name | Geist | 14px | 500 |
+| Community badge text | Geist | 11px | 500 |
+| Trust/Influence score label | Geist | 11px | 400 |
+| Trust/Influence score value | Geist Mono | 12px | 500 |
+| Search placeholder | Geist | 13px | 400 |
+| Tab trigger | Geist | 14px | 500 |
 
 Inherits additional typography from UI-04 for left panel elements.
 

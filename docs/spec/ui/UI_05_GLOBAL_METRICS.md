@@ -137,19 +137,19 @@ The Global Insight & Metrics screen provides a comprehensive analytics dashboard
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Page title | Inter / system | 20px | 700 |
-| Stat card value | Inter / system | 28px | 700 |
-| Stat card label | Inter / system | 12px | 400 |
-| Stat card delta | Inter / system | 11px | 500 |
-| Section heading (h3) | Inter / system | 16px | 600 |
-| Tier card title | Inter / system | 14px | 600 |
-| Tier card agent count | Inter / system | 20px | 700 |
-| Tier card description | Inter / system | 12px | 400, opacity 0.7 |
-| Cascade stat value | Inter / system | 24px | 700 |
-| Cascade stat label | Inter / system | 12px | 400 |
-| Chart axis labels | Inter / system | 11px | 400 |
-| Chart tooltip | Inter / system | 12px | 400 |
-| Export button text | Inter / system | 13px | 500 |
+| Page title | Instrument Serif | 20px | 700 |
+| Stat card value | Geist (tabular-nums) | 28px | 700 |
+| Stat card label | Geist | 12px | 400 |
+| Stat card delta | Geist | 11px | 500 |
+| Section heading (h3) | Instrument Serif | 16px | 600 |
+| Tier card title | Geist | 14px | 600 |
+| Tier card agent count | Geist (tabular-nums) | 20px | 700 |
+| Tier card description | Geist | 12px | 400, opacity 0.7 |
+| Cascade stat value | Geist (tabular-nums) | 24px | 700 |
+| Cascade stat label | Geist | 12px | 400 |
+| Chart axis labels | Geist | 11px | 400 |
+| Chart tooltip | Geist | 12px | 400 |
+| Export button text | Geist | 13px | 500 |
 
 ### Spacing
 

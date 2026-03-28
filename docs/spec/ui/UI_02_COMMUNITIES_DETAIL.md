@@ -112,13 +112,13 @@ The Communities Detail screen provides a comprehensive overview of all communiti
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Page title (breadcrumb active) | Inter / system | 16px | 600 |
-| Stat card value | Inter / system | 28px | 700 |
-| Stat card label | Inter / system | 12px | 400 |
-| Community card name | Inter / system | 16px | 600 |
-| Agent count badge | Inter / system | 12px | 500 |
-| Influencer name | Inter / system | 13px | 400 |
-| Matrix header labels | Inter / system | 12px | 500 |
+| Page title (breadcrumb active) | Instrument Serif | 16px | 600 |
+| Stat card value | Geist (tabular-nums) | 28px | 700 |
+| Stat card label | Geist | 12px | 400 |
+| Community card name | Geist | 16px | 600 |
+| Agent count badge | Geist | 12px | 500 |
+| Influencer name | Geist | 13px | 400 |
+| Matrix header labels | Geist | 12px | 500 |
 
 ### Spacing
 

@@ -123,14 +123,14 @@ The Top Influencers screen displays a ranked table of the most influential agent
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Stat card value | Inter / system | 28px | 700 |
-| Stat card label | Inter / system | 12px | 400 |
-| Table header | Inter / system | 13px | 600 |
-| Table body cell | Inter / system | 13px | 400 |
-| Rank number | Inter / system | 13px | 600 |
-| Agent ID link | Inter / system | 13px | 500 |
-| Sidebar title | Inter / system | 14px | 600 |
-| Chart axis labels | Inter / system | 11px | 400 |
+| Stat card value | Geist (tabular-nums) | 28px | 700 |
+| Stat card label | Geist | 12px | 400 |
+| Table header | Geist | 13px | 600 |
+| Table body cell | Geist | 13px | 400 |
+| Rank number | Geist (tabular-nums) | 13px | 600 |
+| Agent ID link | Geist | 13px | 500 |
+| Sidebar title | Geist | 14px | 600 |
+| Chart axis labels | Geist | 11px | 400 |
 
 ### Spacing
 

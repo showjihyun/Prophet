@@ -104,14 +104,14 @@ The Projects List screen is the top-level project management dashboard of Prophe
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Page title | Inter / system | 24px | 700 |
-| Page description | Inter / system | 14px | 400 |
-| Project name | Inter / system | 16px | 600 |
-| Project description | Inter / system | 14px | 400 |
-| Metadata labels | Inter / system | 12px | 400 |
-| Status badge text | Inter / system | 12px | 500 |
-| Sidebar nav item | Inter / system | 14px | 500 |
-| Sidebar logo text | Inter / system | 16px | 700 |
+| Page title | Instrument Serif | 24px | 700 |
+| Page description | Geist | 14px | 400 |
+| Project name | Geist | 16px | 600 |
+| Project description | Geist | 14px | 400 |
+| Metadata labels | Geist | 12px | 400 |
+| Status badge text | Geist | 12px | 500 |
+| Sidebar nav item | Geist | 14px | 500 |
+| Sidebar logo text | Geist | 16px | 700 |
 
 ### Spacing
 

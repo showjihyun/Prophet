@@ -139,9 +139,9 @@ Inherits all typography from UI-03. Additional:
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Pagination "Showing" text | Inter / system | 13px | 400 |
-| Pagination "Rows per page" label | Inter / system | 13px | 400 |
-| Page number buttons | Inter / system | 13px | 500 |
+| Pagination "Showing" text | Geist | 13px | 400 |
+| Pagination "Rows per page" label | Geist | 13px | 400 |
+| Page number buttons | Geist (tabular-nums) | 13px | 500 |
 
 ### Spacing
 

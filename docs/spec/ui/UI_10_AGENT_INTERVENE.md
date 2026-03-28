@@ -142,14 +142,14 @@ The Agent Intervene Modal is a dialog that appears when the "Intervene" button i
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Modal title | Inter / system | 18px | 600 |
-| Modal description | Inter / system | 14px | 400 |
-| Section/field label | Inter / system | 14px | 500 |
-| Input value | Inter / system | 14px | 400 |
-| Select value | Inter / system | 14px | 400 |
-| Textarea text | Inter / system | 14px | 400 |
-| Checkbox/option label | Inter / system | 14px | 400 |
-| Button text | Inter / system | 14px | 500 |
+| Modal title | Instrument Serif | 18px | 600 |
+| Modal description | Geist | 14px | 400 |
+| Section/field label | Geist | 14px | 500 |
+| Input value | Geist | 14px | 400 |
+| Select value | Geist | 14px | 400 |
+| Textarea text | Geist | 14px | 400 |
+| Checkbox/option label | Geist | 14px | 400 |
+| Button text | Geist | 14px | 500 |
 
 ### Spacing
 

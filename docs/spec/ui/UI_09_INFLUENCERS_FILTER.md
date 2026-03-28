@@ -142,13 +142,13 @@ The Influencers Filter Popover is a floating panel that appears when the "Filter
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Popover title | Inter / system | 16px | 600 |
-| Section label | Inter / system | 14px | 500 |
-| Checkbox/Radio label | Inter / system | 14px | 400 |
-| Input label | Inter / system | 12px | 400 |
-| Input value | Inter / system | 14px | 400 |
-| Select value | Inter / system | 14px | 400 |
-| Button text | Inter / system | 14px | 500 |
+| Popover title | Instrument Serif | 16px | 600 |
+| Section label | Geist | 14px | 500 |
+| Checkbox/Radio label | Geist | 14px | 400 |
+| Input label | Geist | 12px | 400 |
+| Input value | Geist | 14px | 400 |
+| Select value | Geist | 14px | 400 |
+| Button text | Geist | 14px | 500 |
 
 ### Spacing
 

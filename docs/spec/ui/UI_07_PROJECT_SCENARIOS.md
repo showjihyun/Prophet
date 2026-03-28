@@ -126,16 +126,16 @@ The Project Scenarios screen is the detail view for a single project. It display
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Page title | Inter / system | 24px | 700 |
-| Page description | Inter / system | 14px | 400 |
-| Section heading | Inter / system | 18px | 600 |
-| Scenario name | Inter / system | 16px | 600 |
-| Scenario description | Inter / system | 14px | 400 |
-| Metadata labels | Inter / system | 12px | 400 |
-| Metadata values | Inter / system | 12px | 600 |
-| Info bar labels | Inter / system | 12px | 400 |
-| Info bar values | Inter / system | 14px | 600 |
-| Breadcrumb text | Inter / system | 14px | 400 |
+| Page title | Instrument Serif | 24px | 700 |
+| Page description | Geist | 14px | 400 |
+| Section heading | Instrument Serif | 18px | 600 |
+| Scenario name | Geist | 16px | 600 |
+| Scenario description | Geist | 14px | 400 |
+| Metadata labels | Geist | 12px | 400 |
+| Metadata values | Geist (tabular-nums) | 12px | 600 |
+| Info bar labels | Geist | 12px | 400 |
+| Info bar values | Geist (tabular-nums) | 14px | 600 |
+| Breadcrumb text | Geist | 14px | 400 |
 
 ### Spacing
 

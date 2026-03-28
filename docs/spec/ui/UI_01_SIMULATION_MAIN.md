@@ -167,15 +167,15 @@ The screen is divided into 4 horizontal zones stacked vertically:
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Logo text | Inter / system | 16px | 700 (bold) |
-| Panel titles | Inter / system | 14px | 600 (semibold) |
-| Metric values | Inter / system | 24px | 700 (bold) |
-| Metric labels | Inter / system | 12px | 400 (regular) |
-| Community names | Inter / system | 13px | 500 (medium) |
-| Agent count text | Inter / system | 12px | 400 (regular) |
-| Status overlay text | Mono (JetBrains Mono) | 11px | 400 (regular) |
-| Graph title overlay | Inter / system | 18px | 700 (bold) |
-| Graph subtitle | Inter / system | 12px | 400 (regular), opacity 0.6 |
+| Logo text | Geist | 16px | 700 (bold) |
+| Panel titles | Geist | 14px | 600 (semibold) |
+| Metric values | Geist (tabular-nums) | 24px | 700 (bold) |
+| Metric labels | Geist | 12px | 400 (regular) |
+| Community names | Geist | 13px | 500 (medium) |
+| Agent count text | Geist | 12px | 400 (regular) |
+| Status overlay text | Geist Mono | 11px | 400 (regular) |
+| Graph title overlay | Instrument Serif | 18px | 700 (bold) |
+| Graph subtitle | Geist | 12px | 400 (regular), opacity 0.6 |
 
 ### Spacing
 

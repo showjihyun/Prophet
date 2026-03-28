@@ -159,17 +159,17 @@ The Agent Detail screen provides an in-depth view of a single agent's profile, p
 
 | Element | Font | Size | Weight |
 |---------|------|------|--------|
-| Agent ID heading | Inter / system | 24px | 700 |
-| Quick stat value | Inter / system | 20px | 700 |
-| Quick stat label | Inter / system | 12px | 400 |
-| Personality trait label | Inter / system | 13px | 400 |
-| Personality trait percentage | Inter / system | 12px | 600 |
-| Section heading (h3) | Inter / system | 14px | 600 |
-| Table header | Inter / system | 13px | 600 |
-| Table body cell | Inter / system | 13px | 400 |
-| Memory summary text | Inter / system | 13px | 400, line-height 1.5 |
-| Chart axis labels | Inter / system | 11px | 400 |
-| Tab trigger | Inter / system | 14px | 500 |
+| Agent ID heading | Instrument Serif | 24px | 700 |
+| Quick stat value | Geist (tabular-nums) | 20px | 700 |
+| Quick stat label | Geist | 12px | 400 |
+| Personality trait label | Geist | 13px | 400 |
+| Personality trait percentage | Geist (tabular-nums) | 12px | 600 |
+| Section heading (h3) | Instrument Serif | 14px | 600 |
+| Table header | Geist | 13px | 600 |
+| Table body cell | Geist | 13px | 400 |
+| Memory summary text | Geist | 13px | 400, line-height 1.5 |
+| Chart axis labels | Geist | 11px | 400 |
+| Tab trigger | Geist | 14px | 500 |
 
 ### Spacing
 
