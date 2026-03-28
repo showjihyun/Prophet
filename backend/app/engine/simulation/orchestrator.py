@@ -432,5 +432,18 @@ class SimulationOrchestrator:
         """Public accessor for simulation state."""
         return self._get_state(simulation_id)
 
+    async def delete_simulation(self, simulation_id: UUID) -> None:
+        """Remove simulation state from memory.
+        SPEC: docs/spec/09_HARNESS_SPEC.md#memory-eviction-policy
+
+        Raises:
+            KeyError: simulation_id not found
+        """
+        if simulation_id not in self._simulations:
+            raise KeyError(f"Simulation {simulation_id} not found")
+        del self._simulations[simulation_id]
+        if simulation_id in self._locks:
+            del self._locks[simulation_id]
+
 
 __all__ = ["SimulationOrchestrator", "SimulationState"]

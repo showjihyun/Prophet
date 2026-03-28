@@ -167,15 +167,46 @@ class SimulationOrchestrator:
         simulation_id: UUID,
     ) -> StepResult:
         """
-        Execute one simulation step:
-            1. Get active campaign events for current step
-            2. ExposureModel.compute_exposure(agents, graph, events)
-            3. asyncio.gather(*[AgentEngine.tick(agent) for agent in agents])
-            4. PropagationModel → generate new events for next step
-            5. SentimentModel.update_community_sentiment()
-            6. CascadeDetector.detect()
-            7. MetricCollector.record(step, results)
-            8. NetworkEvolver.evolve_step() if enabled
+        Execute one simulation step using **Community-level Orchestration**.
+
+        현실 SNS에서 정보는 커뮤니티 내부에서 먼저 순환한 후 외부로 전파된다.
+        이를 반영하여 step 실행을 3-Phase로 분리한다.
+
+        Phase 1 — Intra-Community (병렬):
+            각 CommunityOrchestrator가 자기 커뮤니티의 agent들만 처리.
+            asyncio.gather로 5개 커뮤니티 동시 실행.
+
+            ```python
+            community_results = await asyncio.gather(*[
+                community_orch.tick(step, campaign_events)
+                for community_orch in self._community_orchestrators.values()
+            ])
+            ```
+
+            각 CommunityOrchestrator.tick():
+                1a. ExposureModel — 커뮤니티 내부 agent만 대상
+                1b. AgentTick — 커뮤니티 소속 agent만 tick
+                1c. Intra-community propagation — 커뮤니티 내부 엣지만 사용
+                1d. Community sentiment — 커뮤니티별 mean_belief, variance 계산
+                1e. Community-level tier allocation — 커뮤니티별 SLM/LLM 비율 적용
+
+        Phase 2 — Cross-Community (순차):
+            커뮤니티 간 bridge 엣지를 통한 전파.
+            Phase 1에서 SHARE/REPOST/COMMENT 한 agent의 콘텐츠가
+            bridge edge를 통해 다른 커뮤니티로 전달됨.
+
+            ```python
+            cross_events = self._bridge_propagator.propagate(
+                community_results, bridge_edges
+            )
+            ```
+
+        Phase 3 — Global Aggregation (순차):
+            1. 전체 agent 결과 merge
+            2. CascadeDetector.detect() — 글로벌 emergent behavior
+            3. NetworkEvolver.evolve_step() — edge weight 업데이트
+            4. MetricCollector.record() — 전체 + 커뮤니티별 메트릭
+            5. WebSocket.broadcast(step_summary)
 
         Note: All engine calls receive an `agent_node_map: dict[UUID, int]`
         mapping agent UUIDs to NetworkX integer node IDs. This map is built
@@ -183,13 +214,99 @@ class SimulationOrchestrator:
         passed to ExposureModel, PropagationModel, and NetworkEvolver to
         avoid O(N) graph scans per agent.
 
-            9. WebSocket.broadcast(step_summary)
-           10. Persist agent_states to PostgreSQL
-
         Returns StepResult.
         Increments simulation.current_step.
         """
 
+```
+
+### CommunityOrchestrator (NEW)
+
+```python
+class CommunityOrchestrator:
+    """Manages agent execution within a single community.
+    SPEC: docs/spec/04_SIMULATION_SPEC.md#communityorchestrator
+
+    Each community has its own orchestrator that:
+    - Holds references to only its community's agents
+    - Uses only intra-community network edges for propagation
+    - Computes community-local sentiment independently
+    - Applies community-specific tier allocation
+    """
+
+    def __init__(
+        self,
+        community_id: UUID,
+        community_config: CommunityConfig,
+        agents: list[AgentState],
+        subgraph: nx.Graph,            # intra-community edges only
+        agent_node_map: dict[UUID, int],
+    ): ...
+
+    async def tick(
+        self,
+        step: int,
+        campaign_events: list[CampaignEvent],
+        recsys_config: RecSysConfig | None = None,
+    ) -> CommunityTickResult:
+        """
+        Execute one step for this community's agents.
+
+        Steps:
+            1. ExposureModel.compute_exposure(self.agents, self.subgraph, events)
+            2. TierSelector.assign_tiers(self.agents, max_ratio)
+            3. for agent in self.agents: AgentTick.tick(agent, ...)
+            4. Intra-community PropagationModel (self.subgraph edges only)
+            5. SentimentModel.update_community_sentiment(self.community_id, ...)
+
+        Returns CommunityTickResult with:
+            - updated_agents: list[AgentState]
+            - propagation_events: list[PropagationEvent]
+            - community_sentiment: CommunitySentiment
+            - outbound_events: list[PropagationEvent]  # events targeting bridge edges
+        """
+
+@dataclass
+class CommunityTickResult:
+    community_id: UUID
+    updated_agents: list[AgentState]
+    propagation_events: list[PropagationEvent]  # intra-community only
+    outbound_events: list[PropagationEvent]     # targeting other communities via bridges
+    community_sentiment: CommunitySentiment
+    action_distribution: dict[str, int]
+    llm_calls: int
+    tick_duration_ms: float
+```
+
+### BridgePropagator (NEW)
+
+```python
+class BridgePropagator:
+    """Handles cross-community propagation via bridge edges.
+    SPEC: docs/spec/04_SIMULATION_SPEC.md#bridgepropagator
+
+    Phase 2 of the 3-Phase step execution.
+    Takes outbound events from each community and delivers them
+    to target agents in other communities.
+    """
+
+    def propagate(
+        self,
+        community_results: list[CommunityTickResult],
+        bridge_edges: list[tuple[int, int]],
+        full_graph: nx.Graph,
+    ) -> list[PropagationEvent]:
+        """
+        For each outbound_event from CommunityTickResult:
+            If target_agent is in a different community:
+                Apply cross-community propagation probability
+                (reduced by bridge_trust_factor = 0.6)
+
+        Returns cross-community PropagationEvents to be applied in Phase 3.
+        """
+```
+
+```python
     async def pause(self, simulation_id: UUID) -> None:
         """Status → PAUSED. Current step completes before pausing."""
 

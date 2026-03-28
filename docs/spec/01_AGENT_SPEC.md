@@ -7,6 +7,15 @@ Version: 0.2.0 | Status: DRAFT | Previous: 0.1.0
 
 Each Agent is an autonomous entity in the simulation with a 6-layer architecture. Agents perceive their environment, retrieve memories, update emotions, evaluate content, decide actions, and influence neighbors.
 
+**Execution Model: Community-first Orchestration**
+
+Agent들은 전체를 하나의 flat loop로 처리하지 않는다.
+각 커뮤니티별 `CommunityOrchestrator`가 소속 agent들을 독립적으로 tick하고,
+커뮤니티 간 전파는 별도 Phase에서 bridge edge를 통해 처리한다.
+이는 현실 SNS의 "커뮤니티 내부 순환 → 외부 전파" 패턴을 재현한다.
+
+상세: `04_SIMULATION_SPEC.md` §4 CommunityOrchestrator 참조.
+
 **Agent Types:**
 | Type | Role | LLM Tier | Default Ratio |
 |------|------|----------|--------------|

@@ -36,7 +36,7 @@ class CampaignInput(BaseModel):
     SPEC: docs/spec/06_API_SPEC.md#post-simulations
     """
     name: str
-    budget: float
+    budget: float = 0.0
     channels: list[str]
     message: str
     target_communities: list[str] = Field(default_factory=lambda: ["all"])

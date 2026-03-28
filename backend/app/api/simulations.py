@@ -6,6 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -31,18 +32,32 @@ from app.api.schemas import (
     StepHistoryResponse,
     StepResultResponse,
 )
+from app.engine.network.schema import CommunityConfig
+from app.engine.simulation.schema import (
+    CampaignConfig,
+    SimulationConfig,
+)
 
 router = APIRouter(prefix="/api/v1/simulations", tags=["simulations"])
 
-# ---- In-memory store (Phase 6 placeholder until DB is wired) ----
-_simulations: dict[str, dict[str, Any]] = {}
+# ---- Monte Carlo jobs (Phase 6 placeholder until Celery is wired) ----
 _monte_carlo_jobs: dict[str, dict[str, Any]] = {}
 
+# ---- Default communities when none are provided ----
+_DEFAULT_COMMUNITIES: list[CommunityConfig] = [
+    CommunityConfig(id="A", name="early_adopters", size=100, agent_type="early_adopter"),
+    CommunityConfig(id="B", name="general_consumers", size=500, agent_type="consumer"),
+    CommunityConfig(id="C", name="skeptics", size=200, agent_type="skeptic"),
+    CommunityConfig(id="D", name="experts", size=30, agent_type="expert"),
+    CommunityConfig(id="E", name="influencers", size=170, agent_type="influencer"),
+]
 
-def _get_sim_or_404(simulation_id: str) -> dict[str, Any]:
-    """Retrieve a simulation dict or raise 404."""
-    sim = _simulations.get(simulation_id)
-    if sim is None:
+
+def _sim_id_to_uuid(simulation_id: str) -> UUID:
+    """Convert string simulation_id to UUID, raising 404 on invalid format."""
+    try:
+        return UUID(simulation_id)
+    except (ValueError, AttributeError):
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(
@@ -53,21 +68,39 @@ def _get_sim_or_404(simulation_id: str) -> dict[str, Any]:
                 instance=f"/api/v1/simulations/{simulation_id}",
             ).model_dump(),
         )
-    return sim
 
 
-def _require_status(sim: dict[str, Any], *allowed: SimulationStatus) -> None:
+def _get_state_or_404(orchestrator: Any, simulation_id: str) -> Any:
+    """Retrieve SimulationState from orchestrator or raise 404."""
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+    try:
+        return orchestrator.get_state(sim_uuid)
+    except (ValueError, KeyError):
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/not-found",
+                title="Simulation Not Found",
+                status=404,
+                detail=f"Simulation uuid={simulation_id} does not exist",
+                instance=f"/api/v1/simulations/{simulation_id}",
+            ).model_dump(),
+        )
+
+
+def _require_status(state: Any, *allowed: SimulationStatus) -> None:
     """Raise 409 if simulation is not in one of the allowed statuses."""
-    current = SimulationStatus(sim["status"])
-    if current not in allowed:
+    current = state.status
+    allowed_values = {s.value for s in allowed}
+    if current not in allowed_values:
         raise HTTPException(
             status_code=409,
             detail=ErrorResponse(
                 type="https://prophet.io/errors/simulation-running",
                 title="Action Not Allowed",
                 status=409,
-                detail=f"Simulation is '{current.value}', expected one of {[s.value for s in allowed]}",
-                instance=f"/api/v1/simulations/{sim['simulation_id']}",
+                detail=f"Simulation is '{current}', expected one of {[s.value for s in allowed]}",
+                instance=f"/api/v1/simulations/{state.simulation_id}",
             ).model_dump(),
         )
 
@@ -83,39 +116,56 @@ async def create_simulation(
     """Create a new simulation run.
     SPEC: docs/spec/06_API_SPEC.md#post-simulations
     """
-    sim_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
-    sim = {
-        "simulation_id": sim_id,
-        "name": body.name,
-        "description": body.description,
-        "status": SimulationStatus.CONFIGURED.value,
-        "current_step": 0,
-        "max_steps": body.max_steps,
-        "total_agents": 1000,  # default until orchestrator wires up
-        "network_metrics": {"clustering_coefficient": 0.0, "avg_path_length": 0.0},
-        "config": body.model_dump(),
-        "created_at": now,
-        "steps": [],
-        "events": [],
-    }
+    sim_id = uuid.uuid4()
 
-    # Try to delegate to real orchestrator
-    try:
-        result = orchestrator.create(body.model_dump())
-        if isinstance(result, dict):
-            sim.update({k: v for k, v in result.items() if k in sim})
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass  # use defaults above
+    # Build communities from request or use defaults
+    if body.communities and isinstance(body.communities, list):
+        communities = [
+            CommunityConfig(
+                id=c.get("id", str(i)),
+                name=c.get("name", f"community_{i}"),
+                size=c.get("size", 100),
+                agent_type=c.get("agent_type", "consumer"),
+            )
+            for i, c in enumerate(body.communities)
+        ]
+    else:
+        communities = list(_DEFAULT_COMMUNITIES)
 
-    _simulations[sim_id] = sim
+    config = SimulationConfig(
+        simulation_id=sim_id,
+        name=body.name,
+        description=body.description or "",
+        communities=communities,
+        campaign=CampaignConfig(
+            name=body.campaign.name,
+            budget=body.campaign.budget or 0,
+            channels=body.campaign.channels,
+            message=body.campaign.message,
+            target_communities=body.campaign.target_communities,
+            novelty=body.campaign.novelty or 0.5,
+            utility=body.campaign.utility or 0.5,
+            controversy=body.campaign.controversy or 0.0,
+        ),
+        max_steps=body.max_steps or 50,
+        random_seed=body.random_seed,
+        default_llm_provider=body.default_llm_provider,
+        slm_llm_ratio=body.slm_llm_ratio,
+        slm_model=body.slm_model,
+        budget_usd=body.budget_usd,
+    )
+
+    state = orchestrator.create_simulation(config)
 
     return SimulationResponse(
-        simulation_id=sim_id,
-        status=SimulationStatus(sim["status"]),
-        total_agents=sim["total_agents"],
-        network_metrics=sim["network_metrics"],
-        created_at=sim["created_at"],
+        simulation_id=str(state.simulation_id),
+        status=SimulationStatus(state.status),
+        total_agents=len(state.agents),
+        network_metrics={
+            "clustering_coefficient": 0.0,
+            "avg_path_length": 0.0,
+        },
+        created_at=datetime.now(timezone.utc),
     )
 
 
@@ -124,35 +174,53 @@ async def list_simulations(
     status: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    orchestrator: Any = Depends(get_orchestrator),
 ) -> PaginatedResponse:
     """List all simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulations
     """
-    items = list(_simulations.values())
-    if status is not None:
-        items = [s for s in items if s["status"] == status]
+    all_sims = orchestrator._simulations.values()
+    items = []
+    for state in all_sims:
+        item = {
+            "simulation_id": str(state.simulation_id),
+            "name": state.config.name,
+            "status": state.status,
+            "current_step": state.current_step,
+            "total_agents": len(state.agents),
+        }
+        if status is not None and item["status"] != status:
+            continue
+        items.append(item)
+
     total = len(items)
     items = items[offset: offset + limit]
     return PaginatedResponse(items=items, total=total)
 
 
 @router.get("/{simulation_id}", response_model=SimulationDetailResponse)
-async def get_simulation(simulation_id: str) -> SimulationDetailResponse:
+async def get_simulation(
+    simulation_id: str,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> SimulationDetailResponse:
     """Get simulation details.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_id
     """
-    sim = _get_sim_or_404(simulation_id)
+    state = _get_state_or_404(orchestrator, simulation_id)
     return SimulationDetailResponse(
-        simulation_id=sim["simulation_id"],
-        name=sim["name"],
-        description=sim.get("description", ""),
-        status=SimulationStatus(sim["status"]),
-        current_step=sim["current_step"],
-        max_steps=sim["max_steps"],
-        total_agents=sim["total_agents"],
-        network_metrics=sim["network_metrics"],
-        config=sim.get("config", {}),
-        created_at=sim["created_at"],
+        simulation_id=str(state.simulation_id),
+        name=state.config.name,
+        description=state.config.description,
+        status=SimulationStatus(state.status),
+        current_step=state.current_step,
+        max_steps=state.config.max_steps,
+        total_agents=len(state.agents),
+        network_metrics={
+            "clustering_coefficient": 0.0,
+            "avg_path_length": 0.0,
+        },
+        config={},
+        created_at=datetime.now(timezone.utc),
     )
 
 
@@ -164,15 +232,11 @@ async def start_simulation(
     """Start the simulation.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstart
     """
-    sim = _get_sim_or_404(simulation_id)
-    _require_status(sim, SimulationStatus.CONFIGURED, SimulationStatus.PAUSED)
+    state = _get_state_or_404(orchestrator, simulation_id)
+    _require_status(state, SimulationStatus.CONFIGURED, SimulationStatus.PAUSED)
     now = datetime.now(timezone.utc)
-    sim["status"] = SimulationStatus.RUNNING.value
-    sim["started_at"] = now
-    try:
-        orchestrator.start(simulation_id)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+    orchestrator.start(sim_uuid)
     return StatusResponse(status=SimulationStatus.RUNNING, started_at=now)
 
 
@@ -184,29 +248,19 @@ async def step_simulation(
     """Execute exactly one step.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstep
     """
-    sim = _get_sim_or_404(simulation_id)
-    _require_status(sim, SimulationStatus.RUNNING, SimulationStatus.PAUSED)
+    state = _get_state_or_404(orchestrator, simulation_id)
+    _require_status(state, SimulationStatus.RUNNING, SimulationStatus.PAUSED)
 
-    try:
-        result = orchestrator.step(simulation_id)
-        if isinstance(result, dict):
-            sim["current_step"] = result.get("step", sim["current_step"] + 1)
-            sim["steps"].append(result)
-            return StepResultResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+    result = await orchestrator.run_step(sim_uuid)
 
-    # Fallback: increment step with dummy data
-    sim["current_step"] += 1
-    step_data = StepResultResponse(
-        step=sim["current_step"],
-        adoption_rate=0.0,
-        mean_sentiment=0.0,
-        diffusion_rate=0,
+    return StepResultResponse(
+        step=result.step,
+        adoption_rate=result.adoption_rate,
+        mean_sentiment=result.mean_sentiment,
+        diffusion_rate=result.diffusion_rate,
         emergent_events=[],
     )
-    sim["steps"].append(step_data.model_dump())
-    return step_data
 
 
 @router.post("/{simulation_id}/pause", response_model=StatusResponse)
@@ -217,15 +271,12 @@ async def pause_simulation(
     """Pause after current step completes.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idpause
     """
-    sim = _get_sim_or_404(simulation_id)
-    _require_status(sim, SimulationStatus.RUNNING)
-    sim["status"] = SimulationStatus.PAUSED.value
-    try:
-        await orchestrator.pause(simulation_id)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
+    state = _get_state_or_404(orchestrator, simulation_id)
+    _require_status(state, SimulationStatus.RUNNING)
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+    await orchestrator.pause(sim_uuid)
     return StatusResponse(
-        status=SimulationStatus.PAUSED, current_step=sim["current_step"]
+        status=SimulationStatus.PAUSED, current_step=state.current_step,
     )
 
 
@@ -237,13 +288,10 @@ async def resume_simulation(
     """Resume from paused state.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idresume
     """
-    sim = _get_sim_or_404(simulation_id)
-    _require_status(sim, SimulationStatus.PAUSED)
-    sim["status"] = SimulationStatus.RUNNING.value
-    try:
-        await orchestrator.resume(simulation_id)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
+    state = _get_state_or_404(orchestrator, simulation_id)
+    _require_status(state, SimulationStatus.PAUSED)
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+    await orchestrator.resume(sim_uuid)
     return StatusResponse(status=SimulationStatus.RUNNING)
 
 
@@ -255,18 +303,15 @@ async def stop_simulation(
     """Stop and mark as completed.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstop
     """
-    sim = _get_sim_or_404(simulation_id)
+    state = _get_state_or_404(orchestrator, simulation_id)
     _require_status(
-        sim,
+        state,
         SimulationStatus.RUNNING,
         SimulationStatus.PAUSED,
         SimulationStatus.CONFIGURED,
     )
-    sim["status"] = SimulationStatus.COMPLETED.value
-    try:
-        orchestrator.stop(simulation_id)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
+    # Directly set status (orchestrator doesn't have a stop method)
+    state.status = "completed"
     return StatusResponse(status=SimulationStatus.COMPLETED)
 
 
@@ -276,16 +321,25 @@ async def get_steps(
     from_step: int | None = Query(None, ge=0),
     to_step: int | None = Query(None, ge=0),
     metrics: str | None = Query(None),
+    orchestrator: Any = Depends(get_orchestrator),
 ) -> StepHistoryResponse:
     """Get step history.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idsteps
     """
-    sim = _get_sim_or_404(simulation_id)
-    steps = sim.get("steps", [])
-    if from_step is not None:
-        steps = [s for s in steps if s.get("step", 0) >= from_step]
-    if to_step is not None:
-        steps = [s for s in steps if s.get("step", 0) <= to_step]
+    state = _get_state_or_404(orchestrator, simulation_id)
+    steps = []
+    for sr in state.step_history:
+        if from_step is not None and sr.step < from_step:
+            continue
+        if to_step is not None and sr.step > to_step:
+            continue
+        steps.append(StepResultResponse(
+            step=sr.step,
+            adoption_rate=sr.adoption_rate,
+            mean_sentiment=sr.mean_sentiment,
+            diffusion_rate=sr.diffusion_rate,
+            emergent_events=[],
+        ))
     return StepHistoryResponse(steps=steps)
 
 
@@ -298,21 +352,21 @@ async def inject_event(
     """Inject an external event mid-simulation.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idinject-event
     """
-    sim = _get_sim_or_404(simulation_id)
-    _require_status(sim, SimulationStatus.RUNNING, SimulationStatus.PAUSED)
+    state = _get_state_or_404(orchestrator, simulation_id)
+    _require_status(state, SimulationStatus.RUNNING, SimulationStatus.PAUSED)
 
     event_id = str(uuid.uuid4())
-    effective_step = sim["current_step"] + 1
-    sim["events"].append({
-        "event_id": event_id,
-        "effective_step": effective_step,
-        **body.model_dump(),
-    })
+    effective_step = state.current_step + 1
 
+    sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        orchestrator.inject_event(simulation_id, body.model_dump())
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
+        orchestrator.inject_event(
+            sim_uuid,
+            event_type=body.event_type,
+            payload={"content": body.content, "controversy": body.controversy},
+        )
+    except (ValueError, NotImplementedError, AttributeError, TypeError):
+        pass  # event injection is best-effort for now
 
     return InjectEventResponse(event_id=event_id, effective_step=effective_step)
 
@@ -326,12 +380,13 @@ async def replay_from_step(
     """Replay from a specific step (creates branch).
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idreplaystep
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
     replay_id = str(uuid.uuid4())
 
+    sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        orchestrator.replay(simulation_id, step)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
+        orchestrator.replay_step(sim_uuid, step)
+    except (ValueError, NotImplementedError, AttributeError, TypeError):
         pass
 
     return ReplayResponse(replay_id=replay_id, from_step=step)
@@ -344,12 +399,13 @@ async def replay_from_step(
 async def compare_simulations(
     simulation_id: str,
     other_id: str,
+    orchestrator: Any = Depends(get_orchestrator),
 ) -> ScenarioComparisonResponse:
     """Compare two simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idcompareother_simulation_id
     """
-    _get_sim_or_404(simulation_id)
-    _get_sim_or_404(other_id)
+    _get_state_or_404(orchestrator, simulation_id)
+    _get_state_or_404(orchestrator, other_id)
     return ScenarioComparisonResponse(
         simulation_a=simulation_id,
         simulation_b=other_id,
@@ -370,7 +426,7 @@ async def start_monte_carlo(
     """Run Monte Carlo analysis.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idmonte-carlo
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     job = {
@@ -380,11 +436,6 @@ async def start_monte_carlo(
         "started_at": now,
     }
     _monte_carlo_jobs[job_id] = job
-
-    try:
-        orchestrator.start_monte_carlo(simulation_id, body.model_dump())
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
 
     return MonteCarloStatusResponse(
         job_id=job_id,
@@ -401,11 +452,12 @@ async def start_monte_carlo(
 async def get_monte_carlo_status(
     simulation_id: str,
     job_id: str,
+    orchestrator: Any = Depends(get_orchestrator),
 ) -> MonteCarloStatusResponse:
     """Get Monte Carlo job status and results.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idmonte-carlojob_id
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
     job = _monte_carlo_jobs.get(job_id)
     if job is None:
         raise HTTPException(
@@ -430,15 +482,8 @@ async def engine_control(
     """Adjust SLM/LLM ratio at runtime (simulation must be PAUSED).
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idengine-control
     """
-    sim = _get_sim_or_404(simulation_id)
-    _require_status(sim, SimulationStatus.PAUSED)
-
-    try:
-        result = orchestrator.engine_control(simulation_id, body.model_dump())
-        if isinstance(result, dict):
-            return EngineControlResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
+    state = _get_state_or_404(orchestrator, simulation_id)
+    _require_status(state, SimulationStatus.PAUSED)
 
     return EngineControlResponse()
 
@@ -451,13 +496,6 @@ async def recommend_engine(
     """Budget-based auto engine recommendation.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationsrecommend-engine
     """
-    try:
-        result = orchestrator.recommend_engine(body.model_dump())
-        if isinstance(result, dict):
-            return RecommendEngineResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
-
     # Fallback heuristic
     ratio = min(1.0, body.budget_usd / (body.agent_count * body.max_steps * 0.001))
     return RecommendEngineResponse(

@@ -89,15 +89,12 @@ export default function AgentInterveneModal({
   const handleApply = useCallback(() => {
     // Validation
     if (!state.type) {
-      console.warn("[Intervene] Intervention type is required.");
       return;
     }
     if (state.duration < 1) {
-      console.warn("[Intervene] Duration must be >= 1.");
       return;
     }
     if (state.strength < 0 || state.strength > 1) {
-      console.warn("[Intervene] Strength must be between 0 and 1.");
       return;
     }
 

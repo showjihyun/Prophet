@@ -60,7 +60,6 @@ function App() {
           <Route path="/agents/:agentId" element={<AgentDetailPage />} />
           <Route path="/metrics" element={<GlobalMetricsPage />} />
           <Route path="/setup" element={<CampaignSetupPage />} />
-          <Route path="/campaign/new" element={<CampaignSetupPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </ErrorBoundary>

@@ -7,17 +7,16 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
-
-# Reset in-memory store between tests
+from app.api import deps as _deps_mod
 from app.api import simulations as _sim_mod
 
 
 @pytest.fixture(autouse=True)
 def _reset_store():
-    _sim_mod._simulations.clear()
+    _deps_mod._orchestrator = None
     _sim_mod._monte_carlo_jobs.clear()
     yield
-    _sim_mod._simulations.clear()
+    _deps_mod._orchestrator = None
     _sim_mod._monte_carlo_jobs.clear()
 
 

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_orchestrator
 from app.api.schemas import LLMCallsResponse, LLMImpactResponse, LLMStatsResponse
-from app.api.simulations import _get_sim_or_404
+from app.api.simulations import _get_state_or_404
 
 router = APIRouter(
     prefix="/api/v1/simulations/{simulation_id}/llm",
@@ -25,7 +25,7 @@ async def get_llm_stats(
     """LLM usage statistics for the simulation.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idllmstats
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
 
     try:
         result = orchestrator.get_llm_stats(simulation_id)
@@ -49,7 +49,7 @@ async def get_llm_calls(
     """Recent LLM call logs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idllmcalls
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
 
     try:
         result = orchestrator.get_llm_calls(
@@ -71,7 +71,7 @@ async def get_llm_impact(
     """Get current engine impact assessment.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idllmimpact
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
 
     try:
         result = orchestrator.get_llm_impact(simulation_id)

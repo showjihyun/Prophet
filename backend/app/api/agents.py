@@ -17,9 +17,7 @@ from app.api.schemas import (
     PaginatedResponse,
     SimulationStatus,
 )
-
-# Import the in-memory store from simulations module
-from app.api.simulations import _get_sim_or_404, _require_status
+from app.api.simulations import _get_state_or_404, _require_status
 
 router = APIRouter(
     prefix="/api/v1/simulations/{simulation_id}/agents",
@@ -40,7 +38,7 @@ async def list_agents(
     """List agents with current state.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagents
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
 
     try:
         result = orchestrator.list_agents(
@@ -69,7 +67,7 @@ async def get_agent(
     """Get full agent state at current step.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagentsagent_id
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
 
     try:
         result = orchestrator.get_agent(simulation_id, agent_id)
@@ -100,8 +98,8 @@ async def patch_agent(
     """Modify agent (simulation must be PAUSED).
     SPEC: docs/spec/06_API_SPEC.md#patch-simulationssimulation_idagentsagent_id
     """
-    sim = _get_sim_or_404(simulation_id)
-    _require_status(sim, SimulationStatus.PAUSED)
+    state = _get_state_or_404(orchestrator, simulation_id)
+    _require_status(state, SimulationStatus.PAUSED)
 
     try:
         result = orchestrator.patch_agent(simulation_id, agent_id, body.model_dump(exclude_none=True))
@@ -133,7 +131,7 @@ async def get_agent_memory(
     """Get agent memory records.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagentsagent_idmemory
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
 
     try:
         result = orchestrator.get_agent_memory(

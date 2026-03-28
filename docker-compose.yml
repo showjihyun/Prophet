@@ -40,6 +40,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    # Model will be pulled on first API call via backend
+    # Or manually: docker compose exec ollama ollama pull llama3.1:8b
     # GPU: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
 
   # Backend (FastAPI)
@@ -53,8 +55,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://prophet:${POSTGRES_PASSWORD:-secret}@db:5432/prophet
       VALKEY_URL: valkey://valkey:6379/0
       OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_DEFAULT_MODEL: llama3.2
-      SLM_MODEL: phi4
+      OLLAMA_DEFAULT_MODEL: llama3.1:8b
+      SLM_MODEL: llama3.1:8b
       DEFAULT_LLM_PROVIDER: ollama
       LLM_TIER3_RATIO: "0.1"
       LLM_CACHE_TTL: "3600"

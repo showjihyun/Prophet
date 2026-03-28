@@ -34,6 +34,9 @@ An agent-based social simulation engine combining LLM + GraphRAG + Viral Diffusi
 # CPU environment (no GPU)
 docker compose up -d
 
+# Pull LLM model (first time only, ~4.7GB)
+docker compose exec ollama ollama pull llama3.1:8b
+
 # GPU environment (NVIDIA)
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```

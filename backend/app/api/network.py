@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_orchestrator
 from app.api.schemas import NetworkFormat, NetworkGraphResponse, NetworkMetricsResponse
-from app.api.simulations import _get_sim_or_404
+from app.api.simulations import _get_state_or_404
 
 router = APIRouter(
     prefix="/api/v1/simulations/{simulation_id}/network",
@@ -26,7 +26,7 @@ async def get_network(
     """Get network graph data (for visualization).
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idnetwork
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
 
     try:
         result = orchestrator.get_network(simulation_id, format=format.value)
@@ -46,7 +46,7 @@ async def get_network_metrics(
     """Current network metrics.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idnetworkmetrics
     """
-    _get_sim_or_404(simulation_id)
+    _get_state_or_404(orchestrator, simulation_id)
 
     try:
         result = orchestrator.get_network_metrics(simulation_id)

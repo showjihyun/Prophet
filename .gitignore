@@ -53,3 +53,4 @@ skills-lock.json
 
 # Pytest cache (recursive)
 **/.pytest_cache/
+.kiro/

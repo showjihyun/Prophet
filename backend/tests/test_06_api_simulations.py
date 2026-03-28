@@ -6,15 +6,17 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+from app.api import deps as _deps_mod
 from app.api import simulations as _sim_mod
 
 
 @pytest.fixture(autouse=True)
-def _reset_store():
-    _sim_mod._simulations.clear()
+def _reset_orchestrator():
+    """Reset the orchestrator singleton and monte carlo jobs between tests."""
+    _deps_mod._orchestrator = None
     _sim_mod._monte_carlo_jobs.clear()
     yield
-    _sim_mod._simulations.clear()
+    _deps_mod._orchestrator = None
     _sim_mod._monte_carlo_jobs.clear()
 
 
@@ -61,6 +63,7 @@ class TestCreateSimulation:
         assert "simulation_id" in data
         assert data["status"] == "configured"
         assert "total_agents" in data
+        assert data["total_agents"] == 1000  # default communities sum to 1000
         assert "network_metrics" in data
         assert "created_at" in data
 
@@ -192,7 +195,7 @@ class TestInjectEvent:
         resp = await client.post(
             f"/api/v1/simulations/{sim_id}/inject-event",
             json={
-                "event_type": "controversy",
+                "event_type": "campaign_ad",
                 "content": "Test event",
                 "controversy": 0.9,
                 "target_communities": ["A"],
@@ -204,7 +207,7 @@ class TestInjectEvent:
     async def test_inject_configured_409(self, client: AsyncClient, sim_id: str):
         resp = await client.post(
             f"/api/v1/simulations/{sim_id}/inject-event",
-            json={"event_type": "controversy", "content": "Nope"},
+            json={"event_type": "campaign_ad", "content": "Nope"},
         )
         assert resp.status_code == 409
 
