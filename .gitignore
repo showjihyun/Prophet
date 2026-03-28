@@ -44,3 +44,12 @@ frontend/.claude/skills/
 
 # Claude settings (local only)
 .claude/settings.local.json
+
+# MCP config (local paths)
+.mcp.json
+
+# Skills lock (managed by npx)
+skills-lock.json
+
+# Pytest cache (recursive)
+**/.pytest_cache/

@@ -1,0 +1,188 @@
+좋습니다. 이제 **MCASP의 핵심 UI**이자 **플랫폼 성공의 승부처**인
+
+**“AI Social World Engine (1000~10000 Agent 실시간 렌더링)”** 설계를 구체적으로 해보겠습니다.
+핵심 목표는 **수천~만 개 Agent를 실시간으로 관찰, 개입, 분석**할 수 있게 하는 것입니다.
+
+---
+
+# 1️⃣ 목표
+
+* **대규모 Agent 시뮬레이션**: 1,000 ~ 10,000 Agent
+* **실시간 상호작용**: 사용자 개입 시 즉각 반영
+* **다중 커뮤니티 지원**: Community A, B, C 등
+* **확산, 의견 변화, Polarization 시각화**
+* **연구/분석용 데이터 추출 가능**
+
+---
+
+# 2️⃣ UI 핵심 구조
+
+```text
++---------------------------------------------------------------+
+| Simulation Control Panel                                      |
+| Run | Pause | Step | Speed | Scenario | Reset | Replay         |
++---------------------------------------------------------------+
+
++---------------------+----------------------------+-----------+
+| Community Panel     | AI SOCIAL WORLD            | Metrics   |
+|                     | (Living Graph Engine)     | Panel     |
++---------------------+----------------------------+-----------+
+
++---------------------------------------------------------------+
+| Timeline + Diffusion Wave Visualization                       |
++---------------------------------------------------------------+
+
++---------------------------------------------------------------+
+| Conversations / Expert Agent Analysis                         |
++---------------------------------------------------------------+
+```
+
+비율:
+
+* **AI Social World**: 화면의 60~70% (중앙 핵심)
+* **Community Panel**: 15~20% (좌측)
+* **Metrics Panel**: 15~20% (우측)
+* **Timeline / Diffusion**: 하단 10~15%
+* **Conversation Feed**: 필요 시 하단/오버레이
+
+---
+
+# 3️⃣ 그래프 엔진 구조
+
+### 기술 선택
+
+* **WebGL 기반 렌더링** → 성능 확보
+* 추천 라이브러리:
+
+  * Sigma.js (WebGL)
+  * Three.js (3D 확장 가능)
+  * Cytoscape.js + WebGL 연동
+
+### 데이터 구조
+
+* **Agent Node**: id, community, traits, influence, sentiment, memory
+* **Edge**: social connection, interaction frequency, trust
+* **Community Cluster**: Node 배열 + 중앙 좌표 + 색상
+* **Viral Cascade Metadata**: 확산 경로, timestamp, origin
+
+---
+
+# 4️⃣ 실시간 렌더링 전략
+
+1. **LOD(Level of Detail) Rendering**
+
+   * 화면 확대/축소에 따라 Agent 표현 간략화
+   * Zoom out → 단순 점, Cluster 중심 표시
+   * Zoom in → 말풍선, Glow, 애니메이션
+
+2. **GPU Instancing**
+
+   * 동일한 Agent 형태를 GPU 인스턴스로 다수 렌더링
+   * 10,000 Agent 이상도 끊김 없이 표시 가능
+
+3. **Web Worker + Offscreen Canvas**
+
+   * Agent 상태 계산, 메시지 확산 등 CPU 부하 분리
+   * UI는 GPU에서 처리
+
+4. **Dynamic Edge Rendering**
+
+   * 중요 관계만 선으로 표시
+   * Cascade나 Polarization 확산 시 강조
+
+5. **Animation Optimization**
+
+   * Pulse, Ripple, Glow 효과는 shader 기반
+   * Timeline 재생 시 단계별 렌더링
+
+---
+
+# 5️⃣ 인터랙티브 기능
+
+1. **Agent 직접 개입**
+
+   * Personality 수정
+   * Message injection
+   * Edge 추가/삭제
+   * Influence boost
+
+2. **Community 간 브릿지**
+
+   * 커뮤니티 간 연결 생성
+   * Viral path 테스트
+
+3. **Multi-Scenario 비교**
+
+   * 같은 사회 조건에서 여러 시나리오 실행
+   * 좌/우 패널로 Graph 비교
+
+4. **Cascade Highlighting**
+
+   * 선택한 메시지의 확산 경로 강조
+   * Color + Glow + Pulse
+
+---
+
+# 6️⃣ 분석용 Metrics 연동
+
+실시간 계산:
+
+* Active Agents / Total Agents
+* Sentiment distribution per community
+* Influence ranking
+* Polarization index
+* Cascade depth & width
+
+표시 방법:
+
+* Graph 내 Glow / Pulse
+* Metrics Panel 차트/바
+* Timeline 연동 Heatmap
+
+---
+
+# 7️⃣ Timeline + Replay Engine
+
+* Day 단위 / Step 단위
+* Play / Pause / Step / Speed
+* Simulation rewind/fast-forward
+* Graph 상태와 Metrics 자동 동기화
+* Diffusion Wave 애니메이션과 연계
+
+---
+
+# 8️⃣ Expert Agent / Conversation Feed
+
+* Expert Agent → 메시지 분석, 추천 전략
+* Conversation feed → Node hover 시 pop-up
+* 실시간 상호작용과 연동
+* 예: Agent34 메시지 → Expert 의견 표시 → 그래프 Glow
+
+---
+
+# 9️⃣ Performance 고려
+
+| 항목               | 방안                            |
+| ---------------- | ----------------------------- |
+| 10,000 Agent 렌더링 | GPU Instancing, WebGL, Shader |
+| 메시지 확산 계산        | Web Worker, Offscreen Canvas  |
+| 그래프 업데이트         | Batch + requestAnimationFrame |
+| Timeline Sync    | Delta-time 기반 애니메이션           |
+
+---
+
+# 🔟 UI/UX 차별점
+
+1. **Living Graph**: Agent가 움직이며 실제 사회처럼 보임
+2. **Cascade Animation**: 메시지 확산이 파동 형태
+3. **Community Island**: Cluster가 독립적 영역
+4. **Direct Intervention**: Agent 선택 후 실시간 변경
+5. **Multi-Scenario**: 동시에 여러 사회 실험
+6. **Expert Overlay**: 전문가 분석 통합
+7. **Heatmap + Opinion Map**: 사회적 감정, 의견 시각화
+8. **Timeline Replay**: 과거 시점 재관찰 가능
+9. **Influence Network**: 주요 노드, 브릿지 강조
+10. **LOD Rendering**: 10,000 Agent까지도 원활한 성능
+
+---
+

@@ -284,13 +284,16 @@ Prophet/
 | Phase | 내용 | 상태 |
 |-------|------|------|
 | **Phase 0** | SPEC 작성 | ✅ 완료 (14개 SPEC + 5개 UI SPEC) |
-| **Phase 1** | 프로젝트 구조 + 하네스 기반 | ✅ 완료 (8/8 테스트) |
-| **Phase 2** | Agent Core (6-Layer) | ✅ 완료 (81/81 테스트) |
-| **Phase 3** | Network Generator | ✅ 완료 (19/19 테스트) |
-| **Phase 4** | Diffusion Engine | ✅ 완료 (78/78 테스트) |
-| **Phase 5** | LLM Integration | ✅ 완료 (92/92 테스트) |
-| **Phase 6** | Simulation Orchestrator + API | ✅ 완료 (127/127 테스트) |
+| **Phase 1** | 프로젝트 구조 + 하네스 기반 | ✅ 완료 (8/8 GREEN 테스트) |
+| **Phase 2** | Agent Core (6-Layer) | ✅ 완료 (81/81 GREEN 테스트) |
+| **Phase 3** | Network Generator | ✅ 완료 (19/19 GREEN 테스트) |
+| **Phase 4** | Diffusion Engine | ✅ 완료 (78/78 GREEN 테스트) |
+| **Phase 5** | LLM Integration | ✅ 완료 (92/92 GREEN 테스트) |
+| **Phase 6** | Simulation Orchestrator + API | ✅ 완료 (127/127 GREEN 테스트) |
 | **Phase 7** | Visualization (Frontend) | ✅ 완료 (tsc 0 errors, build OK) |
+
+> 참고: 위 테스트 수는 구현 완료된 GREEN 테스트만 카운트.
+> 미구현 기능의 RED 테스트 (~31개: test_05_llm_errors, test_07_frontend_errors, test_08_db_errors, test_09_harness_memory)는 향후 구현 시 GREEN으로 전환 예정.
 
 ---
 

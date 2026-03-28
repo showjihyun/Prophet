@@ -4,7 +4,7 @@ services:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: prophet
-      POSTGRES_PASSWORD: secret
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
       POSTGRES_DB: prophet
     ports:
       - "${DB_PORT:-5433}:5432"
@@ -40,28 +40,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-
-  # Ollama with GPU (use: docker compose --profile gpu up)
-  ollama-gpu:
-    image: ollama/ollama:latest
-    profiles: ["gpu"]
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+    # GPU: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
 
   # Backend (FastAPI)
   backend:
@@ -71,7 +50,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://prophet:secret@db:5432/prophet
+      DATABASE_URL: postgresql+asyncpg://prophet:${POSTGRES_PASSWORD:-secret}@db:5432/prophet
       VALKEY_URL: valkey://valkey:6379/0
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_DEFAULT_MODEL: llama3.2

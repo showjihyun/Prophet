@@ -1,0 +1,368 @@
+좋습니다. **Miro Fish**는 “AI 사회가 살아 움직이는 것처럼 보이게 하는 시각화”가 핵심입니다.
+MCASP는 여기에 **연구·실험·개입·분석 기능**을 더하면 **Miro Fish보다 한 단계 위의 플랫폼**이 될 수 있습니다.
+
+즉 UI 목표는 다음입니다.
+
+```text
+AI Social Visualization
++
+Scientific Experiment Platform
++
+Interactive Simulation Control
+```
+
+아래는 **Miro Fish보다 강력한 MCASP UI 핵심 기능 10가지**입니다.
+
+---
+
+# 1️⃣ Living Social Map (살아있는 AI 사회 지도)
+
+Miro Fish의 기본 아이디어를 확장한 UI입니다.
+
+Agent를 **정적 노드가 아니라 움직이는 개체**로 표현합니다.
+
+화면
+
+```
+        ● Agent
+
+   ● Agent      ● Agent
+
+         ● Agent
+```
+
+추가 요소
+
+Agent 상태 표시
+
+| 상태     | UI 표현  |
+| ------ | ------ |
+| 활동     | 움직임    |
+| 메시지 생성 | 말풍선    |
+| 영향력 상승 | Glow   |
+| 논쟁     | 붉은 파동  |
+| 확산     | Ripple |
+
+핵심 효과
+
+```
+사용자가 "AI 사회를 관찰하는 느낌"
+```
+
+---
+
+# 2️⃣ Viral Diffusion Wave Visualization
+
+정보 확산을 **파동 형태**로 보여줍니다.
+
+예
+
+```
+Agent34
+
+   ))) ))) )))  
+
+Agent56
+```
+
+확산 단계
+
+| 단계      | UI       |
+| ------- | -------- |
+| Origin  | 작은 Pulse |
+| Spread  | 파동       |
+| Cascade | 여러 파동    |
+
+사용자는 **바이럴 확산을 직관적으로 이해**할 수 있습니다.
+
+---
+
+# 3️⃣ Opinion Landscape Map
+
+Agent 의견을 **2D ideological space**로 시각화합니다.
+
+예
+
+```
+        Progressive
+
+           ●●●
+       ●●●●●●
+
+Moderate
+
+           ●●
+
+        Conservative
+```
+
+시간 흐름
+
+```
+Day1 → Day10 → Day20
+```
+
+변화
+
+```
+Opinion Polarization
+```
+
+연구용으로 매우 중요합니다.
+
+---
+
+# 4️⃣ Community Territory Map
+
+커뮤니티를 **영역 형태**로 표시합니다.
+
+```
+Community A
+
+  ● ● ● ●
+  ● ● ●
+
+----------------
+
+Community B
+
+  ●●●●●
+  ●●●●
+```
+
+확산 시
+
+```
+A → B → C
+```
+
+사용자는 **사회 구조를 직관적으로 이해**할 수 있습니다.
+
+---
+
+# 5️⃣ Cascade Tree Explorer
+
+확산 구조를 트리 형태로 분석합니다.
+
+```
+Agent34
+ ├ Agent56
+ │  ├ Agent77
+ │  └ Agent88
+ └ Agent90
+```
+
+UI 기능
+
+```
+Cascade depth
+Branching factor
+Influence nodes
+```
+
+이는 실제 **SNS 연구 논문에서 사용하는 분석 방식**입니다.
+
+---
+
+# 6️⃣ AI Conversation Feed
+
+Agent 간 대화를 실시간 표시합니다.
+
+예
+
+```
+Agent34
+"I like this product"
+
+Agent56
+"This looks suspicious"
+
+Agent88
+"I will share it"
+```
+
+전문가 Agent
+
+```
+Marketing Expert
+
+"The message spreads because
+Agent88 has high influence."
+```
+
+사용자는 **사회적 상호작용을 직접 관찰**합니다.
+
+---
+
+# 7️⃣ Timeline Replay System
+
+시뮬레이션을 시간 단위로 재생합니다.
+
+```
+Day 1
+Day 5
+Day 10
+Day 20
+```
+
+기능
+
+```
+Replay
+Fast forward
+Compare scenarios
+```
+
+예
+
+```
+Scenario A vs Scenario B
+```
+
+연구 및 정책 분석에서 중요합니다.
+
+---
+
+# 8️⃣ Interactive Social Engineering Panel
+
+사용자가 시뮬레이션에 직접 개입합니다.
+
+예
+
+Agent 선택
+
+```
+Agent56
+```
+
+개입
+
+```
+Modify personality
+Inject message
+Boost influence
+Create community bridge
+```
+
+예
+
+```
+Community A ↔ Community B
+```
+
+이는 MCASP의 핵심 차별점입니다.
+
+---
+
+# 9️⃣ Influence Network Analyzer
+
+그래프 구조 분석
+
+예
+
+```
+Top Influencers
+
+1 Agent88
+2 Agent34
+3 Agent102
+```
+
+추가 분석
+
+```
+centrality
+trust network
+community bridge nodes
+```
+
+이 기능은
+
+* 마케팅
+* 정책 연구
+* 정보 확산 분석
+
+에서 매우 중요합니다.
+
+---
+
+# 🔟 Social Energy Heatmap
+
+전체 사회의 감정 상태 표시
+
+예
+
+```
+Positive  🔵
+Neutral   ⚪
+Negative  🔴
+```
+
+그래프에 표시
+
+```
+🔵🔵🔵🔵🔵
+🔵🔵⚪⚪
+🔴🔴🔴
+```
+
+이 기능은
+
+```
+Sentiment diffusion
+```
+
+을 직관적으로 보여줍니다.
+
+---
+
+# ⭐ MCASP UI 핵심 구조
+
+최종 화면
+
+```
++------------------------------------------------------+
+| Simulation Control                                   |
++------------------------------------------------------+
+
++-----------+-----------------------------+-------------+
+|Community  |      AI SOCIAL WORLD       | Metrics     |
+|Panel      |      (Living Graph)        | Panel       |
++-----------+-----------------------------+-------------+
+
++------------------------------------------------------+
+| Timeline                                             |
++------------------------------------------------------+
+
++------------------------------------------------------+
+| Conversations + Expert Analysis                      |
++------------------------------------------------------+
+```
+
+---
+
+# ⭐ Miro Fish 대비 MCASP 차별점
+
+| 기능                | Miro Fish | MCASP |
+| ----------------- | --------- | ----- |
+| Agent 시각화         | ✔         | ✔     |
+| 확산 시각화            | ✔         | ✔     |
+| 대화                | ✔         | ✔     |
+| 실시간 개입            | ❌         | ✔     |
+| Graph 분석          | ❌         | ✔     |
+| Scenario 비교       | ❌         | ✔     |
+| Multi-community   | ❌         | ✔     |
+| Expert Agent      | ❌         | ✔     |
+| Policy simulation | ❌         | ✔     |
+
+즉
+
+```
+Miro Fish = Visualization
+MCASP = Research Platform
+```
+
+---
+
+
+
