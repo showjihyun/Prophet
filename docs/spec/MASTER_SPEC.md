@@ -183,6 +183,16 @@ master (기본, 안정 브랜치)
 - 대규모 변경 시 feature 브랜치 → PR 권장
 - force push 금지
 
+### Documentation Language
+
+| 문서 | 언어 |
+|------|------|
+| `README.md` | **English only** |
+| `CLAUDE.md` | Korean (Claude Code 지침) |
+| `AGENTS.md` | Korean (에이전트 지침) |
+| `DESIGN.md` | Korean + English mixed |
+| `docs/spec/*.md` | English (코드 인터페이스) + Korean (설명) |
+
 ### .gitignore 주요 규칙
 
 ```
