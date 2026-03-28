@@ -2,7 +2,7 @@
 SPEC: docs/spec/04_SIMULATION_SPEC.md#§3-5
 """
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
@@ -135,7 +135,7 @@ class StepResult:
     """
     simulation_id: UUID
     step: int
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Aggregate metrics
     total_adoption: int = 0

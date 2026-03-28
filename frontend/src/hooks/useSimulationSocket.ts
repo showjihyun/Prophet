@@ -4,6 +4,13 @@
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 
+const WS_BASE = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/^http/, "ws")
+  : "ws://localhost:8000";
+
+const MAX_RETRIES = 5;
+const BASE_DELAY = 1000;
+
 interface WSMessage {
   type: string;
   data: unknown;
@@ -17,18 +24,44 @@ export function useSimulationSocket(simulationId: string | null) {
   useEffect(() => {
     if (!simulationId) return;
 
-    const ws = new WebSocket(`ws://localhost:8000/ws/${simulationId}`);
-    wsRef.current = ws;
+    let retryCount = 0;
+    let retryTimeout: ReturnType<typeof setTimeout>;
 
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => setConnected(false);
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data) as WSMessage;
-      setLastMessage(msg);
-    };
+    function connect() {
+      const ws = new WebSocket(`${WS_BASE}/ws/${simulationId}`);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setConnected(true);
+        retryCount = 0;
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        if (retryCount < MAX_RETRIES) {
+          const delay = Math.min(BASE_DELAY * Math.pow(2, retryCount), 30000);
+          retryTimeout = setTimeout(() => {
+            retryCount++;
+            connect();
+          }, delay);
+        }
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data) as WSMessage;
+          setLastMessage(msg);
+        } catch {
+          /* non-JSON message, ignore */
+        }
+      };
+    }
+
+    connect();
 
     return () => {
-      ws.close();
+      clearTimeout(retryTimeout);
+      wsRef.current?.close();
       wsRef.current = null;
     };
   }, [simulationId]);

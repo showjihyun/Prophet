@@ -1,6 +1,6 @@
 """
 Auto-generated from SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
-SPEC Version: 0.1.1
+SPEC Version: 0.1.1 (updated: concurrency control + agent_node_map)
 Interface tests for SimulationOrchestrator.
 """
 import pytest
@@ -175,7 +175,7 @@ class TestPauseResume:
         state = orch.create_simulation(_make_config())
         orch.start(state.simulation_id)
         await orch.run_step(state.simulation_id)
-        orch.pause(state.simulation_id)
+        await orch.pause(state.simulation_id)
         assert state.status == SimulationStatus.PAUSED.value
 
     @pytest.mark.asyncio
@@ -183,15 +183,16 @@ class TestPauseResume:
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         orch.start(state.simulation_id)
-        orch.pause(state.simulation_id)
-        orch.resume(state.simulation_id)
+        await orch.pause(state.simulation_id)
+        await orch.resume(state.simulation_id)
         assert state.status == SimulationStatus.RUNNING.value
 
-    def test_pause_non_running_raises(self):
+    @pytest.mark.asyncio
+    async def test_pause_non_running_raises(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         with pytest.raises(InvalidStateTransitionError):
-            orch.pause(state.simulation_id)
+            await orch.pause(state.simulation_id)
 
 
 class TestModifyAgent:
@@ -202,9 +203,9 @@ class TestModifyAgent:
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         orch.start(state.simulation_id)
-        orch.pause(state.simulation_id)
+        await orch.pause(state.simulation_id)
         agent = state.agents[0]
-        modified = orch.modify_agent(state.simulation_id, agent.agent_id, belief=0.9)
+        modified = await orch.modify_agent(state.simulation_id, agent.agent_id, belief=0.9)
         assert modified.belief == 0.9
 
     @pytest.mark.asyncio
@@ -213,27 +214,28 @@ class TestModifyAgent:
         state = orch.create_simulation(_make_config())
         orch.start(state.simulation_id)
         with pytest.raises(InvalidStateError):
-            orch.modify_agent(state.simulation_id, uuid4(), belief=0.5)
+            await orch.modify_agent(state.simulation_id, uuid4(), belief=0.5)
 
     @pytest.mark.asyncio
     async def test_modify_with_modifications_object(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         orch.start(state.simulation_id)
-        orch.pause(state.simulation_id)
+        await orch.pause(state.simulation_id)
         agent = state.agents[0]
         mods = AgentModification(belief=0.75)
-        modified = orch.modify_agent(
+        modified = await orch.modify_agent(
             state.simulation_id, agent.agent_id, modifications=mods
         )
         assert modified.belief == 0.75
 
-    def test_modify_unknown_agent_raises(self):
+    @pytest.mark.asyncio
+    async def test_modify_unknown_agent_raises(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         state.status = SimulationStatus.PAUSED.value
         with pytest.raises(ValueError, match="not found"):
-            orch.modify_agent(state.simulation_id, uuid4(), belief=0.5)
+            await orch.modify_agent(state.simulation_id, uuid4(), belief=0.5)
 
 
 class TestInjectEvent:
@@ -292,3 +294,62 @@ class TestReplayStep:
         state.current_step = 10
         with pytest.raises(StepNotFoundError):
             orch.replay_step(state.simulation_id, target_step=3)
+
+
+class TestConcurrencyControl:
+    """SPEC: 04_SIMULATION_SPEC.md — Concurrency Control (engineering review addition).
+
+    Each simulation has a dedicated asyncio.Lock. The lock is acquired
+    for run_step(), pause(), resume(), and modify_agent().
+    """
+
+    def test_orchestrator_has_locks_dict(self):
+        """Orchestrator must maintain a _locks dict[UUID, asyncio.Lock]."""
+        orch = SimulationOrchestrator()
+        assert hasattr(orch, "_locks")
+        assert isinstance(orch._locks, dict)
+
+    def test_lock_created_on_simulation_create(self):
+        """A lock should be created when a simulation is created."""
+        orch = SimulationOrchestrator()
+        state = orch.create_simulation(_make_config())
+        assert state.simulation_id in orch._locks
+
+    @pytest.mark.asyncio
+    async def test_run_step_acquires_lock(self):
+        """run_step should acquire the simulation lock (non-reentrant check)."""
+        import asyncio
+
+        orch = SimulationOrchestrator()
+        state = orch.create_simulation(_make_config())
+        orch.start(state.simulation_id)
+
+        lock = orch._locks[state.simulation_id]
+        # Lock should not be held before run_step
+        assert not lock.locked()
+        await orch.run_step(state.simulation_id)
+        # Lock should be released after run_step completes
+        assert not lock.locked()
+
+
+class TestAgentNodeMap:
+    """SPEC: 04_SIMULATION_SPEC.md — agent_node_map optimization.
+
+    All engine calls receive an agent_node_map: dict[UUID, int] mapping
+    agent UUIDs to NetworkX integer node IDs, built once per step.
+    """
+
+    @pytest.mark.asyncio
+    async def test_step_result_contains_valid_data(self):
+        """run_step should successfully complete with the agent_node_map optimization.
+        This validates the map is built and used without errors."""
+        from app.engine.simulation.schema import StepResult
+
+        orch = SimulationOrchestrator()
+        state = orch.create_simulation(_make_config())
+        orch.start(state.simulation_id)
+        result = await orch.run_step(state.simulation_id)
+        assert isinstance(result, StepResult)
+        # All agents should have been processed
+        total_actions = sum(result.action_distribution.values())
+        assert total_actions == len(state.agents)

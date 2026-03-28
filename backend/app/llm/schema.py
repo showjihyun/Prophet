@@ -2,7 +2,7 @@
 SPEC: docs/spec/05_LLM_SPEC.md#2-llmadapter-interface-abstract
 """
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID
 
@@ -67,7 +67,7 @@ class LLMCallLog:
     cached: bool
     tier: int = 3
     error: str | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass

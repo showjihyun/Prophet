@@ -37,6 +37,17 @@ Version: 0.1.2 | Status: DRAFT
 
 ## 2. Pages
 
+### Error Boundary (Required)
+
+모든 페이지 라우트는 `React.ErrorBoundary`로 감싸야 한다.
+특히 `GraphPanel` (Cytoscape.js)은 초기화 실패 시 전체 UI 크래시를 방지해야 한다.
+
+```tsx
+<ErrorBoundary fallback={<ErrorFallback />}>
+  <GraphPanel />
+</ErrorBoundary>
+```
+
 ### `/` — Home / Simulation List
 - List of simulation runs (status badges, creation date, campaign name)
 - Button: "New Simulation"
@@ -265,7 +276,12 @@ function useSimulationSocket(simulationId: string): {
 }
 ```
 
-- Auto-reconnect on disconnect (max 5 retries, exponential backoff)
+**Reconnection Policy:**
+- Auto-reconnect on disconnect: exponential backoff (1s, 2s, 4s, 8s, 16s, max 30s)
+- Max 5 retry attempts before giving up
+- `JSON.parse` must be wrapped in try/catch (server may send non-JSON pings)
+- On reconnect failure: show banner "Connection failed. Click to retry."
+
 - Dispatches to Zustand store on every received message
 - Heartbeat ping every 30s
 
@@ -332,6 +348,15 @@ const apiClient = {
   },
 }
 ```
+
+### Data Fetching — TanStack Query (Required)
+
+모든 API 호출은 `@tanstack/react-query`의 `useQuery`/`useMutation`을 통해 수행한다.
+직접 `fetch`나 `apiClient` 호출을 컴포넌트에서 하지 않는다.
+
+- `useQuery`: GET 요청 (자동 캐시, 리패치, 로딩/에러 상태)
+- `useMutation`: POST/PATCH/DELETE 요청 (옵티미스틱 업데이트)
+- 모든 데이터 패칭 컴포넌트는 loading spinner + error fallback UI 필수
 
 ---
 

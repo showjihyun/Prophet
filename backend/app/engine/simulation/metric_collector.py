@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from app.engine.agent.schema import AgentAction
@@ -115,7 +115,7 @@ class MetricCollector:
         result = StepResult(
             simulation_id=simulation_id,
             step=step,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             total_adoption=adopted_count,
             adoption_rate=adoption_rate,
             diffusion_rate=diffusion_rate,

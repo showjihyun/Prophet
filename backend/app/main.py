@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import agents, communities, llm_dashboard, network, simulations, ws
+from app.config import settings
 from app.database import engine, Base
 
 
@@ -32,7 +33,7 @@ app = FastAPI(
 # CORS for frontend dev server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

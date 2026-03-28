@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_default_model: str = "gpt-4o"
 
+    # CORS
+    cors_allow_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
     # Simulation Defaults
     default_llm_provider: str = "ollama"
     llm_tier3_ratio: float = 0.1

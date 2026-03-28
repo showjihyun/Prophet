@@ -19,17 +19,60 @@ import {
   User,
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
+import { apiClient } from '../../api/client';
 
 const SPEEDS = [1, 2, 5, 10] as const;
 
 export default function ControlPanel() {
   const navigate = useNavigate();
+  const simulation = useSimulationStore((s) => s.simulation);
   const status = useSimulationStore((s) => s.status);
   const currentStep = useSimulationStore((s) => s.currentStep);
   const setStatus = useSimulationStore((s) => s.setStatus);
+  const appendStep = useSimulationStore((s) => s.appendStep);
   const [speed, setSpeed] = useState<number>(1);
 
   const isRunning = status === "running";
+
+  const handlePlay = async () => {
+    try {
+      if (simulation?.simulation_id) {
+        if (status === 'configured' || status === 'created') {
+          await apiClient.simulations.start(simulation.simulation_id);
+        } else {
+          await apiClient.simulations.resume(simulation.simulation_id);
+        }
+        setStatus('running');
+      }
+    } catch { /* status unchanged on failure */ }
+  };
+
+  const handlePause = async () => {
+    try {
+      if (simulation?.simulation_id) {
+        await apiClient.simulations.pause(simulation.simulation_id);
+        setStatus('paused');
+      }
+    } catch { /* status unchanged */ }
+  };
+
+  const handleStep = async () => {
+    try {
+      if (simulation?.simulation_id) {
+        const result = await apiClient.simulations.step(simulation.simulation_id);
+        appendStep(result);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleReset = async () => {
+    try {
+      if (simulation?.simulation_id) {
+        await apiClient.simulations.stop(simulation.simulation_id);
+        setStatus('created');
+      }
+    } catch { /* ignore */ }
+  };
 
   return (
     <div
@@ -109,26 +152,24 @@ export default function ControlPanel() {
           <ControlButton
             icon={<Pause className="w-4 h-4" />}
             label="Pause"
-            onClick={() => setStatus("paused")}
+            onClick={handlePause}
           />
         ) : (
           <ControlButton
             icon={<Play className="w-4 h-4" />}
             label="Play"
-            onClick={() => setStatus("running")}
+            onClick={handlePlay}
           />
         )}
         <ControlButton
           icon={<SkipForward className="w-4 h-4" />}
           label="Step"
-          onClick={() => {
-            /* step forward one tick */
-          }}
+          onClick={handleStep}
         />
         <ControlButton
           icon={<RotateCcw className="w-4 h-4" />}
           label="Reset"
-          onClick={() => setStatus("created")}
+          onClick={handleReset}
         />
         <ControlButton
           icon={<Rewind className="w-4 h-4" />}

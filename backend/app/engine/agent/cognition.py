@@ -127,8 +127,9 @@ class CognitionLayer:
             tier_used = 2
 
         if cognition_tier == 3:
-            # Tier 3: LLM — Phase 2 fallback to Tier 2
-            tier_used = 2  # Fallback: Tier 3 -> Tier 2 in Phase 2
+            # TODO: async LLM path — await llm_adapter.complete(prompt)
+            # For now, fall back to Tier 2 (heuristic with personality adjustment)
+            tier_used = 2
 
         confidence = abs(evaluation) / 2.0
         confidence = max(0.0, min(1.0, confidence))

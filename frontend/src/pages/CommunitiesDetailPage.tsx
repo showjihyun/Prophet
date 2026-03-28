@@ -151,7 +151,7 @@ export default function CommunitiesDetailPage() {
               key={community.id}
               className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-shadow cursor-pointer"
               style={{ borderTopColor: community.color, borderTopWidth: 3 }}
-              onClick={() => navigate("/")}
+              onClick={() => navigate(`/communities/${community.id}`)}
             >
               {/* Header */}
               <div className="flex items-center justify-between">

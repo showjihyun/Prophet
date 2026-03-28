@@ -1,6 +1,6 @@
 """
 Auto-generated from SPEC: docs/spec/05_LLM_SPEC.md#2-llmadapter-interface-abstract
-SPEC Version: 0.1.1
+SPEC Version: 0.1.1 (updated: health_check must not make inference calls)
 Generated BEFORE implementation verification — tests define the contract.
 """
 import pytest
@@ -104,3 +104,31 @@ class TestLLMAdapterAbstract:
         """OpenAIAdapter.provider_name == 'openai'."""
         from app.llm.openai_client import OpenAIAdapter
         assert OpenAIAdapter.provider_name == "openai"
+
+
+@pytest.mark.phase5
+class TestHealthCheckNoInference:
+    """SPEC: 05_LLM_SPEC.md#3-provider-implementations — health_check constraint.
+
+    IMPORTANT: health_check MUST NOT make inference API calls.
+    Use lightweight connectivity check only (e.g., HTTP HEAD to API endpoint,
+    or client.models.list()). Inference calls consume API quota and budget.
+    This applies to ALL adapters, not just Claude.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mock_health_check_does_not_increment_call_count(self):
+        """health_check must not trigger inference (tracked via call_count)."""
+        adapter = MockLLMAdapter()
+        assert adapter.call_count == 0
+        await adapter.health_check()
+        # health_check should NOT increment call_count (inference tracker)
+        assert adapter.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_health_check_returns_bool_not_response(self):
+        """health_check returns bool, not LLMResponse (no inference)."""
+        adapter = MockLLMAdapter()
+        result = await adapter.health_check()
+        assert isinstance(result, bool)
+        assert not isinstance(result, LLMResponse)

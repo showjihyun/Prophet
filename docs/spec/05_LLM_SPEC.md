@@ -188,6 +188,11 @@ class ClaudeAdapter(LLMAdapter):
         Claude does not provide embedding API.
         Returns None — caller falls back to Ollama embed or skips vector indexing.
         """
+
+    # IMPORTANT: health_check MUST NOT make inference API calls.
+    # Use lightweight connectivity check only (e.g., HTTP HEAD to API endpoint,
+    # or client.models.list()). Inference calls consume API quota and budget.
+    # This applies to ALL adapters, not just Claude.
 ```
 
 ### OpenAIAdapter

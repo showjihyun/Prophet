@@ -3,7 +3,7 @@ SPEC: docs/spec/06_API_SPEC.md
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -124,7 +124,7 @@ class SimulationResponse(BaseModel):
     status: SimulationStatus
     total_agents: int = 0
     network_metrics: NetworkMetricsData = Field(default_factory=NetworkMetricsData)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SimulationDetailResponse(BaseModel):
@@ -140,7 +140,7 @@ class SimulationDetailResponse(BaseModel):
     total_agents: int = 0
     network_metrics: NetworkMetricsData = Field(default_factory=NetworkMetricsData)
     config: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class StatusResponse(BaseModel):

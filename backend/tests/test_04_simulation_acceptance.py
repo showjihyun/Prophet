@@ -153,7 +153,7 @@ class TestSIM03_PauseMidStep:
         orch.start(state.simulation_id)
 
         await orch.run_step(state.simulation_id)
-        orch.pause(state.simulation_id)
+        await orch.pause(state.simulation_id)
         assert state.status == SimulationStatus.PAUSED.value
 
     @pytest.mark.asyncio
@@ -165,8 +165,8 @@ class TestSIM03_PauseMidStep:
         orch.start(state.simulation_id)
 
         await orch.run_step(state.simulation_id)
-        orch.pause(state.simulation_id)
-        orch.resume(state.simulation_id)
+        await orch.pause(state.simulation_id)
+        await orch.resume(state.simulation_id)
         assert state.status == SimulationStatus.RUNNING.value
 
 
@@ -189,11 +189,11 @@ class TestSIM04_ModifyAgentBelief:
         await orch.run_step(state.simulation_id)
 
         # Pause and modify
-        orch.pause(state.simulation_id)
+        await orch.pause(state.simulation_id)
         target_agent = state.agents[0]
         old_belief = target_agent.belief
 
-        modified = orch.modify_agent(
+        modified = await orch.modify_agent(
             state.simulation_id,
             target_agent.agent_id,
             belief=0.95,

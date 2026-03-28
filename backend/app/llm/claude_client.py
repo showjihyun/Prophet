@@ -135,21 +135,19 @@ class ClaudeAdapter(LLMAdapter):
         return None
 
     async def health_check(self) -> bool:
-        """Check if the Claude API is reachable.
+        """Check if the Claude API is reachable without making an inference call.
 
         SPEC: docs/spec/05_LLM_SPEC.md#3-provider-implementations
         """
-        import anthropic
-
         try:
-            client = anthropic.AsyncAnthropic(api_key=self._api_key)
-            # A lightweight call to verify connectivity
-            await client.messages.create(
-                model=self._default_model,
-                max_tokens=1,
-                messages=[{"role": "user", "content": "ping"}],
-            )
-            return True
+            import httpx
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    "https://api.anthropic.com/v1/models",
+                    headers={"x-api-key": self._api_key, "anthropic-version": "2023-06-01"},
+                    timeout=5.0,
+                )
+                return resp.status_code == 200
         except Exception:
             return False
 

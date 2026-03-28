@@ -39,13 +39,14 @@ class ConnectionManager:
         """Send a message to all connections for a simulation."""
         conns = self._connections.get(simulation_id, [])
         dead: list[WebSocket] = []
-        for ws in conns:
+        for ws in list(conns):  # iterate over copy
             try:
                 await ws.send_json(message)
             except Exception:
                 dead.append(ws)
         for ws in dead:
-            conns.remove(ws)
+            if ws in conns:
+                conns.remove(ws)
 
     def subscribe_agent(self, websocket: WebSocket, agent_id: str) -> None:
         ws_id = str(id(websocket))

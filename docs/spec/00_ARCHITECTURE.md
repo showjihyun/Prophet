@@ -344,3 +344,24 @@ DEFAULT_LLM_PROVIDER=ollama
 LLM_TIER3_RATIO=0.1          # Max 10% agents use LLM per step
 LLM_CACHE_TTL=3600           # Valkey cache TTL in seconds
 ```
+
+### Docker Compose Profiles
+
+```yaml
+# GPU 환경 (NVIDIA)
+docker compose up
+
+# CPU-only 환경 (GPU 없는 개발 머신)
+docker compose up --profile cpu
+# Ollama runs on CPU mode (slower but functional)
+```
+
+Ollama GPU 블록은 선택사항. GPU 없는 환경에서도 CPU 모드로 동작해야 한다.
+Backend 서비스는 반드시 `healthcheck`를 포함해야 한다:
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+```

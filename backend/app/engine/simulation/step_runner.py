@@ -58,7 +58,9 @@ def _build_campaign_events(
     if "all" in campaign.target_communities:
         target_ids = all_community_ids
     else:
-        target_ids = all_community_ids  # Simplified: target all for now
+        target_ids = [cid for cid in all_community_ids if str(cid) in campaign.target_communities]
+        if not target_ids:
+            target_ids = all_community_ids  # fallback if no match
 
     campaign_id = UUID(int=hash(campaign.name) % (2**128))
 
@@ -202,6 +204,9 @@ class StepRunner:
         network = state.network
         seed = (config.random_seed or 0) + step_num
 
+        # O(1) agent lookup by UUID
+        agent_map: dict[UUID, AgentState] = {a.agent_id: a for a in agents}
+
         # Step 1: Campaign events
         campaign_events = _build_campaign_events(config, step_num, agents)
         env_events = _build_environment_events(campaign_events, step_num)
@@ -232,18 +237,17 @@ class StepRunner:
             nids = graph_context.neighbor_ids.get(agent.agent_id, [])
             na_list = []
             for nid in nids:
-                # Find neighbor's last action
-                for other in agents:
-                    if other.agent_id == nid and other.action != AgentAction.IGNORE:
-                        na_list.append(
-                            NeighborAction(
-                                agent_id=nid,
-                                action=other.action,
-                                content_id=uuid4(),
-                                step=step_num,
-                            )
+                # O(1) neighbor lookup
+                other = agent_map.get(nid)
+                if other is not None and other.action != AgentAction.IGNORE:
+                    na_list.append(
+                        NeighborAction(
+                            agent_id=nid,
+                            action=other.action,
+                            content_id=uuid4(),
+                            step=step_num,
                         )
-                        break
+                    )
             neighbor_actions_map[agent.agent_id] = na_list
 
         # Run all agent ticks

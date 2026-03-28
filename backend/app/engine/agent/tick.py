@@ -145,15 +145,14 @@ class AgentTick:
         if graph_context is not None:
             community_bias = graph_context.get_community_mean_belief(agent.community_id)
 
-        # For Tier 3 with LLM adapter: try LLM, fall back to Tier 2
+        # Tier 3 LLM integration requires async context.
+        # In synchronous tick(), Tier 3 falls back to Tier 2 with personality adjustment.
+        # Full async LLM path will be enabled when tick() is made async.
         actual_tier = cognition_tier
         llm_call_log = None
 
-        if cognition_tier == 3 and self._llm_adapter is not None:
-            try:
-                self._llm_adapter.generate()
-            except (TimeoutError, Exception):
-                actual_tier = 2  # Fallback to Tier 2
+        if cognition_tier == 3:
+            actual_tier = 2  # Tier 3 → Tier 2 fallback (sync context)
 
         # Update agent emotion for cognition
         agent_with_emotion = replace(agent, emotion=emotion)

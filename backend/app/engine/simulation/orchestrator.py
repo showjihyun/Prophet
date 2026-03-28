@@ -1,6 +1,7 @@
 """Simulation Orchestrator — top-level coordinator.
 SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
 """
+import asyncio
 import logging
 import random as stdlib_random
 from collections import Counter
@@ -96,9 +97,16 @@ class SimulationOrchestrator:
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
         """
         self._simulations: dict[UUID, SimulationState] = {}
+        self._locks: dict[UUID, asyncio.Lock] = {}
         self._step_runner = StepRunner(llm_adapter=llm_adapter)
         self._llm_adapter = llm_adapter
         self._slm_adapter = slm_adapter
+
+    def _get_lock(self, simulation_id: UUID) -> asyncio.Lock:
+        """Get or create a per-simulation asyncio lock."""
+        if simulation_id not in self._locks:
+            self._locks[simulation_id] = asyncio.Lock()
+        return self._locks[simulation_id]
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -204,6 +212,8 @@ class SimulationOrchestrator:
             agents=agents,
         )
         self._simulations[sim_id] = state
+        # Pre-create lock for this simulation
+        self._locks[sim_id] = asyncio.Lock()
         return state
 
     def start(self, simulation_id: UUID) -> None:
@@ -238,40 +248,43 @@ class SimulationOrchestrator:
         Raises:
             SimulationStepError on internal crash (status -> FAILED)
         """
-        state = self._get_state(simulation_id)
-        try:
-            result = await self._step_runner.execute_step(state, state.current_step)
-            state.step_history.append(result)
-            state.current_step += 1
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            try:
+                result = await self._step_runner.execute_step(state, state.current_step)
+                state.step_history.append(result)
+                state.current_step += 1
 
-            # Check completion
-            if state.current_step >= state.config.max_steps:
-                state.status = SimulationStatus.COMPLETED.value
+                # Check completion
+                if state.current_step >= state.config.max_steps:
+                    state.status = SimulationStatus.COMPLETED.value
 
-            return result
-        except Exception:
-            state.status = SimulationStatus.FAILED.value
-            raise
+                return result
+            except Exception:
+                state.status = SimulationStatus.FAILED.value
+                raise
 
-    def pause(self, simulation_id: UUID) -> None:
+    async def pause(self, simulation_id: UUID) -> None:
         """Pause a running simulation.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
         """
-        state = self._get_state(simulation_id)
-        self._validate_transition(state.status, SimulationStatus.PAUSED.value)
-        state.status = SimulationStatus.PAUSED.value
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            self._validate_transition(state.status, SimulationStatus.PAUSED.value)
+            state.status = SimulationStatus.PAUSED.value
 
-    def resume(self, simulation_id: UUID) -> None:
+    async def resume(self, simulation_id: UUID) -> None:
         """Resume a paused simulation.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
         """
-        state = self._get_state(simulation_id)
-        self._validate_transition(state.status, SimulationStatus.RUNNING.value)
-        state.status = SimulationStatus.RUNNING.value
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            self._validate_transition(state.status, SimulationStatus.RUNNING.value)
+            state.status = SimulationStatus.RUNNING.value
 
-    def modify_agent(
+    async def modify_agent(
         self,
         simulation_id: UUID,
         agent_id: UUID,
@@ -286,42 +299,43 @@ class SimulationOrchestrator:
             InvalidStateError: if not PAUSED
             ValueError: agent not found
         """
-        state = self._get_state(simulation_id)
-        if state.status != SimulationStatus.PAUSED.value:
-            raise InvalidStateError(
-                f"modify_agent only allowed when PAUSED, current status: {state.status}"
-            )
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            if state.status != SimulationStatus.PAUSED.value:
+                raise InvalidStateError(
+                    f"modify_agent only allowed when PAUSED, current status: {state.status}"
+                )
 
-        # Find agent
-        agent_idx = None
-        for i, agent in enumerate(state.agents):
-            if agent.agent_id == agent_id:
-                agent_idx = i
-                break
+            # Find agent
+            agent_idx = None
+            for i, agent in enumerate(state.agents):
+                if agent.agent_id == agent_id:
+                    agent_idx = i
+                    break
 
-        if agent_idx is None:
-            raise ValueError(f"Agent {agent_id} not found in simulation {simulation_id}")
+            if agent_idx is None:
+                raise ValueError(f"Agent {agent_id} not found in simulation {simulation_id}")
 
-        agent = state.agents[agent_idx]
+            agent = state.agents[agent_idx]
 
-        # Apply modifications
-        updates: dict = {}
-        if belief is not None:
-            updates["belief"] = max(-1.0, min(1.0, belief))
-        if modifications is not None:
-            if modifications.personality is not None:
-                updates["personality"] = modifications.personality
-            if modifications.emotion is not None:
-                updates["emotion"] = modifications.emotion
-            if modifications.community_id is not None:
-                updates["community_id"] = modifications.community_id
-            if modifications.belief is not None:
-                updates["belief"] = max(-1.0, min(1.0, modifications.belief))
+            # Apply modifications
+            updates: dict = {}
+            if belief is not None:
+                updates["belief"] = max(-1.0, min(1.0, belief))
+            if modifications is not None:
+                if modifications.personality is not None:
+                    updates["personality"] = modifications.personality
+                if modifications.emotion is not None:
+                    updates["emotion"] = modifications.emotion
+                if modifications.community_id is not None:
+                    updates["community_id"] = modifications.community_id
+                if modifications.belief is not None:
+                    updates["belief"] = max(-1.0, min(1.0, modifications.belief))
 
-        if updates:
-            state.agents[agent_idx] = replace(agent, **updates)
+            if updates:
+                state.agents[agent_idx] = replace(agent, **updates)
 
-        return state.agents[agent_idx]
+            return state.agents[agent_idx]
 
     def inject_event(
         self,
@@ -345,12 +359,15 @@ class SimulationOrchestrator:
 
         # String-based injection (for error test compatibility)
         if event_type is not None:
-            if event_type not in _ALLOWED_EVENT_TYPES:
+            NEGATIVE_EVENT_TYPES = {"negative_pr", "competitor_attack", "bad_review"}
+            if event_type in NEGATIVE_EVENT_TYPES:
+                mapped_type = "community_discussion"  # negative events are discussions
+            elif event_type in {"campaign_ad", "influencer_post", "expert_review", "community_discussion"}:
+                mapped_type = event_type
+            else:
                 raise ValueError(f"Unknown event type: {event_type}")
             env_event = EnvironmentEvent(
-                event_type=event_type if event_type in {
-                    "campaign_ad", "influencer_post", "expert_review", "community_discussion"
-                } else "campaign_ad",
+                event_type=mapped_type,
                 content_id=uuid4(),
                 message=str(payload) if payload else "",
                 source_agent_id=None,

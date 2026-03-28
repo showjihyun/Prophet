@@ -63,6 +63,8 @@ class MemoryLayer:
         alpha: 0.6, gamma: 0.3, delta: 0.1
     """
 
+    MAX_MEMORIES_PER_AGENT: int = 1000
+
     def __init__(self, config: MemoryConfig | None = None):
         """SPEC: docs/spec/01_AGENT_SPEC.md#layer-2-memorylayer"""
         if config is None:
@@ -110,7 +112,7 @@ class MemoryLayer:
 
         scored: list[tuple[float, int, MemoryRecord]] = []
         for idx, m in enumerate(memories):
-            recency_score = 1.0 / (1 + (current_step - m.timestamp))
+            recency_score = 1.0 / (1 + abs(current_step - m.timestamp))
             relevance_score = 0.0  # No embedding support in Phase 2
 
             score = (
@@ -180,6 +182,13 @@ class MemoryLayer:
         if agent_id not in self._store:
             self._store[agent_id] = []
         self._store[agent_id].append(record)
+
+        # Eviction check
+        agent_memories = self._store.get(agent_id, [])
+        if len(agent_memories) > self.MAX_MEMORIES_PER_AGENT:
+            # Evict lowest emotion_weight memories
+            agent_memories.sort(key=lambda m: m.emotion_weight)
+            self._store[agent_id] = agent_memories[-self.MAX_MEMORIES_PER_AGENT:]
 
         return record
 

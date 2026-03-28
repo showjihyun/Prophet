@@ -129,6 +129,10 @@ LLM calls are abstracted behind `LLMAdapter` interface — provider is swappable
 | NF06 | LLM Cost | LLM calls limited to ≤20% of agents per step (Tier 3 only) |
 | NF07 | Observability | All LLM prompts/responses + step metrics logged to PostgreSQL |
 | NF08 | Security | API Key management via env vars; pgvector data scoped per simulation |
+| NF09 | CI/CD | GitHub Actions 사용하지 않음. 로컬 Docker Compose 기반 개발/배포 |
+| NF10 | 배포 | Docker Compose (PostgreSQL + Valkey + Ollama + Backend + Frontend) |
+| NF11 | Security | `.env.*` 패턴 전체 gitignore. API Key는 환경변수만 허용 |
+| NF12 | CORS | `allow_origins`는 환경변수로 설정. localhost 하드코딩 금지 |
 
 ---
 
@@ -151,7 +155,43 @@ Simulation Run
 
 ---
 
-## 6. Tooling Rules
+## 6. Git & Repository
+
+| 항목 | 값 |
+|------|-----|
+| **Repository** | `https://github.com/showjihyun/Prophet.git` |
+| **기본 브랜치** | `master` |
+| **CI/CD** | GitHub Actions 사용하지 않음 |
+| **배포** | 로컬 Docker Compose |
+| **커밋 규칙** | Phase 단위 커밋, Co-Authored-By trailer 포함 |
+
+### 브랜치 전략
+
+```
+master (기본, 안정 브랜치)
+  └── feature/* (기능 개발 시)
+  └── fix/* (버그 수정 시)
+```
+
+- `master`에 직접 커밋 가능 (1인 개발)
+- 대규모 변경 시 feature 브랜치 → PR 권장
+- force push 금지
+
+### .gitignore 주요 규칙
+
+```
+.venv/              # Python 가상환경 (uv 관리)
+node_modules/       # Node 의존성
+.env                # 환경변수 (secrets)
+__pycache__/        # Python 캐시
+.agents/            # skills.sh 스킬 원본
+.claude/skills/     # 스킬 심볼릭 링크
+.claude/settings.local.json  # 로컬 설정
+```
+
+---
+
+## 7. Tooling Rules
 
 ### Package Management — uv only
 
@@ -174,7 +214,7 @@ Simulation Run
 
 ---
 
-## 7. Error Handling Policy (Cross-Cutting)
+## 8. Error Handling Policy (Cross-Cutting)
 
 ### 7.1 Exception Hierarchy
 
@@ -240,7 +280,7 @@ ProphetBaseError
 
 ---
 
-## 8. SPEC DRIVEN Development Rules
+## 9. SPEC DRIVEN Development Rules
 
 1. **SPEC first** — No implementation begins without a corresponding SPEC section.
 2. **Interface contract is law** — Function signatures, input/output types, and behavior defined in SPEC must not be violated by implementation.

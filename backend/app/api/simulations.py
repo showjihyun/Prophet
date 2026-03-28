@@ -221,7 +221,7 @@ async def pause_simulation(
     _require_status(sim, SimulationStatus.RUNNING)
     sim["status"] = SimulationStatus.PAUSED.value
     try:
-        orchestrator.pause(simulation_id)
+        await orchestrator.pause(simulation_id)
     except (NotImplementedError, AttributeError, TypeError, ValueError):
         pass
     return StatusResponse(
@@ -241,7 +241,7 @@ async def resume_simulation(
     _require_status(sim, SimulationStatus.PAUSED)
     sim["status"] = SimulationStatus.RUNNING.value
     try:
-        orchestrator.resume(simulation_id)
+        await orchestrator.resume(simulation_id)
     except (NotImplementedError, AttributeError, TypeError, ValueError):
         pass
     return StatusResponse(status=SimulationStatus.RUNNING)

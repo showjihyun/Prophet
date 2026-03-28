@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../api/client";
+import type { CreateSimulationConfig } from "../api/client";
 import PageNav from "../components/shared/PageNav";
 
 const CHANNELS = ["SNS", "Influencer", "Online Ads", "TV", "Email"] as const;
@@ -19,6 +20,7 @@ const COMMUNITIES = [
 export default function CampaignSetupPage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [budget, setBudget] = useState("");
@@ -52,20 +54,25 @@ export default function CampaignSetupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
+    setError(null);
     try {
-      await apiClient.simulations.create({
+      const config: CreateSimulationConfig = {
         name,
-        budget: Number(budget),
-        channels: Array.from(channels),
-        message,
-        target_communities: Array.from(targetCommunities),
+        campaign: {
+          name,
+          budget: Number(budget),
+          channels: Array.from(channels),
+          message,
+          target_communities: Array.from(targetCommunities),
+        },
         max_steps: maxSteps,
         random_seed: randomSeed,
         slm_llm_ratio: slmLlmRatio / 100,
-      });
+      };
+      await apiClient.simulations.create(config);
       navigate("/");
-    } catch {
-      // Error handling will be added with toast notifications
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create simulation");
       setSubmitting(false);
     }
   }
@@ -246,6 +253,13 @@ export default function CampaignSetupPage() {
               </div>
             </div>
           </details>
+
+          {/* Error Display */}
+          {error && (
+            <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
           {/* Submit */}
           <button

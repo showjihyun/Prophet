@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import {
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -237,7 +238,7 @@ export default function TopInfluencersPage() {
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                     {DISTRIBUTION_DATA.map((entry) => (
-                      <rect key={entry.name} fill={entry.fill} />
+                      <Cell key={entry.name} fill={entry.fill} />
                     ))}
                   </Bar>
                 </BarChart>

@@ -180,6 +180,27 @@ class MockDatabase:
         await self.engine.dispose()
 ```
 
+### Memory Eviction Policy
+
+```python
+class MemoryLayer:
+    MAX_MEMORIES_PER_AGENT: int = 1000  # configurable
+
+    def store(self, ...):
+        """
+        If agent's memory count exceeds MAX_MEMORIES_PER_AGENT,
+        evict the lowest-scored memory (by composite retrieval score)
+        before inserting the new one.
+        """
+```
+
+SimulationOrchestrator must also clean up completed simulations:
+```python
+class SimulationOrchestrator:
+    async def delete_simulation(self, simulation_id: UUID) -> None:
+        """Purges simulation state from memory after completion or timeout."""
+```
+
 ---
 
 ## 5. F20 — Event/Agent Replay

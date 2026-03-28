@@ -44,7 +44,8 @@ class TestSimulationStateTransitions:
         with pytest.raises(InvalidStateTransitionError):
             orch.start(sim.simulation_id)
 
-    def test_modify_agent_while_running_raises(self):
+    @pytest.mark.asyncio
+    async def test_modify_agent_while_running_raises(self):
         """modify_agent while RUNNING raises InvalidStateError."""
         from app.engine.simulation.orchestrator import SimulationOrchestrator
         from app.engine.simulation.exceptions import InvalidStateError
@@ -52,7 +53,7 @@ class TestSimulationStateTransitions:
         sim = orch.create_simulation(_make_sim_config())
         sim.status = "RUNNING"
         with pytest.raises(InvalidStateError):
-            orch.modify_agent(sim.simulation_id, agent_id=uuid4(), belief=0.8)
+            await orch.modify_agent(sim.simulation_id, agent_id=uuid4(), belief=0.8)
 
 
 class TestSimulationInputValidation:

@@ -23,6 +23,7 @@ class NetworkEvolver:
         network: SocialNetwork,
         actions: list[Any],
         step: int,
+        node_map: dict | None = None,
     ) -> SocialNetwork:
         """Evolve the network based on agent actions for one simulation step.
         SPEC: docs/spec/02_NETWORK_SPEC.md#dynamic-network-evolution
@@ -42,22 +43,25 @@ class NetworkEvolver:
             # Get action name as string for comparison
             action_name = action.value if hasattr(action, "value") else str(action)
 
-            neighbors = list(new_graph.neighbors(agent_id)) if new_graph.has_node(agent_id) else []
+            # Map UUID agent_id to integer node_id if node_map provided
+            graph_node = node_map.get(agent_id, agent_id) if node_map else agent_id
+
+            neighbors = list(new_graph.neighbors(graph_node)) if new_graph.has_node(graph_node) else []
 
             if action_name == "share":
                 for neighbor in neighbors:
                     self.update_edge_weight(
-                        new_graph, (agent_id, neighbor), self.config.share_weight_boost
+                        new_graph, (graph_node, neighbor), self.config.share_weight_boost
                     )
             elif action_name == "ignore":
                 for neighbor in neighbors:
                     self.update_edge_weight(
-                        new_graph, (agent_id, neighbor), -self.config.ignore_weight_decay
+                        new_graph, (graph_node, neighbor), -self.config.ignore_weight_decay
                     )
             elif action_name == "adopt":
                 for neighbor in neighbors:
                     self.update_edge_weight(
-                        new_graph, (agent_id, neighbor), self.config.adopt_trust_boost
+                        new_graph, (graph_node, neighbor), self.config.adopt_trust_boost
                     )
 
         # Prune edges below min_weight

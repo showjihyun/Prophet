@@ -152,6 +152,16 @@ class SimulationOrchestrator:
         Begins step loop in background (asyncio task).
         """
 
+    # Concurrency Control:
+    #     Each simulation has a dedicated `asyncio.Lock`. The lock is acquired
+    #     for the entire duration of `run_step()`, `pause()`, `resume()`, and
+    #     `modify_agent()`. This prevents race conditions from concurrent
+    #     API requests or WebSocket commands targeting the same simulation.
+    #
+    #     ```python
+    #     self._locks: dict[UUID, asyncio.Lock] = {}
+    #     ```
+
     async def run_step(
         self,
         simulation_id: UUID,
@@ -166,6 +176,13 @@ class SimulationOrchestrator:
             6. CascadeDetector.detect()
             7. MetricCollector.record(step, results)
             8. NetworkEvolver.evolve_step() if enabled
+
+        Note: All engine calls receive an `agent_node_map: dict[UUID, int]`
+        mapping agent UUIDs to NetworkX integer node IDs. This map is built
+        once per step from `SocialNetwork.graph.nodes(data='agent_id')` and
+        passed to ExposureModel, PropagationModel, and NetworkEvolver to
+        avoid O(N) graph scans per agent.
+
             9. WebSocket.broadcast(step_summary)
            10. Persist agent_states to PostgreSQL
 
