@@ -26,6 +26,45 @@ export interface CreateSimulationConfig {
   budget_usd?: number;
 }
 
+/** Settings response from GET /api/v1/settings. @spec docs/spec/06_API_SPEC.md#7-settings-endpoints */
+export interface SettingsLlm {
+  default_provider: string;
+  ollama_base_url: string;
+  ollama_default_model: string;
+  slm_model: string;
+  ollama_embed_model: string;
+  anthropic_model: string;
+  anthropic_api_key_set: boolean;
+  openai_model: string;
+  openai_api_key_set: boolean;
+}
+
+export interface SettingsSimulation {
+  slm_llm_ratio: number;
+  llm_tier3_ratio: number;
+  llm_cache_ttl: number;
+}
+
+export interface SettingsResponse {
+  llm: SettingsLlm;
+  simulation: SettingsSimulation;
+}
+
+export interface SettingsUpdateRequest {
+  llm?: Partial<{
+    default_provider: string;
+    ollama_base_url: string;
+    ollama_default_model: string;
+    slm_model: string;
+    ollama_embed_model: string;
+    anthropic_api_key: string;
+    anthropic_model: string;
+    openai_api_key: string;
+    openai_model: string;
+  }>;
+  simulation?: Partial<SettingsSimulation>;
+}
+
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api/v1`
   : "http://localhost:8000/api/v1";
@@ -62,5 +101,16 @@ export const apiClient = {
   llm: {
     getStats: (simId: string) => request(`/simulations/${simId}/llm/stats`),
     getImpact: (simId: string) => request(`/simulations/${simId}/llm/impact`),
+  },
+  settings: {
+    get: () => request<SettingsResponse>("/settings/"),
+    update: (data: SettingsUpdateRequest) =>
+      request<{ status: string }>("/settings/", { method: "PUT", body: JSON.stringify(data) }),
+    listOllamaModels: () => request<{ models: string[] }>("/settings/ollama-models"),
+    testOllama: () =>
+      request<{ status: string; model?: string; latency_ms?: number; message?: string }>(
+        "/settings/test-ollama",
+        { method: "POST" },
+      ),
   },
 };

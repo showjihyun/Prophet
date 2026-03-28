@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agents, communities, llm_dashboard, network, simulations, ws
+from app.api import agents, communities, llm_dashboard, network, settings as settings_api, simulations, ws
 from app.config import settings
 import sqlalchemy
 from app.database import engine, Base
@@ -48,6 +48,7 @@ app.include_router(agents.router)
 app.include_router(communities.router)
 app.include_router(network.router)
 app.include_router(llm_dashboard.router)
+app.include_router(settings_api.router)
 app.include_router(ws.router)
 
 

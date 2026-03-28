@@ -440,7 +440,86 @@ Get current engine impact assessment (4 indicators).
 
 ---
 
-## 7. WebSocket — /ws/{simulation_id}
+## 7. Settings Endpoints
+
+### GET /api/v1/settings
+Get current system settings.
+
+**Response 200:**
+```json
+{
+  "llm": {
+    "default_provider": "ollama",
+    "ollama_base_url": "http://localhost:11434",
+    "ollama_default_model": "llama3.1:8b",
+    "slm_model": "llama3.1:8b",
+    "ollama_embed_model": "llama3.1:8b",
+    "anthropic_model": "claude-sonnet-4-6",
+    "anthropic_api_key_set": true,
+    "openai_model": "gpt-4o",
+    "openai_api_key_set": false
+  },
+  "simulation": {
+    "slm_llm_ratio": 0.5,
+    "llm_tier3_ratio": 0.1,
+    "llm_cache_ttl": 3600
+  }
+}
+```
+
+### PUT /api/v1/settings
+Update system settings.
+
+**Request:**
+```json
+{
+  "llm": {
+    "default_provider": "ollama",
+    "ollama_base_url": "http://localhost:11434",
+    "ollama_default_model": "llama3.1:8b",
+    "slm_model": "llama3.1:8b",
+    "ollama_embed_model": "llama3.1:8b",
+    "anthropic_api_key": "sk-ant-...",
+    "anthropic_model": "claude-sonnet-4-6",
+    "openai_api_key": "sk-...",
+    "openai_model": "gpt-4o"
+  },
+  "simulation": {
+    "slm_llm_ratio": 0.5,
+    "llm_tier3_ratio": 0.1,
+    "llm_cache_ttl": 3600
+  }
+}
+```
+
+**Response 200:** `{ "status": "ok" }`
+
+### GET /api/v1/settings/ollama-models
+List available Ollama models (calls Ollama /api/tags).
+
+**Response 200:**
+```json
+{
+  "models": ["llama3.1:8b", "llama3:latest", "llava:latest"]
+}
+```
+
+### POST /api/v1/settings/test-ollama
+Test Ollama connection.
+
+**Response 200:**
+```json
+{ "status": "ok", "model": "llama3.1:8b", "latency_ms": 234 }
+```
+
+**Response 200 (error):**
+```json
+{ "status": "error", "message": "Connection refused" }
+```
+
+---
+
+## 8. WebSocket — /ws/{simulation_id}
 
 **Connection:** `ws://localhost:8000/ws/{simulation_id}`
 
@@ -470,7 +549,7 @@ Get current engine impact assessment (4 indicators).
 
 ---
 
-## 8. Error Response Format
+## 9. Error Response Format
 
 ```json
 {
@@ -495,7 +574,7 @@ Get current engine impact assessment (4 indicators).
 
 ---
 
-## 9. Acceptance Criteria (Harness Tests)
+## 10. Acceptance Criteria (Harness Tests)
 
 | ID | Test | Expected |
 |----|------|----------|

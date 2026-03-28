@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_default_model: str = "llama3.1:8b"
     slm_model: str = "llama3.1:8b"
+    ollama_embed_model: str = "llama3.1:8b"
     anthropic_api_key: str = ""
     anthropic_default_model: str = "claude-sonnet-4-6"
     openai_api_key: str = ""
@@ -23,6 +24,7 @@ class Settings(BaseSettings):
 
     # Simulation Defaults
     default_llm_provider: str = "ollama"
+    slm_llm_ratio: float = 0.5
     llm_tier3_ratio: float = 0.1
     llm_cache_ttl: int = 3600
 

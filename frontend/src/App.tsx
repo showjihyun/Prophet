@@ -13,6 +13,7 @@ import GlobalMetricsPage from "./pages/GlobalMetricsPage";
 import CampaignSetupPage from "./pages/CampaignSetupPage";
 import ProjectsListPage from "./pages/ProjectsListPage";
 import ProjectScenariosPage from "./pages/ProjectScenariosPage";
+import SettingsPage from "./pages/SettingsPage";
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -60,6 +61,7 @@ function App() {
           <Route path="/metrics" element={<GlobalMetricsPage />} />
           <Route path="/setup" element={<CampaignSetupPage />} />
           <Route path="/campaign/new" element={<CampaignSetupPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </ErrorBoundary>
     </BrowserRouter>
