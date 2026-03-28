@@ -11,6 +11,7 @@ import {
   BarChart3,
   Settings,
 } from "lucide-react";
+import ThemeToggle from './ThemeToggle';
 
 interface AppSidebarProps {
   activePath?: string;
@@ -70,6 +71,12 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
           );
         })}
       </nav>
+
+      {/* Theme toggle */}
+      <div className="mt-auto pt-4 border-t border-[var(--border)] flex items-center justify-between px-4 pb-3">
+        <span className="text-xs text-[var(--muted-foreground)]">Theme</span>
+        <ThemeToggle />
+      </div>
     </aside>
   );
 }

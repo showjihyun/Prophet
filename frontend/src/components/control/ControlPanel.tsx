@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
+import ThemeToggle from '../shared/ThemeToggle';
 
 const SPEEDS = [1, 2, 5, 10] as const;
 
@@ -180,6 +181,8 @@ export default function ControlPanel() {
         />
 
         <div className="w-px h-6 bg-[var(--border)] mx-1" />
+
+        <ThemeToggle />
 
         <ControlButton
           icon={<Settings className="w-4 h-4" />}

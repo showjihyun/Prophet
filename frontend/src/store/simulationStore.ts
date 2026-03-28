@@ -37,6 +37,10 @@ interface SimulationStore {
   // Speed
   speed: number;
 
+  // Theme
+  theme: 'dark' | 'light';
+  toggleTheme: () => void;
+
   // Actions
   setSimulation: (sim: SimulationRun) => void;
   appendStep: (step: StepResult) => void;
@@ -63,6 +67,18 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   tierDistribution: null,
   impactAssessment: null,
   speed: 2,
+  theme: 'dark',
+  toggleTheme: () => set((state) => {
+    const next = state.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    if (next === 'light') {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+    localStorage.setItem('prophet-theme', next);
+    return { theme: next };
+  }),
 
   setSimulation: (sim) => set({ simulation: sim, status: sim.status }),
   appendStep: (step) =>
