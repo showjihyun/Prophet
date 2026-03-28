@@ -1,0 +1,51 @@
+[project]
+name = "prophet-backend"
+version = "0.1.0"
+description = "Prophet (MCASP) - Multi-Community Agent Simulation Platform Backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "networkx>=3.4",
+    "numpy>=2.0",
+    "scipy>=1.14",
+    "anthropic>=0.52",
+    "openai>=1.70",
+    "ollama>=0.4",
+    "valkey>=6.1",
+    "celery>=5.4",
+    "pgvector>=0.3",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "websockets>=14.0",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "aiosqlite>=0.21",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "phase1: Phase 1 tests",
+    "phase2: Phase 2 tests",
+    "phase3: Phase 3 tests",
+    "phase4: Phase 4 tests",
+    "phase5: Phase 5 tests",
+    "phase6: Phase 6 tests",
+    "phase7: Phase 7 tests",
+    "acceptance: SPEC acceptance criteria tests",
+    "benchmark: Performance benchmark tests",
+    "integration: Requires live DB + Ollama",
+    "unit: Pure unit tests, no external deps",
+]
