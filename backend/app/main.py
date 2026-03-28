@@ -1,14 +1,41 @@
 """Prophet Backend - FastAPI Application.
 SPEC: docs/spec/00_ARCHITECTURE.md
 """
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import agents, communities, llm_dashboard, network, simulations, ws
+from app.database import engine, Base
+
+
+import app.models  # noqa: F401 — register all models for Base.metadata
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create DB tables on startup (dev mode). Production uses Alembic migrations."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    await engine.dispose()
+
 
 app = FastAPI(
     title="Prophet (MCASP)",
     description="Multi-Community Agent Simulation Platform",
     version="0.1.0",
+    lifespan=lifespan,
+)
+
+# CORS for frontend dev server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # --- Register routers (SPEC: docs/spec/06_API_SPEC.md) ---
