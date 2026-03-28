@@ -1,0 +1,569 @@
+좋습니다. 여기서는 **MCASP의 핵심 엔진인 Social Diffusion Engine (Viral Cascade Algorithm)**을 **연구/논문 수준으로 설계**합니다.
+이 엔진의 목표는 **현실 SNS에서 나타나는 바이럴, 확산, 논쟁, 붕괴 현상**을 재현하는 것입니다.
+
+기본적으로 다음 연구들을 기반으로 합니다.
+
+* Viral Marketing for the Real World
+* Independent Cascade Model
+* Linear Threshold Model
+
+하지만 MCASP에서는 이들을 **LLM 기반 Agent와 결합한 Hybrid Diffusion Engine**을 설계합니다.
+
+---
+
+# 1️⃣ Social Diffusion Engine 목표
+
+현실 SNS에서 나타나는 4가지 현상을 재현해야 합니다.
+
+### Viral Cascade
+
+```text
+콘텐츠가 폭발적으로 확산
+```
+
+---
+
+### Slow Adoption
+
+```text
+천천히 확산
+```
+
+---
+
+### Polarization
+
+```text
+커뮤니티 간 의견 충돌
+```
+
+---
+
+### Collapse
+
+```text
+부정적 리뷰로 확산 중단
+```
+
+---
+
+# 2️⃣ 전체 Diffusion Engine 구조
+
+MCASP Diffusion Engine
+
+```
+Content Event
+      │
+      ▼
+Exposure Model
+      │
+      ▼
+Cognitive Evaluation
+      │
+      ▼
+Behavior Decision
+      │
+      ▼
+Social Propagation
+      │
+      ▼
+Cascade Detection
+```
+
+---
+
+# 3️⃣ Agent State
+
+Agent i 상태
+
+```
+A_i = {
+ emotion,
+ belief,
+ exposure_history,
+ social_links
+}
+```
+
+---
+
+Emotion vector
+
+```
+E_i =
+[interest, trust, skepticism, excitement]
+```
+
+---
+
+Belief
+
+```
+B_i =
+[-1 , 1]
+```
+
+의미
+
+```
+-1 = strong negative
++1 = strong positive
+```
+
+---
+
+# 4️⃣ Exposure Model
+
+Agent는 다음 경로로 콘텐츠를 접합니다.
+
+```
+social feed
+expert review
+advertisement
+community discussion
+```
+
+---
+
+Exposure probability
+
+```
+P_exposure(i) =
+Σ influence_j * W_ij
+```
+
+---
+
+feed ranking
+
+```
+rank_score =
+recency
++ social_weight
++ relevance
+```
+
+---
+
+# 5️⃣ Cognitive Evaluation
+
+Agent는 콘텐츠를 평가합니다.
+
+평가 점수
+
+```
+S_i =
+interest
++ trust
+- skepticism
++ community_bias
+```
+
+---
+
+Memory 영향
+
+```
+memory_weight =
+Σ relevant_memory
+```
+
+---
+
+최종 평가
+
+```
+evaluation_i =
+S_i + memory_weight
+```
+
+---
+
+# 6️⃣ Behavior Decision
+
+Agent 행동
+
+```
+ignore
+view
+like
+comment
+share
+adopt
+```
+
+---
+
+확률
+
+softmax
+
+```
+P(action) =
+softmax(evaluation_i + social_pressure)
+```
+
+---
+
+social pressure
+
+```
+social_pressure =
+Σ W_ij * action_j
+```
+
+---
+
+# 7️⃣ Propagation Model
+
+확산 확률
+
+```
+P(i → j) =
+influence_i
+* trust_ij
+* emotional_factor
+* message_strength
+```
+
+---
+
+emotion factor
+
+```
+emotion_factor =
+excitement - skepticism
+```
+
+---
+
+message_strength
+
+```
+novelty
+controversy
+utility
+```
+
+---
+
+# 8️⃣ Cascade Growth Model
+
+시간 t
+
+확산 수
+
+```
+N(t)
+```
+
+확산 속도
+
+```
+R(t) = dN/dt
+```
+
+---
+
+viral 조건
+
+```
+R(t) > threshold
+```
+
+---
+
+cascade size
+
+```
+C = total adoption
+```
+
+---
+
+# 9️⃣ Community Interaction
+
+Community bias
+
+```
+bias_k
+```
+
+확산 수정
+
+```
+P(i → j) =
+P(i → j) * bias_k
+```
+
+---
+
+community conflict
+
+```
+sentiment_variance
+```
+
+높으면
+
+```
+polarization
+```
+
+---
+
+# 🔟 Expert Intervention
+
+Expert agent 등장
+
+예
+
+```
+reviewer
+scientist
+journalist
+```
+
+LLM reasoning
+
+Prompt
+
+```
+Analyze product quality
+based on current feedback
+```
+
+---
+
+expert opinion
+
+```
+O_k
+```
+
+Agent 감정 수정
+
+```
+E_i(t+1) =
+E_i(t) + α * O_k
+```
+
+---
+
+# 11️⃣ Negative Cascade
+
+부정 확산
+
+예
+
+```
+battery explosion rumor
+```
+
+negative spread
+
+```
+P_neg(i → j) =
+skepticism
+* controversy
+* influencer_effect
+```
+
+---
+
+# 12️⃣ Emergent Behavior Detection
+
+자동 감지
+
+---
+
+### Viral
+
+```
+cascade_size > threshold
+```
+
+---
+
+### Polarization
+
+```
+sentiment_variance > threshold
+```
+
+---
+
+### Echo Chamber
+
+```
+community_internal_links >>
+external_links
+```
+
+---
+
+# 13️⃣ Diffusion Equation
+
+MCASP 확산 수식
+
+```
+dA/dt =
+β * influence
+* trust
+* emotion
+* network_structure
+```
+
+---
+
+Cascade growth
+
+```
+A(t+1) =
+A(t)
++ diffusion_rate
+- decay
+```
+
+---
+
+# 14️⃣ Monte Carlo Simulation
+
+동일 캠페인
+
+```
+100~1000 run
+```
+
+결과
+
+```
+viral probability
+expected reach
+community adoption
+```
+
+---
+
+# 15️⃣ Python Prototype
+
+Diffusion engine 구조
+
+```
+diffusion/
+   exposure_model.py
+   cognition_model.py
+   propagation_model.py
+   cascade_detector.py
+   sentiment_model.py
+```
+
+---
+
+Propagation 예
+
+```python
+def propagate(agent_i, agent_j):
+
+    influence = agent_i.influence
+    trust = trust_matrix[i][j]
+
+    emotion = agent_i.emotion["excitement"] - agent_j.emotion["skepticism"]
+
+    p = influence * trust * emotion
+
+    return random.random() < p
+```
+
+---
+
+# 16️⃣ 시뮬레이션 Loop
+
+전체 루프
+
+```
+for t in timeline:
+
+    exposure()
+
+    cognition()
+
+    decision()
+
+    propagate()
+
+    update_emotion()
+
+    detect_cascade()
+```
+
+---
+
+# 17️⃣ MCASP Diffusion 특징
+
+기존 diffusion 모델
+
+| 모델                  | 특징     |
+| ------------------- | ------ |
+| Independent Cascade | 확률 확산  |
+| Linear Threshold    | 임계치 확산 |
+
+---
+
+MCASP
+
+```
+LLM cognition
++
+emotion dynamics
++
+community bias
++
+network diffusion
+```
+
+---
+
+# 🔥 핵심
+
+MCASP Diffusion Engine은
+
+```
+Network Science
++
+Behavioral Economics
++
+LLM Cognition
+```
+
+을 결합한
+
+**AI 기반 Social Simulation Diffusion Model**
+
+입니다.
+
+---
+
+# 🚀 가장 중요한 사실
+
+이 엔진이 제대로 작동하면
+
+이 플랫폼은 단순 SaaS가 아니라
+
+**AI 기반 가상 사회 실험실**
+
+이 됩니다.
+
+유사 연구
+
+* NetLogo
+* Stanford Smallville
+
+하지만
+
+```
+LLM + GraphRAG + Viral Diffusion
+```
+
+이 결합된 시스템은 **거의 없습니다.**
+

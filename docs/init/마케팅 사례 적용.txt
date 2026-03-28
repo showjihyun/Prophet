@@ -1,0 +1,423 @@
+MCASP 플랫폼에서 **“마케팅 캠페인 확산 시뮬레이션”**은 가장 직접적으로 돈이 될 수 있는 핵심 유즈케이스입니다.
+단순 SNS 확산 모델이 아니라 **Agent 기반 사회 시뮬레이션 + 전문가 Agent 분석 + Multi-community 영향 분석**까지 포함하면 기업들이 실제로 사용할 수 있는 수준이 됩니다.
+
+아래는 **PRD 수준의 상세 시나리오 설계**입니다.
+
+---
+
+# 📊 Marketing Campaign Diffusion Simulation
+
+## 1️⃣ 목적
+
+기업 또는 기관이 **마케팅 캠페인, 제품 출시, 메시지 전략**이
+**사회 집단에서 어떻게 확산되는지 사전에 시뮬레이션**하는 플랫폼
+
+기존 마케팅 툴
+→ 단순 SNS analytics
+
+MCASP
+→ **가상 사회에서 캠페인을 먼저 실행**
+
+---
+
+# 2️⃣ 시뮬레이션 구조
+
+## Multi-Community 구성
+
+| Community | Agent 수 | 특징         |
+| --------- | ------- | ---------- |
+| A         | 100     | 얼리어답터      |
+| B         | 500     | 일반 소비자     |
+| C         | 200     | 회의적인 소비자   |
+| D         | 30      | 전문가/리뷰어    |
+| E         | 170     | 인플루언서 네트워크 |
+
+총 Agent
+**1000개**
+
+---
+
+# 3️⃣ Agent 행동 모델
+
+Agent는 다음 특성을 가짐
+
+### Personality
+
+```
+openness
+skepticism
+trend_following
+brand_loyalty
+social_influence
+```
+
+### Emotional State
+
+```
+interest
+trust
+skepticism
+excitement
+```
+
+### Memory
+
+Agent는 다음을 기억
+
+```
+- 광고 exposure
+- 친구 추천
+- 전문가 리뷰
+- 과거 브랜드 경험
+```
+
+---
+
+# 4️⃣ 캠페인 이벤트
+
+기업은 시뮬레이션 시작 전에 이벤트를 설정
+
+예
+
+### Campaign Input
+
+```
+campaign_name: "New Smartphone Launch"
+
+budget: 5M
+
+channels:
+- SNS
+- Influencer
+- Online Ads
+
+message:
+"AI camera phone"
+```
+
+---
+
+# 5️⃣ 시뮬레이션 진행
+
+### Step 1
+
+기업 캠페인 시작
+
+Agent exposure 발생
+
+```
+SNS exposure
+ad exposure
+influencer post
+```
+
+---
+
+### Step 2
+
+Agent 반응
+
+Agent 행동
+
+```
+ignore
+like
+share
+comment
+purchase intent
+```
+
+---
+
+### Step 3
+
+Agent간 영향
+
+```
+friend recommendation
+discussion
+argument
+community diffusion
+```
+
+---
+
+### Step 4
+
+전문가 Agent 분석
+
+Community C (전문가)
+
+```
+tech reviewer
+market analyst
+researcher
+```
+
+LLM 기반 분석
+
+예
+
+```
+"Camera quality appears competitive"
+"Battery life may be weak"
+```
+
+이 분석은 다시 Agent 행동에 영향
+
+---
+
+# 6️⃣ 확산 모델
+
+확산은 다음 요소로 결정
+
+```
+influence_score
+trust_network
+community_structure
+emotion_state
+```
+
+간단한 확산 함수 예
+
+```
+share_probability =
+influence * trust * excitement
+```
+
+---
+
+# 7️⃣ Emergent Behavior
+
+시뮬레이션에서 나타나는 현상
+
+예
+
+### Viral Explosion
+
+```
+Influencer → Early adopter → General consumers
+```
+
+### Backlash
+
+```
+Expert negative review
+→ skepticism 증가
+→ campaign failure
+```
+
+### Polarization
+
+```
+Community A: positive
+Community C: negative
+```
+
+---
+
+# 8️⃣ GraphRAG 시각화
+
+Node
+
+```
+Agent
+Community
+Campaign Event
+Expert Opinion
+```
+
+Edge
+
+```
+influence
+discussion
+trust
+information flow
+```
+
+그래프 예
+
+```
+Influencer → Community A
+Community A → Community B
+Expert review → Community C
+```
+
+---
+
+# 9️⃣ Timeline 분석
+
+시뮬레이션 결과
+
+```
+t1: campaign launch
+t3: influencer share
+t5: viral growth
+t8: expert criticism
+t12: diffusion slowdown
+```
+
+Dashboard
+
+```
+adoption rate
+sentiment
+community adoption
+viral clusters
+```
+
+---
+
+# 🔟 기업에게 제공되는 결과
+
+기업은 다음 질문에 답을 얻음
+
+### 캠페인이 viral 되는가?
+
+```
+viral probability
+```
+
+---
+
+### 어떤 community가 핵심인가?
+
+```
+key influencer cluster
+```
+
+---
+
+### 전문가 의견 영향
+
+```
+expert opinion sensitivity
+```
+
+---
+
+### 메시지 변경 효과
+
+```
+AI camera vs battery life messaging
+```
+
+---
+
+# 11️⃣ 실시간 개입
+
+사용자는 시뮬레이션 중 다음 변경 가능
+
+```
+campaign message 변경
+budget 증가
+influencer 추가
+negative PR 대응
+```
+
+---
+
+# 12️⃣ 반복 시뮬레이션
+
+Monte Carlo 방식
+
+```
+scenario run: 100
+```
+
+결과
+
+```
+success probability
+diffusion speed
+community adoption
+```
+
+---
+
+# 13️⃣ 돈 되는 이유
+
+이 시스템은 사실상
+
+**AI 기반 가상 소비자 테스트 플랫폼**
+
+현재 기업이 하는 것
+
+```
+A/B test
+focus group
+survey
+```
+
+MCASP
+
+```
+AI consumer society simulation
+```
+
+---
+
+# 14️⃣ 고객
+
+| 고객   | 사용      |
+| ---- | ------- |
+| 브랜드  | 제품 출시   |
+| 광고회사 | 캠페인 전략  |
+| 정부   | 정책 홍보   |
+| 게임회사 | 커뮤니티 반응 |
+| 영화사  | 마케팅 전략  |
+
+---
+
+# 15️⃣ SaaS 모델
+
+예
+
+### Starter
+
+```
+Agent 200
+```
+
+---
+
+### Pro
+
+```
+Agent 1000
+multi community
+```
+
+---
+
+### Enterprise
+
+```
+custom dataset
+on-premise
+LLM integration
+```
+
+---
+
+# 💡 중요한 사실
+
+이 아이디어는 사실상
+
+**세계적으로 거의 없는 카테고리**
+
+비슷한 것
+
+* MIRO Fish
+* OASIS
+
+하지만
+
+**마케팅용으로 만든 플랫폼은 거의 없음**
+
+그래서 충분히 **SaaS 사업 가능성** 있습니다.
+
+---
+
+

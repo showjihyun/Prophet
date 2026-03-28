@@ -1,0 +1,132 @@
+좋습니다. 지금까지 검토한 내용을 기준으로 보면, **기능, 비기능, 시각화, 실시간 개입, LLM 지원, 하네스 기반 테스트/확장/디버깅 기능**까지 모두 포함되어 있습니다.
+추가로 꼭 필요한 PRD 기능은 거의 다 반영된 상태입니다. 굳이 더 넣는다면, **보안/접근 권한 관리, 데이터 저장소 관리, 사용자 역할 관리** 정도인데, On-Premise + 연구/교육/기업 시나리오에서는 선택적입니다.
+
+즉, 기존 PRD + LLM 기능 + 하네스 기능(F18~F30)을 **통합한 완전판**을 만드는 것이 최적입니다.
+
+아래와 같이 정리했습니다.
+
+---
+
+# 🏗 MCASP 통합 완전판 PRD
+
+## 1️⃣ 프로젝트 개요
+
+**프로젝트 명:** Multi-Community Agent Simulation Platform (MCASP)
+**목표:** 범용 Agent 기반 시뮬레이터 구축
+
+* Multi-community 구조, GraphRAG 관계 시각화, Timeline 기반 분석
+* 실시간 개입, Scenario 반복 실험, Emergent Behavior 탐지
+* On-Premise + External LLM 지원, 하네스 엔지니어링 기반 모듈화
+
+---
+
+## 2️⃣ 사용자 / 타겟
+
+| 사용자           | 목적                             |
+| ------------- | ------------------------------ |
+| 연구자 / 데이터 과학자 | 사회 행동 분석, Emergent Behavior 연구 |
+| 마케팅/정책 기획자    | 캠페인/정책 시뮬레이션, 전략 효과 분석         |
+| 교육자           | Agent 기반 실험 학습                 |
+| 개발자 / 엔지니어    | Agent/Scenario/LLM 모듈 테스트 및 확장 |
+
+---
+
+## 3️⃣ 핵심 기능
+
+### 3-1. 시뮬레이션 엔진
+
+* Step 단위 실행
+* Agent 행동 모델: Personality, Emotion, Memory, Expert Insight
+* Cross-community Interaction
+* Emergent Behavior Detection
+
+### 3-2. Multi-community 구조
+
+| Community | Agent 수 | 특징                      |
+| --------- | ------- | ----------------------- |
+| A         | 100     | 소규모, 초기 실험용             |
+| B         | 500     | 대규모, 평균적 사회 행동          |
+| C         | 30      | 전문가/연구자 Agent, 심층 분석 제공 |
+
+* Community별 Metric, GraphRAG Edge Weight 반영
+
+### 3-3. GraphRAG 시각화
+
+* Node: Agent / Event / Expert
+* Node Color: Community / Emotion
+* Node Size: 영향력
+* Edge Weight: Interaction / Influence
+* Interactive Hover: Memory / Expert Insight
+
+### 3-4. Timeline / Metric Dashboard
+
+* Step별 Metric
+* Emergent Behavior 표시
+* 실시간 개입: Pause → Agent 수정 → Resume
+
+### 3-5. 실시간 개입
+
+* Agent Personality/Emotion/Community 수정
+* Scenario Step 재실행 가능
+
+---
+
+## 4️⃣ LLM 기능 통합
+
+| 기능                        | 설명                                           |
+| ------------------------- | -------------------------------------------- |
+| On-Premise + External LLM | HuggingFace/LLaMA + OpenAI/Claude/Gemini API |
+| Agent별 LLM 선택             | 일부 Agent → External, 나머지 → On-Premise        |
+| Prompt Context 구성         | Agent Memory + Personality + Community 상태    |
+| LLM 결과 캐싱                 | 반복 시나리오 최적화                                  |
+| Hybrid Mode               | 일부 Step On-Premise, 일부 Step External         |
+| Quota & Rate Management   | External LLM 안정적 호출                          |
+
+---
+
+## 5️⃣ 하네스 기능 (F18~F30)
+
+| ID  | 기능                          | 설명                                   |
+| --- | --------------------------- | ------------------------------------ |
+| F18 | Unit Test Hooks             | Agent, Community, Engine 단위 테스트 가능   |
+| F19 | Mock Environment            | 실제 시나리오 없이 행동 테스트                    |
+| F20 | Event / Agent Replay        | Step별 Replay 가능                      |
+| F21 | Metric Logging API          | Step별 Metric/Agent 행동/LLM 기록         |
+| F22 | Module Hot-Swap             | Agent/Community/LLM 모듈 교체 가능         |
+| F23 | Scenario Comparison         | 시나리오 간 Metric/Behavior 비교            |
+| F24 | Simulation Sandbox Mode     | 안전한 테스트 환경 제공                        |
+| F25 | Debug Visualization         | Agent 의사결정 + LLM Prompt/Response 시각화 |
+| F26 | API / Integration Hooks     | 외부 데이터/LLM/Event Stream 연결           |
+| F27 | Performance Monitor         | CPU/GPU/Memory 모니터링                  |
+| F28 | Failure Recovery            | Agent/LLM 호출 실패 시 Retry/Fallback     |
+| F29 | Configurable Agent Behavior | Personality/Emotion/Memory 동적 수정     |
+| F30 | Hybrid Execution Mode       | On-Premise + External LLM Step 단위 혼합 |
+
+---
+
+## 6️⃣ 비기능 요구사항
+
+| ID   | 요구사항    | 설명                                    |
+| ---- | ------- | ------------------------------------- |
+| NF01 | 성능      | 1000+ Agent, Step 실행 1초 이하            |
+| NF02 | 확장성     | Agent/Community/Scenario/LLM 모듈 교체 가능 |
+| NF03 | UI/UX   | Web 기반 Dashboard (Streamlit/Dash)     |
+| NF04 | 실시간성    | Agent/Scenario 변경 → 즉시 시뮬레이션 반영       |
+| NF05 | 테스트 용이성 | 하네스 단위 테스트 및 Mock 환경 지원               |
+| NF06 | 범용성     | 마케팅, 정책, 교육 등 다양한 시나리오 적용             |
+| NF07 | 신뢰성     | 실패/재시도/Failover 처리                    |
+| NF08 | 보안 (선택) | On-Premise 환경 접근 권한, API Key 관리       |
+
+---
+
+## 7️⃣ UI 요구사항
+
+* Graph Panel: Agent/Community + Emergent Cluster
+* Timeline Panel: Step Metric + Emergent Behavior
+* Control Panel: Play / Pause / Step / Scenario
+* Agent Detail Hover: Memory, Expert Insight, Personality/Emotion
+* Community Filters: 특정 Community Highlight
+* Interactive Modification: Personality, Emotion, Community 변경
+* LLM Dashboard: Prompt Preview, Quota, Step별 Response
+
+---

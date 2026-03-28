@@ -1,0 +1,454 @@
+좋습니다. **MCASP의 현실성을 결정하는 핵심은 Agent Influence Network 생성 알고리즘**입니다.
+단순 랜덤 그래프가 아니라 **현실 SNS(트위터/X, 인스타, 커뮤니티)의 구조적 특성**을 반영해야 합니다.
+
+참고되는 네트워크 이론은 다음입니다.
+
+* Scale-Free Network
+* Small-World Network
+* Preferential Attachment
+
+이 세 모델을 **Hybrid Network Generator**로 결합합니다.
+
+---
+
+# 1️⃣ 현실 SNS 네트워크 특징
+
+현실 SNS 그래프는 다음 특징이 있습니다.
+
+### 특징 1 — 소수의 슈퍼 인플루언서
+
+예
+
+```text
+followers distribution
+
+90% : < 100 followers
+9%  : 100 ~ 10k
+1%  : > 100k
+```
+
+→ **Power-law distribution**
+
+---
+
+### 특징 2 — Community Cluster
+
+예
+
+```text
+gaming community
+tech community
+fashion community
+```
+
+→ **clustered network**
+
+---
+
+### 특징 3 — Short path
+
+SNS 특징
+
+```text
+average path length ≈ 4~6
+```
+
+→ small world
+
+---
+
+# 2️⃣ Hybrid Network Architecture
+
+MCASP network 구조
+
+```text
+Global Network
+   │
+   ├─ Community A
+   │
+   ├─ Community B
+   │
+   ├─ Community C
+   │
+   └─ Influencer Layer
+```
+
+각 레이어 역할
+
+| Layer           | 역할                    |
+| --------------- | --------------------- |
+| Influencer      | diffusion accelerator |
+| Community       | local interaction     |
+| Cross-community | bridge                |
+
+---
+
+# 3️⃣ Network Generation Algorithm
+
+전체 단계
+
+```text
+1 create communities
+2 generate internal network
+3 create influencer layer
+4 add cross-community edges
+5 compute trust weight
+```
+
+---
+
+# 4️⃣ Community Network 생성
+
+Community 내부 네트워크
+
+모델
+
+```text
+Watts-Strogatz small world
+```
+
+파라미터
+
+```text
+N = community size
+K = neighbors
+p = rewiring probability
+```
+
+예
+
+```text
+N = 100
+K = 6
+p = 0.1
+```
+
+Python 예
+
+```python
+import networkx as nx
+
+G = nx.watts_strogatz_graph(n=100, k=6, p=0.1)
+```
+
+효과
+
+* 높은 clustering
+* 짧은 path
+
+---
+
+# 5️⃣ Influencer Layer 생성
+
+Influencer network
+
+모델
+
+```text
+Barabasi-Albert preferential attachment
+```
+
+Python
+
+```python
+G = nx.barabasi_albert_graph(n=1000, m=3)
+```
+
+특징
+
+```text
+few nodes have massive influence
+```
+
+---
+
+# 6️⃣ Hybrid Merge
+
+두 그래프를 merge
+
+```text
+Community graph
++
+Influencer graph
+```
+
+결과
+
+```text
+Hierarchical network
+```
+
+---
+
+# 7️⃣ Cross-Community Edge 생성
+
+현실 SNS 특징
+
+```text
+community bridges
+```
+
+예
+
+```text
+tech influencer → gaming community
+```
+
+생성 방법
+
+```text
+random bridge edges
+```
+
+확률
+
+```text
+P_cross = 0.02
+```
+
+---
+
+# 8️⃣ Edge Weight 계산
+
+Edge weight
+
+```text
+W_ij = trust_ij * interaction_freq
+```
+
+trust 모델
+
+```text
+trust_ij =
+similarity(personality)
++ interaction_history
+```
+
+---
+
+# 9️⃣ Personality similarity
+
+Agent personality vector
+
+```text
+P_i = [
+interest_tech,
+interest_fashion,
+skepticism,
+trend_following
+]
+```
+
+유사도
+
+```text
+similarity =
+cosine(P_i, P_j)
+```
+
+---
+
+# 🔟 Interaction Frequency
+
+Agent interaction
+
+```text
+activity_level
+```
+
+예
+
+```text
+post_frequency
+comment_rate
+```
+
+Edge weight
+
+```text
+interaction_freq =
+(activity_i + activity_j)/2
+```
+
+---
+
+# 11️⃣ Influence Score
+
+Agent 영향력
+
+```text
+I_i =
+followers *
+credibility *
+activity
+```
+
+정규화
+
+```text
+0 ~ 1
+```
+
+---
+
+# 12️⃣ Final Diffusion Weight
+
+확산 확률
+
+```text
+P(i → j) =
+I_i *
+W_ij *
+emotion_factor
+```
+
+---
+
+# 13️⃣ Network Metrics 검증
+
+생성된 네트워크는 다음 metric 확인
+
+### Degree distribution
+
+```text
+power law
+```
+
+---
+
+### Clustering coefficient
+
+```text
+0.2 ~ 0.6
+```
+
+---
+
+### Average path length
+
+```text
+4 ~ 6
+```
+
+---
+
+# 14️⃣ Python Prototype
+
+네트워크 생성 코드
+
+```python
+import networkx as nx
+
+def generate_social_network(
+    total_agents=1000,
+    community_sizes=[100,500,200,200]
+):
+
+    G = nx.Graph()
+
+    start = 0
+
+    communities = []
+
+    for size in community_sizes:
+        sub = nx.watts_strogatz_graph(size, 6, 0.1)
+        mapping = {i:i+start for i in range(size)}
+        sub = nx.relabel_nodes(sub,mapping)
+        G = nx.compose(G,sub)
+        communities.append(list(mapping.values()))
+        start += size
+
+    influencers = nx.barabasi_albert_graph(total_agents,3)
+
+    G = nx.compose(G,influencers)
+
+    return G
+```
+
+---
+
+# 15️⃣ Dynamic Network Evolution
+
+SNS 네트워크는 고정이 아님
+
+변화
+
+```text
+follow
+unfollow
+community shift
+```
+
+예
+
+```text
+trust drop → edge weight 감소
+```
+
+---
+
+# 16️⃣ Time-based Network
+
+시간 변화
+
+```text
+G(t)
+```
+
+예
+
+```text
+campaign viral → new edges
+```
+
+---
+
+# 17️⃣ Emergent Influence
+
+시뮬레이션 결과
+
+예
+
+```text
+micro influencer → viral cascade
+```
+
+또는
+
+```text
+expert criticism → collapse
+```
+
+---
+
+# 🔥 핵심
+
+이 알고리즘은
+
+```text
+Small-world
++
+Scale-free
++
+Community network
+```
+
+를 결합한
+
+**현실 SNS 구조와 매우 유사한 social graph**를 생성합니다.
+
+---
+
+# 🚀 중요한 사실
+
+MCASP에서 **성패를 좌우하는 3개 기술**
+
+1️⃣ Agent Memory Architecture
+2️⃣ Influence Network Generation
+3️⃣ Diffusion Model
+
+이 세 개가 결합되면 사실상
+
+**AI 기반 가상 사회 실험 엔진**
+
+이 됩니다.
