@@ -10,7 +10,7 @@ const COMMUNITIES = [
   {
     id: "alpha",
     name: "Alpha Community",
-    color: "#3b82f6",
+    color: "var(--community-alpha)",
     agents: 1500,
     sentiment: { positive: 62, neutral: 25, negative: 13 },
     influencers: [
@@ -24,7 +24,7 @@ const COMMUNITIES = [
   {
     id: "beta",
     name: "Beta Community",
-    color: "#22c55e",
+    color: "var(--community-beta)",
     agents: 1200,
     sentiment: { positive: 55, neutral: 30, negative: 15 },
     influencers: [
@@ -38,7 +38,7 @@ const COMMUNITIES = [
   {
     id: "gamma",
     name: "Gamma Community",
-    color: "#f97316",
+    color: "var(--community-gamma)",
     agents: 1100,
     sentiment: { positive: 40, neutral: 35, negative: 25 },
     influencers: [
@@ -52,7 +52,7 @@ const COMMUNITIES = [
   {
     id: "delta",
     name: "Delta Community",
-    color: "#a855f7",
+    color: "var(--community-delta)",
     agents: 1400,
     sentiment: { positive: 48, neutral: 32, negative: 20 },
     influencers: [
@@ -66,7 +66,7 @@ const COMMUNITIES = [
   {
     id: "bridge",
     name: "Bridge Community",
-    color: "#ef4444",
+    color: "var(--community-bridge)",
     agents: 300,
     sentiment: { positive: 35, neutral: 40, negative: 25 },
     influencers: [
@@ -95,10 +95,10 @@ const statusColors: Record<string, string> = {
 };
 
 const emotionColors: Record<string, string> = {
-  interest: "#3b82f6",
-  trust: "#22c55e",
-  skepticism: "#f97316",
-  excitement: "#a855f7",
+  interest: "var(--community-alpha)",
+  trust: "var(--community-beta)",
+  skepticism: "var(--community-gamma)",
+  excitement: "var(--community-delta)",
 };
 
 export default function CommunitiesDetailPage() {
@@ -173,16 +173,13 @@ export default function CommunitiesDetailPage() {
                 </span>
                 <div className="flex h-2 rounded-full overflow-hidden mt-1">
                   <div
-                    className="bg-green-500"
-                    style={{ width: `${community.sentiment.positive}%` }}
+                    style={{ width: `${community.sentiment.positive}%`, backgroundColor: 'var(--sentiment-positive)' }}
                   />
                   <div
-                    className="bg-gray-300"
-                    style={{ width: `${community.sentiment.neutral}%` }}
+                    style={{ width: `${community.sentiment.neutral}%`, backgroundColor: 'var(--sentiment-neutral)' }}
                   />
                   <div
-                    className="bg-red-500"
-                    style={{ width: `${community.sentiment.negative}%` }}
+                    style={{ width: `${community.sentiment.negative}%`, backgroundColor: 'var(--sentiment-negative)' }}
                   />
                 </div>
                 <div className="flex justify-between text-[10px] text-[#a3a3a3] mt-0.5">

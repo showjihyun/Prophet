@@ -24,6 +24,7 @@
   --sentiment-positive: #22c55e;
   --sentiment-neutral: #94a3b8;
   --sentiment-negative: #ef4444;
+  --sentiment-warning: #f59e0b;
 
   /* Graph engine */
   --bg-graph-primary: #0f172a;

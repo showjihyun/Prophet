@@ -11,7 +11,6 @@ import TopInfluencersPage from "./pages/TopInfluencersPage";
 import AgentDetailPage from "./pages/AgentDetailPage";
 import GlobalMetricsPage from "./pages/GlobalMetricsPage";
 import CampaignSetupPage from "./pages/CampaignSetupPage";
-import AnalyticsPage from "./pages/AnalyticsPage";
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -51,12 +50,12 @@ function App() {
         <Routes>
           <Route path="/" element={<SimulationPage />} />
           <Route path="/communities" element={<CommunitiesDetailPage />} />
+          <Route path="/communities/:communityId" element={<CommunitiesDetailPage />} />
           <Route path="/influencers" element={<TopInfluencersPage />} />
           <Route path="/agents/:agentId" element={<AgentDetailPage />} />
           <Route path="/metrics" element={<GlobalMetricsPage />} />
           <Route path="/setup" element={<CampaignSetupPage />} />
           <Route path="/campaign/new" element={<CampaignSetupPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
         </Routes>
       </ErrorBoundary>
     </BrowserRouter>

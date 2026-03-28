@@ -2,11 +2,10 @@
  * TimelinePanel — Timeline + Diffusion Wave (Zone 3 upper).
  * @spec docs/spec/ui/UI_01_SIMULATION_MAIN.md#zone-3-timeline-diffusion-wave
  *
- * Left: Play/Step buttons + "Day 47 of 365"
- * Right: Bar chart (div-based, 24 bars with varying heights and community colors)
+ * Day counter + bar chart (div-based, 24 bars with varying heights and community colors).
+ * Playback controls live in ControlPanel to avoid duplication.
  */
 import { useMemo } from "react";
-import { Play, SkipForward } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 
 const COMMUNITY_COLORS = [
@@ -27,6 +26,7 @@ export default function TimelinePanel() {
   const currentStep = useSimulationStore((s) => s.currentStep);
   const steps = useSimulationStore((s) => s.steps);
   const simulation = useSimulationStore((s) => s.simulation);
+  const speed = useSimulationStore((s) => s.speed);
   const maxSteps = simulation?.max_steps ?? 365;
 
   // Derive wave data from actual steps or use mock
@@ -44,15 +44,9 @@ export default function TimelinePanel() {
       className="flex items-center gap-4 px-4 border-t border-[var(--border)] bg-white"
       style={{ height: "var(--timeline-height)" }}
     >
-      {/* Left: Controls + Day counter */}
+      {/* Left: Day counter */}
       <div className="flex items-center gap-2 shrink-0">
-        <button className="w-8 h-8 flex items-center justify-center rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity">
-          <Play className="w-3.5 h-3.5" />
-        </button>
-        <button className="w-8 h-8 flex items-center justify-center rounded-md border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors">
-          <SkipForward className="w-3.5 h-3.5" />
-        </button>
-        <span className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap ml-1">
+        <span className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap">
           Day {currentStep || 47} of {maxSteps}
         </span>
       </div>
@@ -85,7 +79,7 @@ export default function TimelinePanel() {
 
       {/* Right: Speed badge */}
       <span className="shrink-0 text-[11px] font-medium px-2 py-1 rounded bg-[var(--secondary)] text-[var(--muted-foreground)]">
-        5x Speed
+        {speed}x Speed
       </span>
     </div>
   );

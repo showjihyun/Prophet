@@ -5,13 +5,14 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
+  Area,
   XAxis,
   YAxis,
+  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from "recharts";
 import PageNav from "../components/shared/PageNav";
 
@@ -19,7 +20,7 @@ const MOCK_AGENT = {
   id: "A-0042",
   agentNumber: 3847,
   community: "Alpha",
-  communityColor: "#3b82f6",
+  communityColor: "var(--community-alpha)",
   influence: 98.2,
   connections: 247,
   subscribers: 12,
@@ -36,13 +37,13 @@ const MOCK_AGENT = {
 };
 
 const SENTIMENT_DATA = [
-  { day: "D41", positive: 0.6, negative: -0.2 },
-  { day: "D42", positive: 0.7, negative: -0.15 },
-  { day: "D43", positive: 0.55, negative: -0.3 },
-  { day: "D44", positive: 0.8, negative: -0.1 },
-  { day: "D45", positive: 0.65, negative: -0.25 },
-  { day: "D46", positive: 0.75, negative: -0.18 },
-  { day: "D47", positive: 0.85, negative: -0.12 },
+  { day: "D41", positive: 60, negative: 20 },
+  { day: "D42", positive: 70, negative: 15 },
+  { day: "D43", positive: 55, negative: 30 },
+  { day: "D44", positive: 80, negative: 10 },
+  { day: "D45", positive: 65, negative: 25 },
+  { day: "D46", positive: 75, negative: 18 },
+  { day: "D47", positive: 85, negative: 12 },
 ];
 
 interface Interaction {
@@ -62,17 +63,17 @@ const MOCK_INTERACTIONS: Interaction[] = [
   { target: "A-0334", type: "Reply", sentiment: "Positive", message: "Excellent follow-up on yesterday's interaction chain.", time: "1d ago" },
 ];
 
-const sentimentBadge: Record<string, string> = {
-  Positive: "bg-green-100 text-green-700",
-  Neutral: "bg-gray-100 text-gray-600",
-  Negative: "bg-red-100 text-red-700",
+const SENTIMENT_STYLES: Record<string, React.CSSProperties> = {
+  Positive: { backgroundColor: "color-mix(in srgb, var(--sentiment-positive) 15%, transparent)", color: "var(--sentiment-positive)" },
+  Neutral: { backgroundColor: "color-mix(in srgb, var(--sentiment-neutral) 15%, transparent)", color: "var(--sentiment-neutral)" },
+  Negative: { backgroundColor: "color-mix(in srgb, var(--sentiment-negative) 15%, transparent)", color: "var(--sentiment-negative)" },
 };
 
-const typeBadge: Record<string, string> = {
-  Share: "text-blue-600",
-  Reply: "text-green-600",
-  Mention: "text-orange-500",
-  Influence: "text-purple-600",
+const TYPE_STYLES: Record<string, React.CSSProperties> = {
+  Share: { color: "var(--community-alpha)" },
+  Reply: { color: "var(--community-beta)" },
+  Mention: { color: "var(--community-gamma)" },
+  Influence: { color: "var(--community-delta)" },
 };
 
 const TABS = ["Activity", "Connections", "Messages"] as const;
@@ -96,7 +97,7 @@ export default function AgentDetailPage() {
           { label: `Agent #${agent.agentNumber}` },
         ]}
         actions={
-          <button className="h-9 px-4 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors">
+          <button className="h-9 px-4 text-sm font-medium text-white rounded-md transition-colors" style={{ backgroundColor: 'var(--sentiment-positive)' }}>
             Intervene
           </button>
         }
@@ -161,8 +162,8 @@ export default function AgentDetailPage() {
                   </span>
                   <div className="flex-1 h-2 rounded-full bg-[#e2e8f0] overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-blue-500"
-                      style={{ width: `${value}%` }}
+                      className="h-full rounded-full"
+                      style={{ width: `${value}%`, backgroundColor: agent.communityColor }}
                     />
                   </div>
                   <span className="text-xs font-semibold text-[#0a0a0a] w-10 text-right">
@@ -214,30 +215,16 @@ export default function AgentDetailPage() {
                   Sentiment Over Time
                 </h3>
                 <ResponsiveContainer width="100%" height={200}>
-                  <BarChart
-                    data={SENTIMENT_DATA}
-                    margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-                  >
-                    <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                    <YAxis
-                      domain={[-1, 1]}
-                      tick={{ fontSize: 11 }}
-                      tickCount={5}
-                    />
-                    <Tooltip
-                      formatter={(value: number) => value.toFixed(2)}
-                    />
-                    <Bar dataKey="positive" stackId="sentiment">
-                      {SENTIMENT_DATA.map((_, i) => (
-                        <Cell key={i} fill="#22c55e" />
-                      ))}
-                    </Bar>
-                    <Bar dataKey="negative" stackId="sentiment">
-                      {SENTIMENT_DATA.map((_, i) => (
-                        <Cell key={i} fill="#ef4444" />
-                      ))}
-                    </Bar>
-                  </BarChart>
+                  <LineChart data={SENTIMENT_DATA}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                    <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="positive" fill="var(--sentiment-positive)" fillOpacity={0.1} stroke="none" />
+                    <Area type="monotone" dataKey="negative" fill="var(--sentiment-negative)" fillOpacity={0.1} stroke="none" />
+                    <Line type="monotone" dataKey="positive" stroke="var(--sentiment-positive)" strokeWidth={2} dot={false} name="Positive" />
+                    <Line type="monotone" dataKey="negative" stroke="var(--sentiment-negative)" strokeWidth={2} dot={false} name="Negative" />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
 
@@ -285,13 +272,15 @@ export default function AgentDetailPage() {
                           </button>
                         </td>
                         <td
-                          className={`px-4 py-3 font-medium ${typeBadge[interaction.type]}`}
+                          className="px-4 py-3 font-medium"
+                          style={TYPE_STYLES[interaction.type]}
                         >
                           {interaction.type}
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${sentimentBadge[interaction.sentiment]}`}
+                            className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                            style={SENTIMENT_STYLES[interaction.sentiment]}
                           >
                             {interaction.sentiment}
                           </span>

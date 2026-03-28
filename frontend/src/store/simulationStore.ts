@@ -34,6 +34,9 @@ interface SimulationStore {
   tierDistribution: TierDistribution | null;
   impactAssessment: EngineImpactReport | null;
 
+  // Speed
+  speed: number;
+
   // Actions
   setSimulation: (sim: SimulationRun) => void;
   appendStep: (step: StepResult) => void;
@@ -41,6 +44,7 @@ interface SimulationStore {
   setStatus: (status: SimulationStatus) => void;
   selectAgent: (agentId: string | null) => void;
   setSlmLlmRatio: (ratio: number) => void;
+  setSpeed: (speed: number) => void;
 }
 
 export const useSimulationStore = create<SimulationStore>((set) => ({
@@ -58,6 +62,7 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   slmLlmRatio: 0.5,
   tierDistribution: null,
   impactAssessment: null,
+  speed: 2,
 
   setSimulation: (sim) => set({ simulation: sim, status: sim.status }),
   appendStep: (step) =>
@@ -74,4 +79,5 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   selectAgent: (agentId) =>
     set({ selectedAgentId: agentId, isAgentInspectorOpen: agentId !== null }),
   setSlmLlmRatio: (ratio) => set({ slmLlmRatio: ratio }),
+  setSpeed: (speed) => set({ speed }),
 }));

@@ -25,17 +25,17 @@ const POLARIZATION_DATA = [
 ];
 
 function polarizationColor(v: number): string {
-  if (v < 0.3) return "#22c55e";
-  if (v < 0.6) return "#eab308";
-  return "#ef4444";
+  if (v < 0.3) return "var(--sentiment-positive)";
+  if (v < 0.6) return "var(--sentiment-warning)";
+  return "var(--sentiment-negative)";
 }
 
 const SENTIMENT_BY_COMMUNITY = [
-  { name: "Alpha", positive: 62, neutral: 25, negative: 13, color: "#3b82f6" },
-  { name: "Beta", positive: 55, neutral: 30, negative: 15, color: "#22c55e" },
-  { name: "Gamma", positive: 40, neutral: 35, negative: 25, color: "#f97316" },
-  { name: "Delta", positive: 48, neutral: 32, negative: 20, color: "#a855f7" },
-  { name: "Bridge", positive: 35, neutral: 40, negative: 25, color: "#ef4444" },
+  { name: "Alpha", positive: 62, neutral: 25, negative: 13, color: "var(--community-alpha)" },
+  { name: "Beta", positive: 55, neutral: 30, negative: 15, color: "var(--community-beta)" },
+  { name: "Gamma", positive: 40, neutral: 35, negative: 25, color: "var(--community-gamma)" },
+  { name: "Delta", positive: 48, neutral: 32, negative: 20, color: "var(--community-delta)" },
+  { name: "Bridge", positive: 35, neutral: 40, negative: 25, color: "var(--community-bridge)" },
 ];
 
 export default function GlobalMetricsPage() {
@@ -78,13 +78,18 @@ export default function GlobalMetricsPage() {
             changeType="negative"
             icon={<ActivityIcon />}
           />
-          <StatCard
-            label="Simulation Day"
-            value="Day 47"
-            change="of 365 days"
-            changeType="neutral"
-            icon={<CalendarIcon />}
-          />
+          <div>
+            <StatCard
+              label="Simulation Day"
+              value="Day 47"
+              change="of 365 days"
+              changeType="neutral"
+              icon={<CalendarIcon />}
+            />
+            <div className="mt-2 h-1.5 rounded-full" style={{ backgroundColor: 'var(--muted)' }}>
+              <div className="h-full rounded-full" style={{ width: `${(47 / 365) * 100}%`, backgroundColor: 'var(--primary)' }} />
+            </div>
+          </div>
         </div>
 
         {/* Charts Area - 2 column */}
@@ -143,19 +148,19 @@ export default function GlobalMetricsPage() {
                 <Bar
                   dataKey="positive"
                   stackId="sentiment"
-                  fill="#22c55e"
+                  fill="var(--sentiment-positive)"
                   name="Positive"
                 />
                 <Bar
                   dataKey="neutral"
                   stackId="sentiment"
-                  fill="#94a3b8"
+                  fill="var(--sentiment-neutral)"
                   name="Neutral"
                 />
                 <Bar
                   dataKey="negative"
                   stackId="sentiment"
-                  fill="#ef4444"
+                  fill="var(--sentiment-negative)"
                   name="Negative"
                   radius={[0, 4, 4, 0]}
                 />
@@ -176,30 +181,30 @@ export default function GlobalMetricsPage() {
                 tier="Tier 1: Mass SLM"
                 count="4,800 agents"
                 description="Rule-based + local SLM inference"
-                color="#3b82f6"
+                color="var(--community-alpha)"
                 icon={<CpuIcon />}
               />
               <TierCard
                 tier="Tier 2: Semantic"
                 count="1,700 agents"
                 description="Heuristic + semantic analysis"
-                color="#eab308"
+                color="var(--sentiment-warning)"
                 icon={<BrainIcon />}
               />
               <TierCard
                 tier="Tier 3: Elite LLM"
                 count="~0 agents"
                 description="Full LLM reasoning (Claude/GPT)"
-                color="#a855f7"
+                color="var(--community-delta)"
                 icon={<SparklesIcon />}
               />
             </div>
             {/* Cost distribution bar */}
             <div className="mt-4">
               <div className="flex h-3 rounded-full overflow-hidden">
-                <div className="bg-blue-500" style={{ width: "73.8%" }} />
-                <div className="bg-yellow-500" style={{ width: "26.2%" }} />
-                <div className="bg-purple-500" style={{ width: "0%" }} />
+                <div style={{ width: "73.8%", backgroundColor: "var(--community-alpha)" }} />
+                <div style={{ width: "26.2%", backgroundColor: "var(--sentiment-warning)" }} />
+                <div style={{ width: "0%", backgroundColor: "var(--community-delta)" }} />
               </div>
               <div className="flex justify-between text-[10px] text-[#a3a3a3] mt-1">
                 <span>Tier 1 (73.8%)</span>
@@ -218,25 +223,25 @@ export default function GlobalMetricsPage() {
               <CascadeStat
                 label="Avg Cascade Depth"
                 value="4.7"
-                color="#3b82f6"
+                color="var(--community-alpha)"
                 icon={<GitBranchIcon />}
               />
               <CascadeStat
                 label="Max Cascade Width"
                 value="128"
-                color="#22c55e"
+                color="var(--community-beta)"
                 icon={<GitMergeIcon />}
               />
               <CascadeStat
                 label="Critical Paths"
                 value="23"
-                color="#f97316"
+                color="var(--community-gamma)"
                 icon={<RouteIcon />}
               />
               <CascadeStat
                 label="Decay Rate"
                 value="0.12/step"
-                color="#ef4444"
+                color="var(--community-bridge)"
                 icon={<TrendDownIcon />}
               />
             </div>

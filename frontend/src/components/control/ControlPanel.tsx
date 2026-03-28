@@ -6,7 +6,6 @@
  * Center: Global Insights link, Scenario dropdown, Speed buttons
  * Right: Play/Pause/Step/Reset/Replay + Settings + Avatar
  */
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Brain,
@@ -30,7 +29,8 @@ export default function ControlPanel() {
   const currentStep = useSimulationStore((s) => s.currentStep);
   const setStatus = useSimulationStore((s) => s.setStatus);
   const appendStep = useSimulationStore((s) => s.appendStep);
-  const [speed, setSpeed] = useState<number>(1);
+  const speed = useSimulationStore((s) => s.speed);
+  const setSpeed = useSimulationStore((s) => s.setSpeed);
 
   const isRunning = status === "running";
 

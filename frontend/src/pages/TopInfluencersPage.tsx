@@ -29,35 +29,35 @@ interface Influencer {
 }
 
 const MOCK_INFLUENCERS: Influencer[] = [
-  { rank: 1, agentId: "A-0042", community: "Alpha", communityColor: "#3b82f6", influenceScore: 98.2, sentiment: "Positive", chains: 24, connections: 247, status: "Active" },
-  { rank: 2, agentId: "BR-0012", community: "Bridge", communityColor: "#ef4444", influenceScore: 96.5, sentiment: "Neutral", chains: 31, connections: 189, status: "Active" },
-  { rank: 3, agentId: "B-0091", community: "Beta", communityColor: "#22c55e", influenceScore: 94.7, sentiment: "Positive", chains: 19, connections: 203, status: "Active" },
-  { rank: 4, agentId: "D-0067", community: "Delta", communityColor: "#a855f7", influenceScore: 92.1, sentiment: "Positive", chains: 17, connections: 178, status: "Active" },
-  { rank: 5, agentId: "A-0187", community: "Alpha", communityColor: "#3b82f6", influenceScore: 91.5, sentiment: "Neutral", chains: 15, connections: 156, status: "Active" },
-  { rank: 6, agentId: "BR-0034", community: "Bridge", communityColor: "#ef4444", influenceScore: 90.2, sentiment: "Negative", chains: 22, connections: 134, status: "Idle" },
-  { rank: 7, agentId: "B-0203", community: "Beta", communityColor: "#22c55e", influenceScore: 88.3, sentiment: "Positive", chains: 12, connections: 145, status: "Active" },
-  { rank: 8, agentId: "D-0145", community: "Delta", communityColor: "#a855f7", influenceScore: 86.8, sentiment: "Neutral", chains: 14, connections: 121, status: "Active" },
-  { rank: 9, agentId: "G-0055", community: "Gamma", communityColor: "#f97316", influenceScore: 85.9, sentiment: "Positive", chains: 11, connections: 132, status: "Idle" },
-  { rank: 10, agentId: "A-0334", community: "Alpha", communityColor: "#3b82f6", influenceScore: 87.1, sentiment: "Neutral", chains: 13, connections: 118, status: "Active" },
+  { rank: 1, agentId: "A-0042", community: "Alpha", communityColor: "var(--community-alpha)", influenceScore: 98.2, sentiment: "Positive", chains: 24, connections: 247, status: "Active" },
+  { rank: 2, agentId: "BR-0012", community: "Bridge", communityColor: "var(--community-bridge)", influenceScore: 96.5, sentiment: "Neutral", chains: 31, connections: 189, status: "Active" },
+  { rank: 3, agentId: "B-0091", community: "Beta", communityColor: "var(--community-beta)", influenceScore: 94.7, sentiment: "Positive", chains: 19, connections: 203, status: "Active" },
+  { rank: 4, agentId: "D-0067", community: "Delta", communityColor: "var(--community-delta)", influenceScore: 92.1, sentiment: "Positive", chains: 17, connections: 178, status: "Active" },
+  { rank: 5, agentId: "A-0187", community: "Alpha", communityColor: "var(--community-alpha)", influenceScore: 91.5, sentiment: "Neutral", chains: 15, connections: 156, status: "Active" },
+  { rank: 6, agentId: "BR-0034", community: "Bridge", communityColor: "var(--community-bridge)", influenceScore: 90.2, sentiment: "Negative", chains: 22, connections: 134, status: "Idle" },
+  { rank: 7, agentId: "B-0203", community: "Beta", communityColor: "var(--community-beta)", influenceScore: 88.3, sentiment: "Positive", chains: 12, connections: 145, status: "Active" },
+  { rank: 8, agentId: "D-0145", community: "Delta", communityColor: "var(--community-delta)", influenceScore: 86.8, sentiment: "Neutral", chains: 14, connections: 121, status: "Active" },
+  { rank: 9, agentId: "G-0055", community: "Gamma", communityColor: "var(--community-gamma)", influenceScore: 85.9, sentiment: "Positive", chains: 11, connections: 132, status: "Idle" },
+  { rank: 10, agentId: "A-0334", community: "Alpha", communityColor: "var(--community-alpha)", influenceScore: 87.1, sentiment: "Neutral", chains: 13, connections: 118, status: "Active" },
 ];
 
 const DISTRIBUTION_DATA = [
-  { name: "Alpha", value: 120, fill: "#3b82f6" },
-  { name: "Beta", value: 85, fill: "#22c55e" },
-  { name: "Gamma", value: 52, fill: "#f97316" },
-  { name: "Delta", value: 65, fill: "#a855f7" },
-  { name: "Bridge", value: 20, fill: "#ef4444" },
+  { name: "Alpha", value: 120, fill: "var(--community-alpha)" },
+  { name: "Beta", value: 85, fill: "var(--community-beta)" },
+  { name: "Gamma", value: 52, fill: "var(--community-gamma)" },
+  { name: "Delta", value: 65, fill: "var(--community-delta)" },
+  { name: "Bridge", value: 20, fill: "var(--community-bridge)" },
 ];
 
-const sentimentBadge: Record<string, string> = {
-  Positive: "bg-green-100 text-green-700",
-  Neutral: "bg-gray-100 text-gray-600",
-  Negative: "bg-red-100 text-red-700",
+const SENTIMENT_STYLES: Record<string, React.CSSProperties> = {
+  Positive: { backgroundColor: "color-mix(in srgb, var(--sentiment-positive) 15%, transparent)", color: "var(--sentiment-positive)" },
+  Neutral: { backgroundColor: "color-mix(in srgb, var(--sentiment-neutral) 15%, transparent)", color: "var(--sentiment-neutral)" },
+  Negative: { backgroundColor: "color-mix(in srgb, var(--sentiment-negative) 15%, transparent)", color: "var(--sentiment-negative)" },
 };
 
-const statusBadge: Record<string, string> = {
-  Active: "bg-green-100 text-green-700",
-  Idle: "bg-gray-100 text-gray-500",
+const STATUS_STYLES: Record<string, React.CSSProperties> = {
+  Active: { backgroundColor: "color-mix(in srgb, var(--sentiment-positive) 15%, transparent)", color: "var(--sentiment-positive)" },
+  Idle: { backgroundColor: "var(--secondary)", color: "var(--muted-foreground)" },
 };
 
 export default function TopInfluencersPage() {
@@ -92,7 +92,7 @@ export default function TopInfluencersPage() {
             value="Alpha"
             icon={
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--community-alpha)' }} />
               </span>
             }
           />
@@ -177,8 +177,8 @@ export default function TopInfluencersPage() {
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-2 rounded-full bg-[#e2e8f0] overflow-hidden">
                             <div
-                              className="h-full rounded-full bg-blue-500"
-                              style={{ width: `${inf.influenceScore}%` }}
+                              className="h-full rounded-full"
+                              style={{ width: `${inf.influenceScore}%`, backgroundColor: inf.communityColor }}
                             />
                           </div>
                           <span className="text-xs font-medium w-10 text-right">
@@ -188,7 +188,8 @@ export default function TopInfluencersPage() {
                       </td>
                       <td className="px-3 py-3">
                         <span
-                          className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${sentimentBadge[inf.sentiment]}`}
+                          className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                          style={SENTIMENT_STYLES[inf.sentiment]}
                         >
                           {inf.sentiment}
                         </span>
@@ -199,7 +200,8 @@ export default function TopInfluencersPage() {
                       </td>
                       <td className="px-3 py-3">
                         <span
-                          className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${statusBadge[inf.status]}`}
+                          className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                          style={STATUS_STYLES[inf.status]}
                         >
                           {inf.status}
                         </span>

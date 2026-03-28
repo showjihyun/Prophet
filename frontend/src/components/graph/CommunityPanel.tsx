@@ -6,6 +6,7 @@
  * sentiment bars, and total agent count.
  */
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 
@@ -64,6 +65,7 @@ const MOCK_COMMUNITIES: CommunityItem[] = [
 ];
 
 export default function CommunityPanel() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const highlightedCommunity = useSimulationStore(
     (s) => s.highlightedCommunity,
@@ -122,7 +124,7 @@ export default function CommunityPanel() {
           Communities
         </span>
         <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)]">
-          {filtered.length}
+          {communities.length}
         </span>
       </div>
 
@@ -133,6 +135,7 @@ export default function CommunityPanel() {
             key={community.id}
             community={community}
             isHighlighted={highlightedCommunity === community.id}
+            onClick={() => navigate(`/communities/${community.id}`)}
           />
         ))}
       </div>
@@ -150,12 +153,15 @@ export default function CommunityPanel() {
 function CommunityRow({
   community,
   isHighlighted,
+  onClick,
 }: {
   community: CommunityItem;
   isHighlighted: boolean;
+  onClick: () => void;
 }) {
   return (
     <div
+      onClick={onClick}
       className={`flex items-center gap-3 px-4 cursor-pointer transition-colors hover:bg-[var(--secondary)] ${
         isHighlighted ? "bg-[var(--secondary)]" : ""
       }`}

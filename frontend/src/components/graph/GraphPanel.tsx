@@ -7,6 +7,7 @@
  * community-colored nodes, and interactive selection.
  */
 import { useEffect, useRef, useCallback, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import cytoscape, { type Core, type EventObject } from "cytoscape";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 
@@ -254,6 +255,9 @@ const CY_STYLE: cytoscape.Stylesheet[] = [
 // Component
 // ---------------------------------------------------------------------------
 export default function GraphPanel() {
+  const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const cyRef = useRef<Core | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
@@ -261,6 +265,8 @@ export default function GraphPanel() {
     label: string;
     community: string;
     type: string;
+    influenceScore: number;
+    connections: number;
     x: number;
     y: number;
   } | null>(null);
@@ -326,6 +332,7 @@ export default function GraphPanel() {
     cy.on("tap", "node", (evt: EventObject) => {
       const node = evt.target;
       setSelectedAgent(node.data("id") as string);
+      navigateRef.current(`/agents/${node.data("id")}`);
     });
 
     // --- Click background: deselect ---
@@ -345,6 +352,8 @@ export default function GraphPanel() {
           COMMUNITIES.find((c) => c.id === node.data("community"))?.name ??
           "Unknown",
         type: node.data("agent_type") as string,
+        influenceScore: node.data("influence_score") as number,
+        connections: node.connectedEdges().length,
         x: pos.x,
         y: pos.y,
       });
@@ -384,6 +393,7 @@ export default function GraphPanel() {
   return (
     <div
       data-testid="graph-panel"
+      aria-label="Social network graph visualization"
       className="relative w-full h-full overflow-hidden"
       style={{
         background:
@@ -421,7 +431,7 @@ export default function GraphPanel() {
       </div>
 
       {/* Cascade Badge */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+      <div className="absolute bottom-20 left-6 z-10 pointer-events-none">
         <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-green-400 bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)]">
           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse-dot" />
           Cascade #47 Active
@@ -440,6 +450,12 @@ export default function GraphPanel() {
           <p className="text-xs font-semibold text-white">{hoverInfo.label}</p>
           <p className="text-[10px] text-white/60">
             {hoverInfo.community} · {hoverInfo.type}
+          </p>
+          <p className="text-[10px] text-white/60">
+            Influence: {hoverInfo.influenceScore.toFixed(2)}
+          </p>
+          <p className="text-[10px] text-white/60">
+            Connections: {hoverInfo.connections}
           </p>
         </div>
       )}
@@ -476,7 +492,7 @@ export default function GraphPanel() {
       {/* Status Bar — bottom-right */}
       <div className="absolute bottom-4 right-4 z-10 pointer-events-none">
         <span className="text-[11px] font-mono text-white/40">
-          60 FPS · {nodeCount} nodes · {edgeCount} edges · Canvas
+          60 FPS · {nodeCount} nodes · {edgeCount} edges · WebGL
         </span>
       </div>
     </div>
@@ -498,6 +514,7 @@ function GraphButton({
   return (
     <button
       title={label}
+      aria-label={label}
       onClick={onClick}
       className="w-8 h-8 flex items-center justify-center rounded-md bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors"
     >
