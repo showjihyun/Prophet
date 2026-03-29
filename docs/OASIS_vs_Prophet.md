@@ -228,3 +228,170 @@ Based on OASIS's strengths, Prophet should consider:
 - Distributed inference (vLLM cluster)
 
 **Bottom line:** Prophet is a more sophisticated simulation engine for marketing use cases. OASIS is a broader social media simulator validated at scale. Prophet's biggest gaps are scale testing and real-world validation, not architecture or features.
+
+---
+
+## 11. OASIS Tech Stack Deep Dive (from bench_mark analysis)
+
+Source: `docs/spec/bench_mark/OASIS Tech stack 분석.txt`
+
+### OASIS 4-Layer Architecture
+
+```
+[LLM / Model Layer]          → CAMEL-AI ModelFactory, OpenAI GPT-4o-mini
+        ↓
+[Agent Layer]                 → Agent Graph + Profile + 23 Actions
+        ↓
+[Simulation / Environment]    → PettingZoo-style env.step(), action batching
+        ↓
+[Data / Infrastructure]       → SQLite, asyncio, igraph
+```
+
+### Layer-by-Layer Comparison
+
+#### Layer 1: LLM / Model
+
+| Aspect | OASIS | Prophet | Gap Analysis |
+|--------|-------|---------|-------------|
+| LLM abstraction | CAMEL-AI ModelFactory | Self-built LLMAdapter pattern | Prophet has no vendor dependency, but CAMEL provides richer model switching |
+| Model switching | `ModelFactory.create(platform, type)` | `LLMAdapterRegistry.get(provider)` | Equivalent. Both support runtime model swap |
+| Embedding | OpenAI + sentence-transformers | Ollama embed (768-dim) | **OASIS has HuggingFace sentence-transformers** — richer embedding models without API cost |
+| Distributed inference | vLLM cluster support | Ollama single-node | **Gap: Prophet cannot parallelize LLM across GPUs** |
+| Cost per agent | $0.002-0.005 (GPT-4o-mini) | $0 (local SLM) or $0.002 (Claude) | **Prophet 10-50x cheaper** |
+
+**Prophet 보완 필요:**
+- `sentence-transformers` 통합으로 로컬 임베딩 품질 향상 (Ollama embed보다 정밀)
+- vLLM 또는 `text-generation-inference` 분산 추론 옵션 추가
+
+#### Layer 2: Agent System
+
+| Aspect | OASIS | Prophet | Gap Analysis |
+|--------|-------|---------|-------------|
+| Decision making | LLM function calling → action tool | 6-Layer pipeline (deterministic + LLM) | **Prophet is more structured and predictable** |
+| Agent profile | Text-based (LLM interprets freely) | 5-dim numeric vector | **Prophet is measurable and comparable** |
+| Action system | 23 actions (SNS-complete) | 12 actions (marketing-focused) | OASIS has group_chat, interview, report, search, trending |
+| RL integration | PettingZoo-style env.step() | No RL interface | **Gap: Prophet lacks RL-style experiment API** |
+| Rule engine | "LLM + Rule hybrid" (mentioned but minimal) | Full 3-Tier: SLM → Heuristic → LLM | **Prophet's rule engine is far more developed** |
+| Agent generation | `generator/` module for bulk creation | `AgentInitializer` with distribution sampling | Similar capability |
+
+**Prophet 보완 필요:**
+- Group Chat action (에이전트 간 다자 토론 — 정책 시뮬레이션에 유용)
+- Interview action (시뮬레이션 중 에이전트에게 질문 — 연구 도구)
+- PettingZoo-compatible interface (RL 연구자 생태계 접근)
+
+#### Layer 3: Simulation / Environment
+
+| Aspect | OASIS | Prophet | Gap Analysis |
+|--------|-------|---------|-------------|
+| Execution model | `env.step()` → action batching | CommunityOrchestrator → 3-Phase | **Prophet is architecturally superior** |
+| Platform fidelity | Twitter + Reddit exact replication | Platform-agnostic | By design choice, not a gap |
+| RecSys | TwHIN-BERT + HotScore + Interest-based | Weighted 5-factor formula | **OASIS's RecSys is more realistic** |
+| Time model | 24-dim activity vector, 3 min/step | Variable temporal (5 min → 4 hour) | **Prophet's adaptive model is more flexible** |
+| Reproducibility | Seed-based, same env = same result | Seed-based, deterministic | Equivalent |
+| Action batching | Built-in batch processing | asyncio.gather per community | Prophet is community-parallel, OASIS is agent-batch |
+
+**Prophet 보완 필요:**
+- TwHIN-BERT 수준의 RecSys 통합 (현재 weighted formula는 단순)
+- RL-style `env.step()` API wrapper (연구 커뮤니티 접근성)
+
+#### Layer 4: Data / Infrastructure
+
+| Aspect | OASIS | Prophet | Gap Analysis |
+|--------|-------|---------|-------------|
+| Primary DB | SQLite (`.db` file) | PostgreSQL 16 + pgvector | **Prophet is production-grade** |
+| Graph storage | igraph (in-memory) | NetworkX (in-memory) | Both in-memory. **Gap: neither scales to 1M edges on disk** |
+| Cache | None | Valkey (LLM response cache) | **Prophet has caching** |
+| Async runtime | asyncio | asyncio | Same |
+| Visualization | `/visualization` scripts | React 18 + Cytoscape.js | **Prophet has real-time web UI** |
+| Logging | `/log` directory | PostgreSQL `llm_calls` + `simulation_events` tables | **Prophet is more structured** |
+| Graph DB | Neo4j integration (optional) | None | **Gap: Prophet has no graph DB option for large-scale** |
+| Distributed | None (single process) | None (Docker Compose, single server) | Both single-server |
+
+**Prophet 보완 필요:**
+- Neo4j 또는 graph DB 옵션 (NetworkX 한계: 100K+ edges에서 메모리 병목)
+- Ray 또는 Celery 분산 처리 (현재 단일 프로세스)
+
+---
+
+## 12. Gap Analysis Summary — What Prophet Must Build
+
+### CRITICAL (blocks commercial viability)
+
+| # | Gap | OASIS Has | Prophet Status | Effort | Impact |
+|---|-----|-----------|----------------|--------|--------|
+| G1 | **10K+ agent scale test** | 1M agents (27x A100) | 200 agents tested | MED | Without scale proof, enterprise customers won't trust it |
+| G2 | **Real data validation** | Twitter15/16 NRMSE 30% | No validation | HIGH | Academic credibility + sales proof |
+| G3 | **Distributed inference** | vLLM cluster | Ollama single-node | HIGH | Bottleneck at 10K+ agents |
+
+### HIGH (significant competitive advantage)
+
+| # | Gap | OASIS Has | Prophet Status | Effort | Impact |
+|---|-----|-----------|----------------|--------|--------|
+| G4 | **sentence-transformers** | HuggingFace local embeddings | Ollama embed only | LOW | Better embedding quality, no API cost |
+| G5 | **Graph DB option** | Neo4j integration | NetworkX only | HIGH | Memory limit at 100K+ edges |
+| G6 | **Group Chat / Discussion** | create_group, send_to_group | Not implemented | MED | Policy simulation, focus group simulation |
+| G7 | **RL-style env.step() API** | PettingZoo interface | Not implemented | MED | Research community adoption |
+
+### MEDIUM (nice-to-have differentiation)
+
+| # | Gap | OASIS Has | Prophet Status | Effort | Impact |
+|---|-----|-----------|----------------|--------|--------|
+| G8 | **Interview Action** | Agent interrogation mid-sim | Not implemented | LOW | Research tool |
+| G9 | **TwHIN-BERT RecSys** | Real Twitter rec model | Weighted formula | MED | More realistic content exposure |
+| G10 | **Ray / Celery distribution** | Mentioned as future | Celery Monte Carlo only | HIGH | Multi-server scale |
+| G11 | **Action batching** | Built-in batch processing | Per-agent sequential | MED | Throughput optimization |
+
+### NOT NEEDED (Prophet is better by design)
+
+| Aspect | Why Not Needed |
+|--------|---------------|
+| Platform-specific simulation | Prophet is intentionally platform-agnostic for marketing versatility |
+| All 23 SNS actions | 12 marketing actions cover the use case. Adding `search` and `trending` might help |
+| Content moderation | Not core to marketing simulation |
+| CAMEL-AI dependency | Self-built adapter pattern gives more control |
+| SQLite | PostgreSQL + pgvector is strictly better |
+
+---
+
+## 13. Recommended Implementation Roadmap
+
+```
+Phase 8: Scale & Validation
+├── G1: Scale test 10K agents (optimize CommunityOrchestrator, batch processing)
+├── G4: sentence-transformers integration (replace Ollama embed)
+├── G11: Action batching in CommunityOrchestrator
+└── G2: Twitter15/16 validation dataset
+
+Phase 9: Research API
+├── G7: PettingZoo-compatible env.step() wrapper
+├── G8: Interview action (query agent mid-simulation)
+├── G6: Group chat / multi-agent discussion
+└── G9: TwHIN-BERT RecSys option
+
+Phase 10: Infrastructure Scale
+├── G3: vLLM / text-generation-inference distributed inference
+├── G5: Neo4j graph DB option (alternative to NetworkX)
+└── G10: Ray / Celery distribution for multi-server
+```
+
+---
+
+## 14. Final Verdict
+
+Prophet has **architectural superiority** over OASIS in 6 key areas:
+1. Cost control (3-Tier: 10-50x cheaper)
+2. Predictability (mathematical diffusion models)
+3. Community modeling (CommunityOrchestrator + BridgePropagator)
+4. Agent cognition (6-Layer vs single LLM call)
+5. User experience (full-stack web app)
+6. Marketing analytics (cascade detection, Monte Carlo, KPIs)
+
+OASIS has **infrastructure superiority** in 3 areas:
+1. Scale (proven 1M, Prophet needs to prove 10K+)
+2. Validation (Twitter15/16, Prophet has none)
+3. Ecosystem (PettingZoo, CAMEL-AI, sentence-transformers)
+
+**The gap is not in design or architecture. It's in scale proof and validation data.**
+Prophet's 3-Phase CommunityOrchestrator is architecturally prepared for 10K+ agents.
+The bottleneck is infrastructure (distributed inference, graph DB) and validation (real data comparison).
+Both are solvable engineering problems, not design problems.
