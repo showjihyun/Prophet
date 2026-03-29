@@ -10,7 +10,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.deps import get_orchestrator
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_orchestrator, get_session, get_persistence
+from app.engine.simulation.persistence import SimulationPersistence
 from app.api.schemas import (
     CreateSimulationRequest,
     EngineControlRequest,
@@ -114,6 +117,8 @@ def _require_status(state: Any, *allowed: SimulationStatus) -> None:
 async def create_simulation(
     body: CreateSimulationRequest,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
 ) -> SimulationResponse:
     """Create a new simulation run.
     SPEC: docs/spec/06_API_SPEC.md#post-simulations
@@ -158,6 +163,10 @@ async def create_simulation(
     )
 
     state = orchestrator.create_simulation(config)
+
+    # Persist to DB (fire-and-forget, does not block response)
+    edges = list(state.network.graph.edges(data=True)) if state.network else []
+    await persist.persist_creation(session, state.simulation_id, config, state.agents, edges)
 
     return SimulationResponse(
         simulation_id=str(state.simulation_id),
@@ -230,6 +239,8 @@ async def get_simulation(
 async def start_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
 ) -> StatusResponse:
     """Start the simulation.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstart
@@ -239,6 +250,7 @@ async def start_simulation(
     now = datetime.now(timezone.utc)
     sim_uuid = _sim_id_to_uuid(simulation_id)
     orchestrator.start(sim_uuid)
+    await persist.persist_status(session, sim_uuid, "running")
     return StatusResponse(status=SimulationStatus.RUNNING, started_at=now)
 
 
@@ -246,6 +258,8 @@ async def start_simulation(
 async def step_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
 ) -> StepResultResponse:
     """Execute exactly one step.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstep
@@ -255,6 +269,10 @@ async def step_simulation(
 
     sim_uuid = _sim_id_to_uuid(simulation_id)
     result = await orchestrator.run_step(sim_uuid)
+
+    # Persist step result + status update
+    await persist.persist_step(session, sim_uuid, result)
+    await persist.persist_status(session, sim_uuid, state.status, state.current_step)
 
     return StepResultResponse(
         step=result.step,
@@ -269,6 +287,8 @@ async def step_simulation(
 async def pause_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
 ) -> StatusResponse:
     """Pause after current step completes.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idpause
@@ -277,6 +297,7 @@ async def pause_simulation(
     _require_status(state, SimulationStatus.RUNNING)
     sim_uuid = _sim_id_to_uuid(simulation_id)
     await orchestrator.pause(sim_uuid)
+    await persist.persist_status(session, sim_uuid, "paused", state.current_step)
     return StatusResponse(
         status=SimulationStatus.PAUSED, current_step=state.current_step,
     )
@@ -301,6 +322,8 @@ async def resume_simulation(
 async def stop_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
 ) -> StatusResponse:
     """Stop and mark as completed.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstop
@@ -312,8 +335,9 @@ async def stop_simulation(
         SimulationStatus.PAUSED,
         SimulationStatus.CONFIGURED,
     )
-    # Directly set status (orchestrator doesn't have a stop method)
     state.status = "completed"
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+    await persist.persist_status(session, sim_uuid, "completed")
     return StatusResponse(status=SimulationStatus.COMPLETED)
 
 
