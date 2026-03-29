@@ -65,6 +65,60 @@ export interface SettingsUpdateRequest {
   simulation?: Partial<SettingsSimulation>;
 }
 
+/** Agent summary from list endpoint. @spec docs/spec/06_API_SPEC.md#get-agents */
+export interface AgentSummary {
+  agent_id: string;
+  community_id: string;
+  agent_type: string;
+  action: string;
+  adopted: boolean;
+  influence_score: number;
+  belief: number;
+}
+
+/** Full agent detail. @spec docs/spec/06_API_SPEC.md#get-agents-agent_id */
+export interface AgentDetail extends AgentSummary {
+  personality: Record<string, number>;
+  emotion: Record<string, number>;
+  memories: MemoryRecord[];
+}
+
+/** Agent memory record. */
+export interface MemoryRecord {
+  memory_type: string;
+  content: string;
+  timestamp: number;
+  importance: number;
+  source_agent_id?: string;
+}
+
+/** Community info. @spec docs/spec/06_API_SPEC.md#get-communities */
+export interface CommunityInfo {
+  community_id: string;
+  name: string;
+  size: number;
+  adoption_rate: number;
+  mean_belief: number;
+  sentiment_variance: number;
+  dominant_action: string;
+}
+
+/** Cytoscape graph format. @spec docs/spec/06_API_SPEC.md#get-network */
+export interface CytoscapeGraph {
+  nodes: Array<{ data: Record<string, unknown> }>;
+  edges: Array<{ data: Record<string, unknown> }>;
+}
+
+/** Network metrics. @spec docs/spec/06_API_SPEC.md#get-network-metrics */
+export interface NetworkMetrics {
+  clustering_coefficient: number;
+  avg_path_length: number;
+  modularity: number;
+  density: number;
+  total_nodes: number;
+  total_edges: number;
+}
+
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api/v1`
   : "http://localhost:8000/api/v1";
@@ -106,18 +160,29 @@ export const apiClient = {
       request<Record<string, unknown>>("/simulations/recommend-engine", { method: "POST", body: JSON.stringify(body) }),
   },
   agents: {
-    list: (simId: string) => request(`/simulations/${simId}/agents`),
+    list: (simId: string, params?: { community_id?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.community_id) q.set("community_id", params.community_id);
+      if (params?.limit) q.set("limit", String(params.limit));
+      if (params?.offset) q.set("offset", String(params.offset));
+      const qs = q.toString();
+      return request<{ items: AgentSummary[]; total: number }>(`/simulations/${simId}/agents${qs ? `?${qs}` : ""}`);
+    },
     get: (simId: string, agentId: string) =>
-      request(`/simulations/${simId}/agents/${agentId}`),
+      request<AgentDetail>(`/simulations/${simId}/agents/${agentId}`),
     modify: (simId: string, agentId: string, body: Record<string, unknown>) =>
-      request<Record<string, unknown>>(`/simulations/${simId}/agents/${agentId}`, { method: "PATCH", body: JSON.stringify(body) }),
+      request<AgentDetail>(`/simulations/${simId}/agents/${agentId}`, { method: "PATCH", body: JSON.stringify(body) }),
     getMemory: (simId: string, agentId: string) =>
-      request<{ memories: unknown[] }>(`/simulations/${simId}/agents/${agentId}/memory`),
+      request<{ memories: MemoryRecord[] }>(`/simulations/${simId}/agents/${agentId}/memory`),
+  },
+  communities: {
+    list: (simId: string) =>
+      request<{ communities: CommunityInfo[] }>(`/simulations/${simId}/communities/`),
   },
   network: {
-    get: (simId: string) => request(`/simulations/${simId}/network?format=cytoscape`),
+    get: (simId: string) => request<CytoscapeGraph>(`/simulations/${simId}/network?format=cytoscape`),
     getMetrics: (simId: string) =>
-      request<Record<string, unknown>>(`/simulations/${simId}/network/metrics`),
+      request<NetworkMetrics>(`/simulations/${simId}/network/metrics`),
   },
   llm: {
     getStats: (simId: string) => request(`/simulations/${simId}/llm/stats`),

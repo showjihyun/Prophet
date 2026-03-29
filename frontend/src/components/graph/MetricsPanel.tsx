@@ -5,8 +5,10 @@
  * Real-time metrics: Active Agents, Sentiment Distribution,
  * Polarization Index, Cascade Stats, Top Influencers.
  */
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSimulationStore } from "../../store/simulationStore";
+import { apiClient, type AgentSummary } from "../../api/client";
 
 const COMMUNITY_COLORS: Record<string, string> = {
   Alpha: "var(--community-alpha)",
@@ -35,14 +37,35 @@ const MOCK_METRICS = {
   cascadeWidth: 847,
 };
 
+const COMMUNITY_ID_TO_NAME: Record<string, string> = {
+  A: "Alpha", B: "Beta", C: "Gamma", D: "Delta", E: "Bridge",
+};
+
 export default function MetricsPanel() {
   const navigate = useNavigate();
   const steps = useSimulationStore((s) => s.steps);
+  const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
+  const [topInfluencers, setTopInfluencers] = useState(MOCK_TOP_INFLUENCERS);
+
+  // Fetch top influencers from API
+  useEffect(() => {
+    if (!simulationId) return;
+    apiClient.agents.list(simulationId, { limit: 200 }).then((res) => {
+      const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score).slice(0, 4);
+      setTopInfluencers(
+        sorted.map((a) => ({
+          id: a.agent_id,
+          community: COMMUNITY_ID_TO_NAME[a.community_id] ?? a.community_id,
+          score: Math.round(a.influence_score * 100 * 10) / 10,
+        })),
+      );
+    }).catch(() => { /* keep mock */ });
+  }, [simulationId, latestStep?.step]);
 
   // Derive metrics from latest step or fall back to mock
   const activeAgents = latestStep?.total_adoption ?? MOCK_METRICS.activeAgents;
-  const totalAgents = MOCK_METRICS.totalAgents;
+  const totalAgents = simulationId ? (latestStep ? Math.round(latestStep.total_adoption / Math.max(latestStep.adoption_rate, 0.01)) : MOCK_METRICS.totalAgents) : MOCK_METRICS.totalAgents;
   const activePercent = ((activeAgents / totalAgents) * 100).toFixed(1);
 
   // Sentiment: derive from mean_sentiment [-1, 1] range
@@ -63,8 +86,6 @@ export default function MetricsPanel() {
   const cascadeWidth = latestStep
     ? Object.values(latestStep.action_distribution).reduce((a, b) => a + b, 0)
     : MOCK_METRICS.cascadeWidth;
-
-  const topInfluencers = MOCK_TOP_INFLUENCERS;
 
   return (
     <div

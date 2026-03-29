@@ -4,8 +4,10 @@
  * @spec docs/spec/ui/UI_08_INFLUENCERS_PAGINATION.md
  * @spec docs/spec/ui/UI_09_INFLUENCERS_FILTER.md
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiClient, type AgentSummary } from "../api/client";
+import { useSimulationStore } from "../store/simulationStore";
 import {
   BarChart,
   Bar,
@@ -96,9 +98,66 @@ const STATUS_STYLES: Record<string, React.CSSProperties> = {
   Idle: { backgroundColor: "var(--secondary)", color: "var(--muted-foreground)" },
 };
 
+const COMMUNITY_ID_TO_NAME: Record<string, string> = {
+  A: "Alpha", B: "Beta", C: "Gamma", D: "Delta", E: "Bridge",
+};
+
+function agentToInfluencer(a: AgentSummary, rank: number): Influencer {
+  const community = COMMUNITY_ID_TO_NAME[a.community_id] ?? a.community_id;
+  return {
+    rank,
+    agentId: a.agent_id,
+    community,
+    communityColor: COMMUNITY_COLORS[community] ?? "var(--muted-foreground)",
+    influenceScore: Math.round(a.influence_score * 1000) / 10,
+    sentiment: a.belief > 0.1 ? "Positive" : a.belief < -0.1 ? "Negative" : "Neutral",
+    chains: 0,
+    connections: 0,
+    status: a.action !== "idle" ? "Active" : "Idle",
+  };
+}
+
 export default function TopInfluencersPage() {
   const navigate = useNavigate();
+  const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const [search, setSearch] = useState("");
+  const [influencers, setInfluencers] = useState<Influencer[]>(MOCK_INFLUENCERS);
+  const [distributionData, setDistributionData] = useState(DISTRIBUTION_DATA);
+  const [stats, setStats] = useState({ total: 120, avg: 72.4, active: 98, bridges: 23 });
+
+  // Fetch real agents from API
+  useEffect(() => {
+    if (!simulationId) return;
+    apiClient.agents.list(simulationId, { limit: 200 }).then((res) => {
+      const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score);
+      setInfluencers(sorted.map((a, i) => agentToInfluencer(a, i + 1)));
+
+      // Compute distribution
+      const commCounts: Record<string, number> = {};
+      for (const a of res.items) {
+        const name = COMMUNITY_ID_TO_NAME[a.community_id] ?? a.community_id;
+        commCounts[name] = (commCounts[name] ?? 0) + 1;
+      }
+      setDistributionData(
+        Object.entries(commCounts).map(([name, value]) => ({
+          name,
+          value,
+          fill: COMMUNITY_COLORS[name] ?? "var(--muted-foreground)",
+        })),
+      );
+
+      // Compute stats
+      const scores = res.items.map((a) => a.influence_score * 100);
+      const activeCount = res.items.filter((a) => a.action !== "idle").length;
+      const bridgeCount = res.items.filter((a) => a.agent_type === "bridge").length;
+      setStats({
+        total: res.total,
+        avg: scores.length ? Math.round((scores.reduce((s, v) => s + v, 0) / scores.length) * 10) / 10 : 0,
+        active: activeCount,
+        bridges: bridgeCount,
+      });
+    }).catch(() => { /* keep mock */ });
+  }, [simulationId]);
 
   // Pagination state (UI-08)
   const [currentPage, setCurrentPage] = useState(1);
@@ -110,7 +169,7 @@ export default function TopInfluencersPage() {
 
   // Apply search + filters
   const filtered = useMemo(() => {
-    return MOCK_INFLUENCERS.filter((i) => {
+    return influencers.filter((i) => {
       // Search
       if (
         search &&
@@ -131,7 +190,7 @@ export default function TopInfluencersPage() {
       if (i.connections < filters.minConnections) return false;
       return true;
     });
-  }, [search, filters]);
+  }, [search, filters, influencers]);
 
   // Pagination derived values
   const total = filtered.length;
@@ -193,10 +252,10 @@ export default function TopInfluencersPage() {
       <div className="flex-1 p-6 flex flex-col gap-6 overflow-auto">
         {/* Summary Stats — updated per UI-08 SPEC */}
         <div className="grid grid-cols-4 gap-4">
-          <StatCard label="Total Influencers" value="120" icon={<CrownIcon />} />
-          <StatCard label="Avg Score" value="72.4" icon={<BarChartIcon />} />
-          <StatCard label="Active Influencers" value="98" icon={<UsersIcon />} />
-          <StatCard label="Cross-Community Bridges" value="23" icon={<GitBranchIcon />} />
+          <StatCard label="Total Influencers" value={String(stats.total)} icon={<CrownIcon />} />
+          <StatCard label="Avg Score" value={String(stats.avg)} icon={<BarChartIcon />} />
+          <StatCard label="Active Influencers" value={String(stats.active)} icon={<UsersIcon />} />
+          <StatCard label="Cross-Community Bridges" value={String(stats.bridges)} icon={<GitBranchIcon />} />
         </div>
 
         {/* Content area: table + sidebar */}
@@ -401,7 +460,7 @@ export default function TopInfluencersPage() {
               </h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart
-                  data={DISTRIBUTION_DATA}
+                  data={distributionData}
                   layout="vertical"
                   margin={{ top: 0, right: 8, bottom: 0, left: 0 }}
                 >
@@ -419,7 +478,7 @@ export default function TopInfluencersPage() {
                     ]}
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                    {DISTRIBUTION_DATA.map((entry) => (
+                    {distributionData.map((entry) => (
                       <Cell key={entry.name} fill={entry.fill} />
                     ))}
                   </Bar>

@@ -2,8 +2,10 @@
  * AgentDetailPage — Agent profile, personality, activity chart, and interactions.
  * @spec docs/spec/ui/UI_04_AGENT_DETAIL.md
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { apiClient, type AgentDetail } from "../api/client";
+import { useSimulationStore } from "../store/simulationStore";
 import {
   LineChart,
   Line,
@@ -176,15 +178,54 @@ const MOCK_MESSAGES: MessageItem[] = [
 
 const TABS = ["Activity", "Connections", "Messages"] as const;
 
+const COMMUNITY_ID_TO_NAME: Record<string, { name: string; color: string }> = {
+  A: { name: "Alpha", color: "var(--community-alpha)" },
+  B: { name: "Beta", color: "var(--community-beta)" },
+  C: { name: "Gamma", color: "var(--community-gamma)" },
+  D: { name: "Delta", color: "var(--community-delta)" },
+  E: { name: "Bridge", color: "var(--community-bridge)" },
+};
+
+function apiToAgent(a: AgentDetail) {
+  const comm = COMMUNITY_ID_TO_NAME[a.community_id] ?? { name: a.community_id, color: "var(--muted-foreground)" };
+  return {
+    id: a.agent_id,
+    agentNumber: a.agent_id.replace(/\D/g, "").slice(-4) || a.agent_id.slice(0, 6),
+    community: comm.name,
+    communityColor: comm.color,
+    influence: Math.round(a.influence_score * 1000) / 10,
+    connections: 0,
+    subscribers: 0,
+    trust: a.emotion?.trust ?? 0,
+    personality: Object.fromEntries(
+      Object.entries(a.personality ?? {}).map(([k, v]) => [k.charAt(0).toUpperCase() + k.slice(1), Math.round(v * 100)]),
+    ),
+    memorySummary: a.memories.length > 0
+      ? a.memories.slice(0, 3).map((m) => m.content ?? String(m)).join(" | ")
+      : MOCK_AGENT.memorySummary,
+  };
+}
+
 export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
+  const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Activity");
   const [interveneOpen, setInterveneOpen] = useState(false);
   const [connSearch, setConnSearch] = useState("");
   const [msgFilter, setMsgFilter] = useState("all");
 
-  const agent = { ...MOCK_AGENT, id: agentId ?? MOCK_AGENT.id };
+  const [agent, setAgent] = useState({ ...MOCK_AGENT, id: agentId ?? MOCK_AGENT.id });
+
+  // Fetch real agent data from API
+  useEffect(() => {
+    if (!simulationId || !agentId) return;
+    apiClient.agents.get(simulationId, agentId).then((res) => {
+      setAgent(apiToAgent(res));
+    }).catch(() => {
+      setAgent({ ...MOCK_AGENT, id: agentId });
+    });
+  }, [simulationId, agentId]);
 
   const filteredConnections = useMemo(
     () =>

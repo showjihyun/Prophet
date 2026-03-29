@@ -10,6 +10,8 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import cytoscape, { type Core, type EventObject } from "cytoscape";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { apiClient, type CytoscapeGraph } from "../../api/client";
+import { useSimulationStore } from "../../store/simulationStore";
 
 // ---------------------------------------------------------------------------
 // Community palette (must match CSS vars & DESIGN.md §5)
@@ -269,12 +271,48 @@ export default function GraphPanel() {
   } | null>(null);
   const [nodeCount, setNodeCount] = useState(0);
   const [edgeCount, setEdgeCount] = useState(0);
+  const [legendItems, setLegendItems] = useState(LEGEND_ITEMS);
+
+  const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
+  const emergentEvents = useSimulationStore((s) => s.emergentEvents);
 
   // --- Initialize Cytoscape ---
   useEffect(() => {
     if (!containerRef.current) return;
+    let cancelled = false;
 
-    const mockData = generateMockGraphData();
+    async function loadGraph() {
+      let graphData: CytoscapeGraph;
+      try {
+        if (simulationId) {
+          graphData = await apiClient.network.get(simulationId);
+        } else {
+          graphData = generateMockGraphData();
+        }
+      } catch {
+        graphData = generateMockGraphData();
+      }
+      if (cancelled || !containerRef.current) return;
+
+      // Compute legend from real data
+      const commCounts: Record<string, number> = {};
+      for (const n of graphData.nodes) {
+        const cid = (n.data.community as string) ?? "?";
+        commCounts[cid] = (commCounts[cid] ?? 0) + 1;
+      }
+      setLegendItems(
+        COMMUNITIES.map((c) => ({
+          name: c.name,
+          color: c.color,
+          count: String(commCounts[c.id] ?? 0),
+        })),
+      );
+
+      initCytoscape(graphData);
+    }
+
+    function initCytoscape(graphData: CytoscapeGraph) {
+      if (!containerRef.current) return;
 
     const cy = cytoscape({
       container: containerRef.current,
@@ -363,12 +401,18 @@ export default function GraphPanel() {
     });
 
     cyRef.current = cy;
+    }
+
+    loadGraph();
 
     return () => {
-      cy.destroy();
-      cyRef.current = null;
+      cancelled = true;
+      if (cyRef.current) {
+        cyRef.current.destroy();
+        cyRef.current = null;
+      }
     };
-  }, []);
+  }, [simulationId]);
 
   // --- Zoom controls ---
   const handleZoomIn = useCallback(() => {
@@ -428,12 +472,14 @@ export default function GraphPanel() {
       </div>
 
       {/* Cascade Badge */}
-      <div className="absolute bottom-20 left-6 z-10 pointer-events-none">
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-green-400 bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)]">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse-dot" />
-          Cascade #47 Active
-        </span>
-      </div>
+      {emergentEvents.length > 0 && (
+        <div className="absolute bottom-20 left-6 z-10 pointer-events-none">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--sentiment-positive)] bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--sentiment-positive)] animate-pulse-dot" />
+            {emergentEvents[emergentEvents.length - 1].event_type.replace("_", " ")} detected
+          </span>
+        </div>
+      )}
 
       {/* Tooltip overlay */}
       {hoverInfo && (
@@ -469,7 +515,7 @@ export default function GraphPanel() {
       {/* Legend — bottom-left */}
       <div className="absolute bottom-4 left-4 z-10 bg-black/40 rounded-lg p-3 backdrop-blur-sm">
         <div className="flex flex-col gap-1.5">
-          {LEGEND_ITEMS.map((item) => (
+          {legendItems.map((item) => (
             <div key={item.name} className="flex items-center gap-2">
               <span
                 className="w-2 h-2 rounded-full shrink-0"

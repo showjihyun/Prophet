@@ -2,9 +2,12 @@
  * CommunitiesDetailPage — Communities overview with cards and connection matrix.
  * @spec docs/spec/ui/UI_02_COMMUNITIES_DETAIL.md
  */
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
+import { apiClient, type CommunityInfo } from "../api/client";
+import { useSimulationStore } from "../store/simulationStore";
 
 const COMMUNITIES = [
   {
@@ -101,9 +104,47 @@ const emotionColors: Record<string, string> = {
   excitement: "var(--community-delta)",
 };
 
+const COMMUNITY_META: Record<string, { name: string; color: string }> = {
+  A: { name: "Alpha Community", color: "var(--community-alpha)" },
+  B: { name: "Beta Community", color: "var(--community-beta)" },
+  C: { name: "Gamma Community", color: "var(--community-gamma)" },
+  D: { name: "Delta Community", color: "var(--community-delta)" },
+  E: { name: "Bridge Community", color: "var(--community-bridge)" },
+};
+
+function apiToLocal(c: CommunityInfo): typeof COMMUNITIES[number] {
+  const meta = COMMUNITY_META[c.community_id] ?? { name: c.name || c.community_id, color: "var(--muted-foreground)" };
+  const sentPos = Math.round(Math.max(0, c.mean_belief) * 100);
+  const sentNeg = Math.round(Math.max(0, -c.mean_belief) * 100);
+  return {
+    id: c.community_id.toLowerCase(),
+    name: meta.name,
+    color: meta.color,
+    agents: c.size,
+    sentiment: { positive: sentPos, neutral: 100 - sentPos - sentNeg, negative: sentNeg },
+    influencers: [],
+    emotions: { interest: 25, trust: 25, skepticism: 25, excitement: 25 },
+    status: c.adoption_rate > 0.6 ? "Very High" as const : c.adoption_rate > 0.3 ? "High" as const : c.adoption_rate > 0.1 ? "Medium" as const : "Low" as const,
+  };
+}
+
 export default function CommunitiesDetailPage() {
   const navigate = useNavigate();
-  const totalAgents = COMMUNITIES.reduce((s, c) => s + c.agents, 0);
+  const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
+  const latestStep = useSimulationStore((s) => s.steps.length > 0 ? s.steps[s.steps.length - 1] : null);
+  const [communities, setCommunities] = useState(COMMUNITIES);
+
+  useEffect(() => {
+    if (!simulationId) return;
+    apiClient.communities.list(simulationId).then((res) => {
+      if (res.communities.length > 0) {
+        setCommunities(res.communities.map(apiToLocal));
+      }
+    }).catch(() => { /* keep mock */ });
+  }, [simulationId, latestStep?.step]);
+
+  const totalAgents = communities.reduce((s, c) => s + c.agents, 0);
+  const avgSentiment = latestStep?.mean_sentiment ?? 0.72;
 
   return (
     <div
@@ -122,7 +163,7 @@ export default function CommunitiesDetailPage() {
         <div className="grid grid-cols-4 gap-4">
           <StatCard
             label="Total Communities"
-            value={5}
+            value={communities.length}
             icon={<UsersIcon />}
           />
           <StatCard
@@ -132,21 +173,19 @@ export default function CommunitiesDetailPage() {
           />
           <StatCard
             label="Active Interactions"
-            value="24,891"
+            value={latestStep ? Object.values(latestStep.action_distribution).reduce((a, b) => a + b, 0).toLocaleString() : "—"}
             icon={<MessageIcon />}
           />
           <StatCard
             label="Avg Sentiment"
-            value="+0.72"
-            change="+3% from yesterday"
-            changeType="positive"
+            value={`${avgSentiment >= 0 ? "+" : ""}${avgSentiment.toFixed(2)}`}
             icon={<TrendUpIcon />}
           />
         </div>
 
         {/* Community Cards Grid */}
         <div className="grid grid-cols-3 gap-4">
-          {COMMUNITIES.map((community) => (
+          {communities.map((community) => (
             <div
               key={community.id}
               className="interactive bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-shadow cursor-pointer"
@@ -273,7 +312,7 @@ export default function CommunitiesDetailPage() {
               <thead>
                 <tr>
                   <th className="w-24" />
-                  {COMMUNITIES.map((c) => (
+                  {communities.map((c) => (
                     <th
                       key={c.id}
                       className="text-xs font-medium text-[var(--muted-foreground)] text-center p-2"
@@ -290,7 +329,7 @@ export default function CommunitiesDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {COMMUNITIES.map((row) => (
+                {communities.map((row) => (
                   <tr key={row.id}>
                     <td className="text-xs font-medium text-[var(--muted-foreground)] p-2">
                       <span className="flex items-center gap-1">
@@ -301,7 +340,7 @@ export default function CommunitiesDetailPage() {
                         {row.name.split(" ")[0]}
                       </span>
                     </td>
-                    {COMMUNITIES.map((col) => {
+                    {communities.map((col) => {
                       const strength =
                         CONNECTION_MATRIX[row.id]?.[col.id] ?? 0;
                       const size = Math.max(8, Math.round(strength * 24));
