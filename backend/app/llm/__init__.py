@@ -28,6 +28,7 @@ from app.llm.cache import LLMResponseCache
 from app.llm.registry import LLMAdapterRegistry, LLMProviderNotFoundError
 from app.llm.quota import LLMQuotaManager
 from app.llm.engine_control import EngineController
+from app.llm.gateway import InMemoryLLMCache, VectorLLMCache, ModelRouter, LLMGateway
 
 __all__ = [
     # Schema / Data types
@@ -60,4 +61,9 @@ __all__ = [
     "LLMAdapterRegistry",
     "LLMQuotaManager",
     "EngineController",
+    # Gateway
+    "InMemoryLLMCache",
+    "VectorLLMCache",
+    "ModelRouter",
+    "LLMGateway",
 ]

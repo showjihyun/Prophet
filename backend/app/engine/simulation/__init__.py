@@ -16,6 +16,7 @@ from app.engine.simulation.orchestrator import SimulationOrchestrator, Simulatio
 from app.engine.simulation.step_runner import StepRunner
 from app.engine.simulation.metric_collector import MetricCollector
 from app.engine.simulation.monte_carlo import MonteCarloRunner
+from app.engine.simulation.event_activation import EventDrivenActivation
 from app.engine.simulation.exceptions import (
     SimulationStepError,
     SimulationCapacityError,
@@ -49,4 +50,6 @@ __all__ = [
     "InvalidStateError",
     "StepNotFoundError",
     "DBPersistenceError",
+    # Event-driven activation
+    "EventDrivenActivation",
 ]
