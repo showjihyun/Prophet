@@ -92,6 +92,9 @@ class SimulationOrchestrator:
     for simulations. Uses in-memory state for Phase 6.
     """
 
+    MAX_SIMULATIONS = 50
+    SIMULATION_TTL_SECONDS = 86400  # 24 hours
+
     def __init__(self, llm_adapter=None, slm_adapter=None) -> None:
         """Initialize the orchestrator.
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
@@ -107,6 +110,39 @@ class SimulationOrchestrator:
         if simulation_id not in self._locks:
             self._locks[simulation_id] = asyncio.Lock()
         return self._locks[simulation_id]
+
+    # ------------------------------------------------------------------ #
+    # Eviction
+    # ------------------------------------------------------------------ #
+
+    def _cleanup_expired(self) -> None:
+        """Remove simulations older than TTL or if over max count.
+        SPEC: docs/spec/09_HARNESS_SPEC.md#memory-eviction-policy
+        """
+        from datetime import datetime as _dt, timezone as _tz
+
+        now = _dt.now(_tz.utc)
+        expired: list[UUID] = []
+        for sim_id, state in self._simulations.items():
+            created_at = getattr(state, 'created_at', None)
+            if created_at is not None:
+                age = (now - created_at).total_seconds()
+                if age > self.SIMULATION_TTL_SECONDS:
+                    expired.append(sim_id)
+        for sim_id in expired:
+            del self._simulations[sim_id]
+            self._locks.pop(sim_id, None)
+
+        # Also enforce max count (remove oldest first)
+        if len(self._simulations) > self.MAX_SIMULATIONS:
+            sorted_sims = sorted(
+                self._simulations.keys(),
+                key=lambda k: getattr(self._simulations[k], 'created_at', _dt.min),
+            )
+            while len(self._simulations) > self.MAX_SIMULATIONS:
+                oldest = sorted_sims.pop(0)
+                del self._simulations[oldest]
+                self._locks.pop(oldest, None)
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -126,6 +162,8 @@ class SimulationOrchestrator:
         Raises:
             ValueError: empty community list
         """
+        self._cleanup_expired()
+
         if not config.communities:
             raise ValueError("communities list must not be empty")
 

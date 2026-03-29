@@ -367,8 +367,9 @@ async def inject_event(
             event_type=body.event_type,
             payload={"content": body.content, "controversy": body.controversy},
         )
-    except (ValueError, NotImplementedError, AttributeError, TypeError):
-        pass  # event injection is best-effort for now
+    except (ValueError, NotImplementedError, AttributeError, TypeError) as e:
+        import logging
+        logging.getLogger(__name__).warning(f"inject_event fallback: {e}")
 
     return InjectEventResponse(event_id=event_id, effective_step=effective_step)
 

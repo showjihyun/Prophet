@@ -24,6 +24,7 @@ from app.engine.diffusion.schema import (
 from app.engine.diffusion.exposure_model import ExposureModel
 from app.engine.diffusion.sentiment_model import SentimentModel
 from app.engine.network.schema import CommunityConfig
+from app.engine.simulation.event_activation import EventDrivenActivation
 
 
 @dataclass
@@ -57,6 +58,7 @@ class CommunityOrchestrator:
         agent_node_map: dict[UUID, int],
         bridge_node_ids: set[int] | None = None,
         llm_adapter: object | None = None,
+        gateway: 'LLMGateway | None' = None,
     ):
         self.community_id = community_id
         self.community_config = community_config
@@ -64,6 +66,7 @@ class CommunityOrchestrator:
         self.subgraph = subgraph
         self.agent_node_map = agent_node_map
         self._bridge_node_ids = bridge_node_ids or set()
+        self._gateway = gateway
 
         self._agent_tick = AgentTick(llm_adapter=llm_adapter)
         self._tier_selector = TierSelector()
@@ -146,6 +149,16 @@ class CommunityOrchestrator:
                     )
                 )
 
+        # 3.5. Event-driven activation: only tick active agents
+        activation = EventDrivenActivation()
+        active_agents = activation.get_active_agents(
+            all_agents=self.agents,
+            exposure_scores={},  # will be populated from exposure model
+            base_activation_rate=0.10,
+            seed=seed,
+        )
+        active_agent_ids = {a.agent_id for a in active_agents}
+
         # 4. Build neighbor actions from previous step
         neighbor_actions_map: dict[UUID, list[NeighborAction]] = {}
         for agent in self.agents:
@@ -172,6 +185,12 @@ class CommunityOrchestrator:
         for i in range(0, len(self.agents), self.BATCH_SIZE):
             batch = self.agents[i:i + self.BATCH_SIZE]
             for agent in batch:
+                # Inactive agents keep their previous state (IGNORE action)
+                if agent.agent_id not in active_agent_ids:
+                    updated.append(agent)
+                    action_counter[agent.action.value] += 1
+                    continue
+
                 tier = tier_map.get(agent.agent_id, 1)
 
                 result: AgentTickResult = self._agent_tick.tick(
@@ -201,6 +220,10 @@ class CommunityOrchestrator:
                         outbound.append(pe)  # target not in this community
             # Yield to event loop between batches (allows other communities to progress)
             await asyncio.sleep(0)
+
+        # 5.5. Flush gateway step cache after all agent ticks
+        if self._gateway:
+            await self._gateway.flush_step_cache()
 
         # 6. Community sentiment
         sentiment = self._sentiment_model.update_community_sentiment(

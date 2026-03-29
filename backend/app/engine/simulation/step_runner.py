@@ -36,6 +36,7 @@ from app.engine.simulation.schema import (
     SimulationConfig,
     StepResult,
 )
+from app.llm.gateway import LLMGateway
 
 if TYPE_CHECKING:
     from app.engine.simulation.orchestrator import SimulationState
@@ -192,6 +193,7 @@ class StepRunner:
         self._sentiment_model = SentimentModel()
         self._cascade_detector = CascadeDetector()
         self._network_evolver = NetworkEvolver()
+        self._gateway = LLMGateway()
 
     def _build_community_orchestrators(
         self,
@@ -258,6 +260,7 @@ class StepRunner:
                 agent_node_map=comm_agent_node_map,
                 bridge_node_ids=comm_bridge_nodes,
                 llm_adapter=self._agent_tick._llm_adapter,
+                gateway=self._gateway,
             ))
 
         return orchestrators
