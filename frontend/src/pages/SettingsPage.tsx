@@ -57,6 +57,12 @@ export default function SettingsPage() {
   // Ollama models list
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
 
+  // Platform & RecSys
+  const [platforms, setPlatforms] = useState<{ name: string; display_name: string }[]>([]);
+  const [recsysAlgos, setRecsysAlgos] = useState<{ name: string }[]>([]);
+  const [platform, setPlatform] = useState("default");
+  const [recsys, setRecsys] = useState("weighted");
+
   // Test connection
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<OllamaTestResult | null>(null);
@@ -96,6 +102,8 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchOllamaModels();
+    apiClient.settings.listPlatforms().then(d => setPlatforms((d.platforms || []) as { name: string; display_name: string }[])).catch(() => {});
+    apiClient.settings.listRecsys().then(d => setRecsysAlgos((d.algorithms || []) as { name: string }[])).catch(() => {});
   }, [fetchSettings, fetchOllamaModels]);
 
   /* ---------- actions ---------- */
@@ -397,6 +405,47 @@ export default function SettingsPage() {
                 onChange={(e) => setCacheTtl(Number(e.target.value))}
                 className="w-32 h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               />
+            </div>
+          </div>
+        </section>
+
+        {/* ---- Platform Configuration ---- */}
+        <section className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 mb-6">
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
+            Platform Simulation
+          </h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--muted-foreground)] mb-1">
+                Platform
+              </label>
+              <select
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              >
+                {platforms.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.display_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[var(--muted-foreground)] mb-1">
+                RecSys Algorithm
+              </label>
+              <select
+                value={recsys}
+                onChange={(e) => setRecsys(e.target.value)}
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              >
+                {recsysAlgos.map((r) => (
+                  <option key={r.name} value={r.name}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </section>

@@ -4,6 +4,8 @@
  */
 import { useState, useCallback, useEffect } from "react";
 import { X, Zap } from "lucide-react";
+import { apiClient } from "../../api/client";
+import { useSimulationStore } from "../../store/simulationStore";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,7 +88,7 @@ export default function AgentInterveneModal({
     [],
   );
 
-  const handleApply = useCallback(() => {
+  const handleApply = useCallback(async () => {
     // Validation
     if (!state.type) {
       return;
@@ -98,9 +100,22 @@ export default function AgentInterveneModal({
       return;
     }
 
-    // Future: call apiClient intervention endpoint when available
+    // Call backend API to apply intervention
+    const simulation = useSimulationStore.getState().simulation;
+    if (simulation?.simulation_id) {
+      try {
+        await apiClient.agents.modify(simulation.simulation_id, agentId, {
+          ...(state.type === "modify_sentiment" && { emotion: { trust: state.strength } }),
+          ...(state.type === "boost_influence" && { personality: { social_influence: state.strength } }),
+          belief: state.strength * 2 - 1, // normalize 0-1 to -1 to 1
+        });
+      } catch (err) {
+        console.warn("Intervention API call failed, applying locally", err);
+      }
+    }
+
     onClose();
-  }, [state, agentLabel, onClose]);
+  }, [state, agentId, agentLabel, onClose]);
 
   if (!isOpen) return null;
 

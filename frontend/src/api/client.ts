@@ -89,14 +89,35 @@ export const apiClient = {
     pause: (id: string) => request<{ status: string }>(`/simulations/${id}/pause`, { method: "POST" }),
     resume: (id: string) => request<{ status: string }>(`/simulations/${id}/resume`, { method: "POST" }),
     stop: (id: string) => request<{ status: string }>(`/simulations/${id}/stop`, { method: "POST" }),
+    getSteps: (id: string) => request<StepResult[]>(`/simulations/${id}/steps`),
+    injectEvent: (id: string, event: { event_type: string; content: string; controversy?: number; target_communities?: string[] }) =>
+      request<{ event_id: string }>(`/simulations/${id}/inject-event`, { method: "POST", body: JSON.stringify(event) }),
+    replay: (id: string, step: number) =>
+      request<{ replay_id: string }>(`/simulations/${id}/replay/${step}`, { method: "POST" }),
+    compare: (id: string, otherId: string) =>
+      request<Record<string, unknown>>(`/simulations/${id}/compare/${otherId}`),
+    monteCarlo: (id: string, opts: { n_runs: number; llm_enabled?: boolean }) =>
+      request<{ job_id: string }>(`/simulations/${id}/monte-carlo`, { method: "POST", body: JSON.stringify(opts) }),
+    getMonteCarloJob: (id: string, jobId: string) =>
+      request<Record<string, unknown>>(`/simulations/${id}/monte-carlo/${jobId}`),
+    engineControl: (id: string, body: { slm_llm_ratio: number; slm_model?: string; budget_usd?: number }) =>
+      request<Record<string, unknown>>(`/simulations/${id}/engine-control`, { method: "POST", body: JSON.stringify(body) }),
+    recommendEngine: (body: { agent_count: number; budget_usd: number; max_steps?: number }) =>
+      request<Record<string, unknown>>("/simulations/recommend-engine", { method: "POST", body: JSON.stringify(body) }),
   },
   agents: {
     list: (simId: string) => request(`/simulations/${simId}/agents`),
     get: (simId: string, agentId: string) =>
       request(`/simulations/${simId}/agents/${agentId}`),
+    modify: (simId: string, agentId: string, body: Record<string, unknown>) =>
+      request<Record<string, unknown>>(`/simulations/${simId}/agents/${agentId}`, { method: "PATCH", body: JSON.stringify(body) }),
+    getMemory: (simId: string, agentId: string) =>
+      request<{ memories: unknown[] }>(`/simulations/${simId}/agents/${agentId}/memory`),
   },
   network: {
     get: (simId: string) => request(`/simulations/${simId}/network?format=cytoscape`),
+    getMetrics: (simId: string) =>
+      request<Record<string, unknown>>(`/simulations/${simId}/network/metrics`),
   },
   llm: {
     getStats: (simId: string) => request(`/simulations/${simId}/llm/stats`),
@@ -112,5 +133,7 @@ export const apiClient = {
         "/settings/test-ollama",
         { method: "POST" },
       ),
+    listPlatforms: () => request<{ platforms: unknown[] }>("/settings/platforms"),
+    listRecsys: () => request<{ algorithms: unknown[] }>("/settings/recsys"),
   },
 };
