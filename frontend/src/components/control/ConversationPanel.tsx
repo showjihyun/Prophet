@@ -111,7 +111,7 @@ export default function ConversationPanel() {
       style={{ height: "calc(var(--bottom-area-height) - var(--timeline-height))" }}
     >
       {/* Expert Agent Analysis */}
-      <div className="w-[360px] shrink-0 border-r border-[var(--border)] p-3 flex flex-col gap-2">
+      <div data-testid="expert-agent-analysis" className="w-[360px] shrink-0 border-r border-[var(--border)] p-3 flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <Brain className="w-4 h-4 text-[var(--community-delta)]" />
           <span className="text-xs font-semibold text-[var(--foreground)]">

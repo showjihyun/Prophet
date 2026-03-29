@@ -102,7 +102,7 @@ export default function ControlPanel() {
             MCASP Prophet Engine
           </span>
         </div>
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--card)]">
+        <span data-testid="status-badge" className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--card)]">
           <span
             className={`w-2 h-2 rounded-full ${
               isRunning
@@ -135,6 +135,7 @@ export default function ControlPanel() {
         </button>
 
         <select
+          data-testid="scenario-select"
           className="h-8 px-2 text-xs border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-1 focus:ring-gray-300"
           defaultValue="default"
         >
@@ -162,30 +163,34 @@ export default function ControlPanel() {
 
       {/* Right: Playback controls + Settings + Avatar */}
       <div className="flex items-center gap-1">
-        {isRunning ? (
-          <ControlButton
-            icon={<Pause className="w-4 h-4" />}
-            label="Pause"
-            onClick={handlePause}
-          />
-        ) : (
-          <ControlButton
-            icon={<Play className="w-4 h-4" />}
-            label="Play"
-            onClick={handlePlay}
-          />
-        )}
         <ControlButton
+          testId="play-btn"
+          icon={<Play className="w-4 h-4" />}
+          label="Play"
+          onClick={handlePlay}
+          hidden={isRunning}
+        />
+        <ControlButton
+          testId="pause-btn"
+          icon={<Pause className="w-4 h-4" />}
+          label="Pause"
+          onClick={handlePause}
+          hidden={!isRunning}
+        />
+        <ControlButton
+          testId="step-btn"
           icon={<SkipForward className="w-4 h-4" />}
           label="Step"
           onClick={handleStep}
         />
         <ControlButton
+          testId="reset-btn"
           icon={<RotateCcw className="w-4 h-4" />}
           label="Reset"
           onClick={handleReset}
         />
         <ControlButton
+          testId="replay-btn"
           icon={<Rewind className="w-4 h-4" />}
           label="Replay"
           onClick={() => setReplayOpen(true)}
@@ -246,16 +251,22 @@ function ControlButton({
   icon,
   label,
   onClick,
+  testId,
+  hidden,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  testId?: string;
+  hidden?: boolean;
 }) {
   return (
     <button
+      data-testid={testId}
       onClick={onClick}
       title={label}
-      className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+      aria-hidden={hidden}
+      className={`w-8 h-8 flex items-center justify-center rounded-md text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors ${hidden ? "invisible absolute" : ""}`}
     >
       {icon}
     </button>

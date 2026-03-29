@@ -45,14 +45,14 @@ export default function TimelinePanel() {
       style={{ height: "var(--timeline-height)" }}
     >
       {/* Left: Day counter */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div data-testid="timeline-controls" className="flex items-center gap-2 shrink-0">
         <span className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap">
           Day {currentStep || 47} of {maxSteps}
         </span>
       </div>
 
       {/* Center: Diffusion Wave bars */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div data-testid="diffusion-wave-chart" className="flex-1 flex flex-col min-w-0">
         <div className="text-[10px] text-[var(--muted-foreground)] font-medium mb-1">
           Diffusion Wave Timeline
         </div>
@@ -78,7 +78,7 @@ export default function TimelinePanel() {
       </div>
 
       {/* Right: Speed badge */}
-      <span className="shrink-0 text-[11px] font-medium px-2 py-1 rounded bg-[var(--secondary)] text-[var(--muted-foreground)]">
+      <span data-testid="speed-badge" className="shrink-0 text-[11px] font-medium px-2 py-1 rounded bg-[var(--secondary)] text-[var(--muted-foreground)]">
         {speed}x Speed
       </span>
     </div>

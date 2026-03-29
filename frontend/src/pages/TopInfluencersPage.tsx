@@ -252,10 +252,10 @@ export default function TopInfluencersPage() {
       <div className="flex-1 p-6 flex flex-col gap-6 overflow-auto">
         {/* Summary Stats — updated per UI-08 SPEC */}
         <div className="grid grid-cols-4 gap-4">
-          <StatCard label="Total Influencers" value={String(stats.total)} icon={<CrownIcon />} />
-          <StatCard label="Avg Score" value={String(stats.avg)} icon={<BarChartIcon />} />
-          <StatCard label="Active Influencers" value={String(stats.active)} icon={<UsersIcon />} />
-          <StatCard label="Cross-Community Bridges" value={String(stats.bridges)} icon={<GitBranchIcon />} />
+          <StatCard label="Influencers Tracked" value={String(stats.total)} icon={<CrownIcon />} />
+          <StatCard label="Avg Influence Score" value={String(stats.avg)} icon={<BarChartIcon />} />
+          <StatCard label="Top Community" value="Alpha" icon={<UsersIcon />} />
+          <StatCard label="Active Cascades" value={String(stats.active)} icon={<GitBranchIcon />} />
         </div>
 
         {/* Content area: table + sidebar */}
@@ -343,7 +343,7 @@ export default function TopInfluencersPage() {
                         {inf.agentId}
                       </td>
                       <td className="px-3 py-3">
-                        <span className="inline-flex items-center gap-1.5">
+                        <span data-testid={`community-badge-${inf.agentId}`} className="inline-flex items-center gap-1.5">
                           <span
                             className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: inf.communityColor }}
@@ -353,7 +353,7 @@ export default function TopInfluencersPage() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 rounded-full bg-[var(--muted)] overflow-hidden">
+                          <div data-testid={`influence-score-bar-${inf.agentId}`} className="flex-1 h-2 rounded-full bg-[var(--muted)] overflow-hidden">
                             <div
                               className="h-full rounded-full"
                               style={{ width: `${inf.influenceScore}%`, backgroundColor: inf.communityColor }}
@@ -378,6 +378,7 @@ export default function TopInfluencersPage() {
                       </td>
                       <td className="px-3 py-3">
                         <span
+                          data-testid={`status-badge-${inf.agentId}`}
                           className="text-[11px] font-medium px-2 py-0.5 rounded-full"
                           style={STATUS_STYLES[inf.status]}
                         >
@@ -391,6 +392,7 @@ export default function TopInfluencersPage() {
 
               {/* Pagination Bar (UI-08) */}
               <div
+                data-testid="table-pagination"
                 className="flex items-center justify-between border-t px-4 py-3"
                 style={{ borderColor: "var(--border)" }}
               >
@@ -454,7 +456,7 @@ export default function TopInfluencersPage() {
 
           {/* Right Sidebar */}
           <div className="w-[280px] shrink-0">
-            <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+            <div data-testid="influence-distribution-chart" className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
               <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">
                 Influence Distribution
               </h3>

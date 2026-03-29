@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 interface BreadcrumbItem {
   label: string;
   href?: string;
+  testId?: string;
 }
 
 interface PageNavProps {
@@ -28,6 +29,7 @@ export default function PageNav({ breadcrumbs, actions }: PageNavProps) {
     >
       <div className="flex items-center gap-3">
         <button
+          data-testid="back-btn"
           onClick={() => navigate(-1)}
           className="flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
           aria-label="Go back"
@@ -62,6 +64,7 @@ export default function PageNav({ breadcrumbs, actions }: PageNavProps) {
                   </button>
                 ) : (
                   <span
+                    data-testid={item.testId}
                     className={
                       isLast
                         ? "text-[var(--foreground)] font-semibold"

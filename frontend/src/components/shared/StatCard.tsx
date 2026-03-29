@@ -12,6 +12,8 @@ interface StatCardProps {
   change?: string;
   changeType?: "positive" | "negative" | "neutral";
   icon?: ReactNode;
+  testId?: string;
+  changeTestId?: string;
 }
 
 const changeColors: Record<string, string> = {
@@ -26,10 +28,12 @@ export default function StatCard({
   change,
   changeType = "neutral",
   icon,
+  testId,
+  changeTestId,
 }: StatCardProps) {
   return (
     <div
-      data-testid="stat-card"
+      data-testid={testId ?? "stat-card"}
       className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4 flex flex-col gap-2 hover:scale-[1.02] transition-transform"
     >
       <div className="flex items-center justify-between">
@@ -41,6 +45,7 @@ export default function StatCard({
       </span>
       {change && (
         <span
+          data-testid={changeTestId}
           className={`text-[11px] font-medium px-2 py-0.5 rounded-full w-fit ${changeColors[changeType]}`}
         >
           {change}

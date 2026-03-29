@@ -156,6 +156,7 @@ export default function CommunitiesDetailPage() {
           { label: "Home", href: "/" },
           { label: "Communities Overview" },
         ]}
+        actions={<span className="font-semibold text-sm text-[var(--foreground)]">MCASP Prophet Engine</span>}
       />
 
       <div className="flex-1 p-6 flex flex-col gap-6 overflow-auto">
@@ -188,6 +189,7 @@ export default function CommunitiesDetailPage() {
           {communities.map((community) => (
             <div
               key={community.id}
+              data-testid={`community-card-${community.id}`}
               className="interactive bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-shadow cursor-pointer"
               style={{ borderTopColor: community.color, borderTopWidth: 3 }}
               onClick={() => navigate(`/communities/${community.id}`)}
@@ -206,7 +208,7 @@ export default function CommunitiesDetailPage() {
               </div>
 
               {/* Sentiment Bar */}
-              <div>
+              <div data-testid={`sentiment-bar-${community.id}`}>
                 <span className="text-[11px] text-[var(--muted-foreground)] font-medium">
                   Sentiment
                 </span>
@@ -229,7 +231,7 @@ export default function CommunitiesDetailPage() {
               </div>
 
               {/* Key Influencers */}
-              <div>
+              <div data-testid={`key-influencers-${community.id}`}>
                 <span className="text-[11px] text-[var(--muted-foreground)] font-medium">
                   Key Influencers
                 </span>
@@ -255,7 +257,7 @@ export default function CommunitiesDetailPage() {
               </div>
 
               {/* Emotion Distribution */}
-              <div>
+              <div data-testid={`emotion-distribution-${community.id}`}>
                 <span className="text-[11px] text-[var(--muted-foreground)] font-medium">
                   Emotion Distribution
                 </span>
@@ -294,6 +296,7 @@ export default function CommunitiesDetailPage() {
 
               {/* Status */}
               <span
+                data-testid={`activity-status-${community.id}`}
                 className={`text-[11px] font-medium px-2 py-0.5 rounded-full w-fit ${statusColors[community.status]}`}
               >
                 {community.status} Activity
@@ -308,7 +311,7 @@ export default function CommunitiesDetailPage() {
             Community Connections
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table data-testid="connections-matrix" className="w-full">
               <thead>
                 <tr>
                   <th className="w-24" />

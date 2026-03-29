@@ -63,6 +63,7 @@ export default function GlobalMetricsPage() {
             change="+2% system"
             changeType="positive"
             icon={<UsersIcon />}
+            changeTestId="total-agents-delta"
           />
           <StatCard
             label="Active Cascades"
@@ -70,6 +71,7 @@ export default function GlobalMetricsPage() {
             change="+12 today"
             changeType="positive"
             icon={<ZapIcon />}
+            changeTestId="cascades-delta"
           />
           <StatCard
             label="Polarization"
@@ -77,6 +79,7 @@ export default function GlobalMetricsPage() {
             change="+0.08 from Day 46"
             changeType="negative"
             icon={<ActivityIcon />}
+            changeTestId="polarization-delta"
           />
           <div>
             <StatCard
@@ -86,7 +89,7 @@ export default function GlobalMetricsPage() {
               changeType="neutral"
               icon={<CalendarIcon />}
             />
-            <div className="mt-2 h-1.5 rounded-full" style={{ backgroundColor: 'var(--muted)' }}>
+            <div data-testid="sim-day-progress" className="mt-2 h-1.5 rounded-full" style={{ backgroundColor: 'var(--muted)' }}>
               <div className="h-full rounded-full" style={{ width: `${(47 / 365) * 100}%`, backgroundColor: 'var(--primary)' }} />
             </div>
           </div>
@@ -95,7 +98,7 @@ export default function GlobalMetricsPage() {
         {/* Charts Area - 2 column */}
         <div className="grid grid-cols-2 gap-6">
           {/* Polarization Trend */}
-          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+          <div data-testid="polarization-trend-chart" className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
             <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">
               Polarization Trend
             </h3>
@@ -122,7 +125,7 @@ export default function GlobalMetricsPage() {
           </div>
 
           {/* Sentiment by Community */}
-          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+          <div data-testid="sentiment-community-chart" className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
             <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">
               Sentiment by Community
             </h3>
@@ -178,6 +181,7 @@ export default function GlobalMetricsPage() {
             </h3>
             <div className="space-y-3">
               <TierCard
+                testId="tier1-card"
                 tier="Tier 1: Mass SLM"
                 count="4,800 agents"
                 description="Rule-based + local SLM inference"
@@ -185,6 +189,7 @@ export default function GlobalMetricsPage() {
                 icon={<CpuIcon />}
               />
               <TierCard
+                testId="tier2-card"
                 tier="Tier 2: Semantic"
                 count="1,700 agents"
                 description="Heuristic + semantic analysis"
@@ -192,6 +197,7 @@ export default function GlobalMetricsPage() {
                 icon={<BrainIcon />}
               />
               <TierCard
+                testId="tier3-card"
                 tier="Tier 3: Elite LLM"
                 count="~0 agents"
                 description="Full LLM reasoning (Claude/GPT)"
@@ -221,24 +227,28 @@ export default function GlobalMetricsPage() {
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <CascadeStat
+                testId="avg-cascade-depth"
                 label="Avg Cascade Depth"
                 value="4.7"
                 color="var(--community-alpha)"
                 icon={<GitBranchIcon />}
               />
               <CascadeStat
+                testId="max-cascade-width"
                 label="Max Cascade Width"
                 value="128"
                 color="var(--community-beta)"
                 icon={<GitMergeIcon />}
               />
               <CascadeStat
+                testId="critical-path"
                 label="Critical Paths"
                 value="23"
                 color="var(--community-gamma)"
                 icon={<RouteIcon />}
               />
               <CascadeStat
+                testId="decay-rate"
                 label="Decay Rate"
                 value="0.12/step"
                 color="var(--community-bridge)"
@@ -260,15 +270,18 @@ function TierCard({
   description,
   color,
   icon,
+  testId,
 }: {
   tier: string;
   count: string;
   description: string;
   color: string;
   icon: React.ReactNode;
+  testId?: string;
 }) {
   return (
     <div
+      data-testid={testId}
       className="flex items-center gap-3 p-3 rounded-lg border border-[var(--border)] hover:shadow-sm transition-shadow"
       style={{ borderLeftColor: color, borderLeftWidth: 3 }}
     >
@@ -287,14 +300,16 @@ function CascadeStat({
   value,
   color,
   icon,
+  testId,
 }: {
   label: string;
   value: string;
   color: string;
   icon: React.ReactNode;
+  testId?: string;
 }) {
   return (
-    <div className="p-3 rounded-lg border border-[var(--border)] flex flex-col gap-1">
+    <div data-testid={testId} className="p-3 rounded-lg border border-[var(--border)] flex flex-col gap-1">
       <span style={{ color }}>{icon}</span>
       <span className="text-2xl font-bold text-[var(--foreground)]">{value}</span>
       <span className="text-xs text-[var(--muted-foreground)]">{label}</span>

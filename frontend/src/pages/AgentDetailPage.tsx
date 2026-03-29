@@ -254,7 +254,7 @@ export default function AgentDetailPage() {
         breadcrumbs={[
           { label: "Simulation", href: "/" },
           { label: agent.community },
-          { label: `Agent #${agent.agentNumber}` },
+          { label: `Agent #${agent.agentNumber}`, testId: "agent-breadcrumb" },
         ]}
         actions={
           <button
@@ -273,6 +273,7 @@ export default function AgentDetailPage() {
           {/* Avatar */}
           <div className="flex flex-col items-center gap-3">
             <div
+              data-testid="agent-avatar"
               className="w-20 h-20 rounded-full flex items-center justify-center text-white text-xl font-bold"
               style={{
                 backgroundColor: agent.communityColor,
@@ -281,10 +282,10 @@ export default function AgentDetailPage() {
             >
               {agent.agentNumber}
             </div>
-            <h2 className="text-2xl font-bold font-display text-[var(--foreground)]">
+            <h2 data-testid="agent-id-heading" className="text-2xl font-bold font-display text-[var(--foreground)]">
               Agent #{agent.agentNumber}
             </h2>
-            <span className="inline-flex items-center gap-1.5 text-sm bg-[var(--secondary)] px-3 py-1 rounded-full">
+            <span data-testid="community-badge" className="inline-flex items-center gap-1.5 text-sm bg-[var(--secondary)] px-3 py-1 rounded-full">
               <span
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: agent.communityColor }}
@@ -324,7 +325,7 @@ export default function AgentDetailPage() {
                   <span className="text-[13px] text-[var(--muted-foreground)] w-24 shrink-0">
                     {trait}
                   </span>
-                  <div className="flex-1 h-2 rounded-full bg-[var(--muted)] overflow-hidden">
+                  <div data-testid={`trait-bar-${trait.toLowerCase().replace(/\//g, '-')}`} className="flex-1 h-2 rounded-full bg-[var(--muted)] overflow-hidden">
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${value}%`, backgroundColor: agent.communityColor }}
@@ -343,7 +344,7 @@ export default function AgentDetailPage() {
             <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
               Memory Summary
             </h3>
-            <div className="bg-[var(--muted)] rounded-lg p-3 text-[13px] text-[var(--muted-foreground)] leading-relaxed border border-[var(--border)]">
+            <div data-testid="memory-summary" className="bg-[var(--muted)] rounded-lg p-3 text-[13px] text-[var(--muted-foreground)] leading-relaxed border border-[var(--border)]">
               {agent.memorySummary}
             </div>
           </div>
@@ -352,10 +353,12 @@ export default function AgentDetailPage() {
         {/* Right Panel - Activity & Interactions */}
         <main className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
           {/* Tab Bar */}
-          <div className="flex border-b border-[var(--border)]">
+          <div role="tablist" className="flex border-b border-[var(--border)]">
             {TABS.map((tab) => (
               <button
                 key={tab}
+                role="tab"
+                aria-selected={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 text-sm font-medium transition-colors relative ${
                   activeTab === tab
@@ -374,7 +377,7 @@ export default function AgentDetailPage() {
           {activeTab === "Activity" && (
             <>
               {/* Sentiment Over Time */}
-              <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
+              <div data-testid="sentiment-chart" className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">
                   Sentiment Over Time
                 </h3>

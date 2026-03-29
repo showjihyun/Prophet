@@ -121,6 +121,7 @@ export default function AgentInterveneModal({
 
   return (
     <div
+      data-testid="intervention-modal"
       className="fixed inset-0 z-50 flex items-center justify-center"
       role="dialog"
       aria-modal="true"
@@ -168,6 +169,7 @@ export default function AgentInterveneModal({
               Intervention Type
             </label>
             <select
+              data-testid="intervention-type-select"
               value={state.type}
               onChange={(e) => updateField("type", e.target.value)}
               className="w-full h-10 rounded-md border px-3 text-sm bg-[var(--card)]"
