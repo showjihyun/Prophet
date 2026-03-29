@@ -50,4 +50,5 @@ markers = [
     "benchmark: Performance benchmark tests",
     "integration: Requires live DB + Ollama",
     "unit: Pure unit tests, no external deps",
+    "external_data: Requires real Twitter15/16 dataset on disk",
 ]
