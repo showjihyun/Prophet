@@ -166,34 +166,32 @@ const CY_STYLE: cytoscape.Stylesheet[] = [
       "overlay-opacity": 0,
     },
   },
-  // -- Influencer --
+  // -- Influencer (glow via underlay) --
   {
     selector: 'node[agent_type = "influencer"]',
     style: {
       width: 10,
       height: 10,
-      "shadow-blur": 8,
-      "shadow-color": nodeColor as unknown as string,
-      "shadow-opacity": 0.6,
-      "shadow-offset-x": 0,
-      "shadow-offset-y": 0,
+      "underlay-color": nodeColor as unknown as string,
+      "underlay-padding": 4,
+      "underlay-opacity": 0.3,
+      "underlay-shape": "ellipse",
     },
   },
-  // -- Bridge node --
+  // -- Bridge node (red glow via underlay) --
   {
     selector: 'node[agent_type = "bridge"]',
     style: {
       width: 7,
       height: 7,
       "background-color": "#ef4444",
-      "shadow-blur": 8,
-      "shadow-color": "#ef4444",
-      "shadow-opacity": 0.5,
-      "shadow-offset-x": 0,
-      "shadow-offset-y": 0,
+      "underlay-color": "#ef4444",
+      "underlay-padding": 4,
+      "underlay-opacity": 0.25,
+      "underlay-shape": "ellipse",
     },
   },
-  // -- Selected node (green ring) --
+  // -- Selected node (green ring via border + underlay) --
   {
     selector: "node:selected",
     style: {
@@ -201,11 +199,10 @@ const CY_STYLE: cytoscape.Stylesheet[] = [
       height: 20,
       "border-width": 3,
       "border-color": "#ffffff",
-      "shadow-blur": 16,
-      "shadow-color": "#22c55e",
-      "shadow-opacity": 0.8,
-      "shadow-offset-x": 0,
-      "shadow-offset-y": 0,
+      "underlay-color": "#22c55e",
+      "underlay-padding": 8,
+      "underlay-opacity": 0.4,
+      "underlay-shape": "ellipse",
       label: "data(label)",
       "font-size": 8,
       color: "#ffffff",
@@ -311,7 +308,7 @@ export default function GraphPanel() {
       // Interaction
       minZoom: 0.2,
       maxZoom: 5,
-      wheelSensitivity: 0.3,
+      // wheelSensitivity removed — Cytoscape default (1.0) used
     });
 
     setNodeCount(cy.nodes().length);

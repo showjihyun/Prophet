@@ -153,11 +153,10 @@ const CY_STYLE: cytoscape.Stylesheet[] = [
       height: 20,
       "border-width": 1.5,
       "border-color": "#ffffff",
-      "shadow-blur": 16,
-      "shadow-color": nodeColor as unknown as string,
-      "shadow-opacity": 0.6,
-      "shadow-offset-x": 0,
-      "shadow-offset-y": 0,
+      "underlay-color": nodeColor as unknown as string,
+      "underlay-padding": 8,
+      "underlay-opacity": 0.35,
+      "underlay-shape": "ellipse",
       label: "data(label)",
       "font-size": 8,
       color: "#ffffff",
@@ -217,7 +216,7 @@ export default function EgoGraph({ agentId }: EgoGraphProps) {
       } as cytoscape.ConcentricLayoutOptions,
       minZoom: 0.3,
       maxZoom: 5,
-      wheelSensitivity: 0.3,
+      // wheelSensitivity removed — Cytoscape default (1.0) used
     });
 
     // Apply trust-based edge opacity
