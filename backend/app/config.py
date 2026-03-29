@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     anthropic_default_model: str = "claude-sonnet-4-6"
     openai_api_key: str = ""
     openai_default_model: str = "gpt-4o"
+    vllm_base_url: str = ""  # empty = not configured
+    vllm_default_model: str = "meta-llama/Llama-3.1-8B-Instruct"
+
+    # Distributed execution
+    ray_enabled: bool = False
+    ray_address: str = "auto"
+    ray_num_workers: int = 4
 
     # CORS
     cors_allow_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]

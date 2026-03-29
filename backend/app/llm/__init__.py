@@ -21,6 +21,7 @@ from app.llm.adapter import LLMAdapter
 from app.llm.ollama_client import OllamaAdapter
 from app.llm.claude_client import ClaudeAdapter
 from app.llm.openai_client import OpenAIAdapter
+from app.llm.vllm_client import VLLMAdapter
 from app.llm.slm_batch import SLMBatchInferencer
 from app.llm.prompt_builder import PromptBuilder
 from app.llm.cache import LLMResponseCache
@@ -51,6 +52,7 @@ __all__ = [
     "OllamaAdapter",
     "ClaudeAdapter",
     "OpenAIAdapter",
+    "VLLMAdapter",
     "SLMBatchInferencer",
     # Services
     "PromptBuilder",

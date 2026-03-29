@@ -38,7 +38,7 @@ class EvalResult:
     provider: str | None = None
 
 # Priority order for fallback
-_PROVIDER_PRIORITY = ["ollama", "claude", "openai"]
+_PROVIDER_PRIORITY = ["ollama", "vllm", "claude", "openai"]
 
 
 class LLMProviderNotFoundError(LLMProviderError):
