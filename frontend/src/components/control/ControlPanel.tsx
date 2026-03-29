@@ -7,6 +7,7 @@
  * Right: Play/Pause/Step/Reset/Replay + Settings + Avatar
  */
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import {
   Brain,
   Play,
@@ -16,10 +17,17 @@ import {
   Rewind,
   Settings,
   User,
+  AlertTriangle,
+  BarChart3,
+  Cpu,
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
 import ThemeToggle from '../shared/ThemeToggle';
+import InjectEventModal from '../shared/InjectEventModal';
+import ReplayModal from '../shared/ReplayModal';
+import MonteCarloModal from '../shared/MonteCarloModal';
+import EngineControlPanel from './EngineControlPanel';
 
 const SPEEDS = [1, 2, 5, 10] as const;
 
@@ -32,6 +40,11 @@ export default function ControlPanel() {
   const appendStep = useSimulationStore((s) => s.appendStep);
   const speed = useSimulationStore((s) => s.speed);
   const setSpeed = useSimulationStore((s) => s.setSpeed);
+
+  const [injectOpen, setInjectOpen] = useState(false);
+  const [replayOpen, setReplayOpen] = useState(false);
+  const [monteCarloOpen, setMonteCarloOpen] = useState(false);
+  const [engineOpen, setEngineOpen] = useState(false);
 
   const isRunning = status === "running";
 
@@ -78,7 +91,7 @@ export default function ControlPanel() {
   return (
     <div
       data-testid="control-panel"
-      className="shrink-0 flex items-center justify-between px-4 border-b border-[var(--border)] bg-[var(--card)]"
+      className="shrink-0 relative flex items-center justify-between px-4 border-b border-[var(--border)] bg-[var(--card)]"
       style={{ height: "var(--control-bar-height)" }}
     >
       {/* Left: Logo + Status */}
@@ -175,9 +188,25 @@ export default function ControlPanel() {
         <ControlButton
           icon={<Rewind className="w-4 h-4" />}
           label="Replay"
-          onClick={() => {
-            /* replay */
-          }}
+          onClick={() => setReplayOpen(true)}
+        />
+
+        <div className="w-px h-6 bg-[var(--border)] mx-1" />
+
+        <ControlButton
+          icon={<AlertTriangle className="w-4 h-4" />}
+          label="Inject Event"
+          onClick={() => setInjectOpen(true)}
+        />
+        <ControlButton
+          icon={<BarChart3 className="w-4 h-4" />}
+          label="Monte Carlo"
+          onClick={() => setMonteCarloOpen(true)}
+        />
+        <ControlButton
+          icon={<Cpu className="w-4 h-4" />}
+          label="Engine Control"
+          onClick={() => setEngineOpen(!engineOpen)}
         />
 
         <div className="w-px h-6 bg-[var(--border)] mx-1" />
@@ -187,18 +216,28 @@ export default function ControlPanel() {
         <ControlButton
           icon={<Settings className="w-4 h-4" />}
           label="Settings"
-          onClick={() => {
-            /* open settings */
-          }}
+          onClick={() => navigate("/settings")}
         />
 
         <button
-          className="w-8 h-8 rounded-full bg-[var(--secondary)] flex items-center justify-center hover:bg-gray-200 transition-colors ml-1"
+          className="w-8 h-8 rounded-full bg-[var(--secondary)] flex items-center justify-center hover:bg-[var(--secondary)] transition-colors ml-1"
           title="User profile"
         >
           <User className="w-4 h-4 text-[var(--muted-foreground)]" />
         </button>
       </div>
+
+      {/* Modals */}
+      <InjectEventModal isOpen={injectOpen} onClose={() => setInjectOpen(false)} />
+      <ReplayModal isOpen={replayOpen} onClose={() => setReplayOpen(false)} />
+      <MonteCarloModal isOpen={monteCarloOpen} onClose={() => setMonteCarloOpen(false)} />
+
+      {/* Engine Control dropdown */}
+      {engineOpen && (
+        <div className="absolute right-16 top-14 z-40 w-72">
+          <EngineControlPanel />
+        </div>
+      )}
     </div>
   );
 }

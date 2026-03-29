@@ -17,6 +17,7 @@ import SettingsPage from "./pages/SettingsPage";
 import ScenarioOpinionsPage from "./pages/ScenarioOpinionsPage";
 import CommunityOpinionPage from "./pages/CommunityOpinionPage";
 import ConversationThreadPage from "./pages/ConversationThreadPage";
+import ComparisonPage from "./pages/ComparisonPage";
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -67,6 +68,7 @@ function App() {
           <Route path="/opinions" element={<ScenarioOpinionsPage />} />
           <Route path="/opinions/:communityId" element={<CommunityOpinionPage />} />
           <Route path="/opinions/:communityId/thread/:threadId" element={<ConversationThreadPage />} />
+          <Route path="/compare/:otherId" element={<ComparisonPage />} />
         </Routes>
       </ErrorBoundary>
     </BrowserRouter>

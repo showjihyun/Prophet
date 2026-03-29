@@ -121,6 +121,10 @@ LLM calls are abstracted behind `LLMAdapter` interface — provider is swappable
 | UI-10 | [UI_10_AGENT_INTERVENE.md](./ui/UI_10_AGENT_INTERVENE.md) | Agent intervention modal (Pencil sync) | DRAFT |
 | UI-11 | [UI_11_AGENT_CONNECTIONS.md](./ui/UI_11_AGENT_CONNECTIONS.md) | Agent connections tab (Pencil sync) | DRAFT |
 | UI-12 | [UI_12_SETTINGS.md](./ui/UI_12_SETTINGS.md) | Settings page (Pencil sync) | DRAFT |
+| 12 | [PLATFORM_PLUGIN_SPEC.md](./platform/12_PLATFORM_PLUGIN_SPEC.md) | SNS platform plugins (Twitter/Reddit/Instagram) | DRAFT |
+| 13 | [SCALE_VALIDATION_SPEC.md](./platform/13_SCALE_VALIDATION_SPEC.md) | Scale benchmark & validation pipeline | DRAFT |
+| 14 | [LLM_GATEWAY_SPEC.md](./platform/14_LLM_GATEWAY_SPEC.md) | LLM gateway + cache chain + quota | DRAFT |
+| 15 | [15_DEV_WORKFLOW_SPEC.md](./15_DEV_WORKFLOW_SPEC.md) | Development workflow & model selection strategy | DRAFT |
 | UI-13 | [UI_13_SCENARIO_OPINIONS.md](./ui/UI_13_SCENARIO_OPINIONS.md) | Scenario opinions overview (Pencil sync) | DRAFT |
 | UI-14 | [UI_14_COMMUNITY_OPINION.md](./ui/UI_14_COMMUNITY_OPINION.md) | Community opinion detail (Pencil sync) | DRAFT |
 | UI-15 | [UI_15_CONVERSATION_THREAD.md](./ui/UI_15_CONVERSATION_THREAD.md) | Conversation thread view (Pencil sync) | DRAFT |

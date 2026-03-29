@@ -13,10 +13,28 @@
 
 ---
 
+## 모델 선택 전략
+
+> **SPEC: `docs/spec/15_DEV_WORKFLOW_SPEC.md`** — "Think with Opus, Code with Sonnet"
+
+| Agent Role | Model | 근거 |
+|------------|-------|------|
+| **plan-agent** (설계) | Opus 4.6 | 아키텍처 설계, SPEC 작성, 전체 조망 |
+| **audit-agent** (감사) | Opus 4.6 | 정합성 검증, 트레이드오프 분석 |
+| **backend-agent** (구현) | Sonnet 4.6 | SPEC 기반 코드 생성 |
+| **frontend-agent** (구현) | Sonnet 4.6 | 컴포넌트/페이지 생성 |
+| **harness-agent** (테스트) | Sonnet 4.6 | 테스트 코드 생성 |
+| **db-agent** (마이그레이션) | Sonnet 4.6 | 마이그레이션 생성 |
+| **code-reviewer** | Sonnet 4.6 | 패턴 기반 리뷰 |
+
+Agent tool 호출 시 `model` 파라미터를 작업 유형에 맞게 명시한다.
+
+---
+
 ## 에이전트 역할 분류
 
 ### backend-agent
-**담당:** 백엔드 Python 코드 구현
+**담당:** 백엔드 Python 코드 구현 | **Model: Sonnet 4.6**
 
 | 모듈 | SPEC 문서 | 디렉토리 |
 |------|-----------|----------|
@@ -37,7 +55,7 @@
 ---
 
 ### frontend-agent
-**담당:** React 18 프론트엔드 구현
+**담당:** React 18 프론트엔드 구현 | **Model: Sonnet 4.6**
 
 **디자인 총괄:** `DESIGN.md` (Pencil 연동, 디자인 토큰, 컴포넌트 매핑)
 
@@ -67,7 +85,7 @@
 ---
 
 ### harness-agent
-**담당:** 테스트 하네스 및 pytest 구현
+**담당:** 테스트 하네스 및 pytest 구현 | **Model: Sonnet 4.6**
 
 | 모듈 | SPEC 문서 | 디렉토리 |
 |------|-----------|----------|
@@ -86,7 +104,7 @@
 ---
 
 ### db-agent
-**담당:** PostgreSQL 스키마 및 마이그레이션
+**담당:** PostgreSQL 스키마 및 마이그레이션 | **Model: Sonnet 4.6**
 
 | 모듈 | SPEC 문서 | 디렉토리 |
 |------|-----------|----------|

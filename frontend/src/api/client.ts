@@ -91,9 +91,9 @@ export const apiClient = {
     stop: (id: string) => request<{ status: string }>(`/simulations/${id}/stop`, { method: "POST" }),
     getSteps: (id: string) => request<StepResult[]>(`/simulations/${id}/steps`),
     injectEvent: (id: string, event: { event_type: string; content: string; controversy?: number; target_communities?: string[] }) =>
-      request<{ event_id: string }>(`/simulations/${id}/inject-event`, { method: "POST", body: JSON.stringify(event) }),
+      request<{ event_id: string; effective_step: number }>(`/simulations/${id}/inject-event`, { method: "POST", body: JSON.stringify(event) }),
     replay: (id: string, step: number) =>
-      request<{ replay_id: string }>(`/simulations/${id}/replay/${step}`, { method: "POST" }),
+      request<{ replay_id: string; from_step: number }>(`/simulations/${id}/replay/${step}`, { method: "POST" }),
     compare: (id: string, otherId: string) =>
       request<Record<string, unknown>>(`/simulations/${id}/compare/${otherId}`),
     monteCarlo: (id: string, opts: { n_runs: number; llm_enabled?: boolean }) =>

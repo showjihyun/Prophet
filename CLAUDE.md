@@ -185,6 +185,35 @@ Phase 완료
 5. 각 Phase는 하네스 테스트가 통과해야 다음 Phase로 진행한다.
 6. LLM 의존 기능은 반드시 SLM(Tier 1) fallback을 가져야 한다.
 
+### 개발 모델 선택 전략 (Think with Opus, Code with Sonnet)
+
+> **SPEC: `docs/spec/15_DEV_WORKFLOW_SPEC.md`**
+
+Prophet 시뮬레이션의 3-Tier 전략을 개발 워크플로우에도 적용한다.
+
+| 작업 유형 | 모델 | 비율 |
+|-----------|------|------|
+| **계획/분석**: SPEC 작성, Plan 수립, 아키텍처 설계, 감사, 복잡한 디버깅 | **Opus 4.6** | ~10% |
+| **구현/테스트**: 코드 작성, 테스트 생성, 리팩토링, 코드 리뷰, 보일러플레이트 | **Sonnet 4.6** | ~80% |
+| **직접 도구**: Glob, Grep, Read (모델 불필요) | — | ~10% |
+
+**Agent tool 호출 시 `model` 파라미터를 명시한다:**
+```
+# Planning — Opus
+Agent(subagent_type="Plan", model="opus")
+
+# Code implementation — Sonnet
+Agent(subagent_type="general-purpose", model="sonnet")
+
+# Deep exploration — Opus
+Agent(subagent_type="Explore", model="opus")
+
+# Code review — Sonnet
+Agent(subagent_type="feature-dev:code-reviewer", model="sonnet")
+```
+
+**예외**: 사용자가 모델을 명시적으로 지정하면 즉시 반영.
+
 ---
 
 ## 기술 스택
