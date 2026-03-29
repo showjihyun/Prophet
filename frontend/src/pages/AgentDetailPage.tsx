@@ -101,6 +101,79 @@ const MOCK_CONNECTIONS: ConnectionItem[] = [
   { id: "a8", name: "Agent #3344", community: "Alpha", color: "#3b82f6", trust: 0.68, influence: 0.52 },
 ];
 
+// ---------------------------------------------------------------------------
+// Mock messages data for the Messages tab
+// ---------------------------------------------------------------------------
+interface MessageItem {
+  id: string;
+  type: "share" | "comment" | "repost" | "adopt";
+  content: string;
+  timestamp: string;
+  sentiment: "positive" | "neutral" | "negative";
+  reach: number;
+  reactions: { like: number; comment: number; repost: number };
+  replyTo?: string;
+}
+
+const MOCK_MESSAGES: MessageItem[] = [
+  {
+    id: "m1",
+    type: "share",
+    content: "The AI camera phone looks promising. Battery specs need verification though.",
+    timestamp: "2m ago",
+    sentiment: "positive",
+    reach: 47,
+    reactions: { like: 12, comment: 3, repost: 2 },
+  },
+  {
+    id: "m2",
+    type: "comment",
+    content: "Responding to Agent #1043: I agree the camera quality is competitive, but the price point concerns me.",
+    timestamp: "15m ago",
+    sentiment: "neutral",
+    reach: 23,
+    reactions: { like: 5, comment: 1, repost: 0 },
+    replyTo: "Agent #1043",
+  },
+  {
+    id: "m3",
+    type: "repost",
+    content: "RT @Agent #4214: This campaign is gaining traction in the Beta community. Watch the cascade.",
+    timestamp: "32m ago",
+    sentiment: "positive",
+    reach: 89,
+    reactions: { like: 24, comment: 7, repost: 15 },
+    replyTo: "Agent #4214",
+  },
+  {
+    id: "m4",
+    type: "adopt",
+    content: "Decision: Adopting the product. Key factor: trusted recommendation from Agent #0592.",
+    timestamp: "1h ago",
+    sentiment: "positive",
+    reach: 12,
+    reactions: { like: 3, comment: 0, repost: 1 },
+  },
+  {
+    id: "m5",
+    type: "comment",
+    content: "I'm skeptical about the marketing claims. Has anyone actually tested the AI features?",
+    timestamp: "2h ago",
+    sentiment: "negative",
+    reach: 56,
+    reactions: { like: 8, comment: 12, repost: 4 },
+  },
+  {
+    id: "m6",
+    type: "share",
+    content: "Sharing expert analysis: The technology behind the AI camera is solid, based on the review from Community Delta.",
+    timestamp: "3h ago",
+    sentiment: "positive",
+    reach: 134,
+    reactions: { like: 31, comment: 9, repost: 18 },
+  },
+];
+
 const TABS = ["Activity", "Connections", "Messages"] as const;
 
 export default function AgentDetailPage() {
@@ -109,6 +182,7 @@ export default function AgentDetailPage() {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Activity");
   const [interveneOpen, setInterveneOpen] = useState(false);
   const [connSearch, setConnSearch] = useState("");
+  const [msgFilter, setMsgFilter] = useState("all");
 
   const agent = { ...MOCK_AGENT, id: agentId ?? MOCK_AGENT.id };
 
@@ -120,6 +194,14 @@ export default function AgentDetailPage() {
           c.community.toLowerCase().includes(connSearch.toLowerCase()),
       ),
     [connSearch],
+  );
+
+  const filteredMessages = useMemo(
+    () =>
+      msgFilter === "all"
+        ? MOCK_MESSAGES
+        : MOCK_MESSAGES.filter((m) => m.type === msgFilter),
+    [msgFilter],
   );
 
   return (
@@ -416,12 +498,82 @@ export default function AgentDetailPage() {
           )}
 
           {activeTab === "Messages" && (
-            <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-8 flex items-center justify-center text-[var(--muted-foreground)] min-h-[400px]">
-              <div className="text-center">
-                <p className="text-sm">
-                  Chronological message feed will load here
-                </p>
-                <p className="text-xs mt-1">Infinite scroll enabled</p>
+            <div className="flex flex-col gap-4">
+              {/* Header with stats */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-[var(--foreground)]">Message History</h3>
+                <span className="text-xs text-[var(--muted-foreground)]">{filteredMessages.length} messages</span>
+              </div>
+
+              {/* Filter bar */}
+              <div className="flex gap-2">
+                {(["all", "share", "comment", "repost", "adopt"] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setMsgFilter(type)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      msgFilter === type
+                        ? "bg-[var(--foreground)] text-[var(--card)]"
+                        : "bg-[var(--secondary)] text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+                    }`}
+                  >
+                    {type === "all" ? "All" : type.charAt(0).toUpperCase() + type.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Message list */}
+              <div className="flex flex-col gap-3">
+                {filteredMessages.map((msg) => (
+                  <div key={msg.id} className="rounded-lg border border-[var(--border)] p-4 bg-[var(--card)]">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {/* Action type badge */}
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            msg.type === "share"
+                              ? "bg-blue-500/20 text-blue-400"
+                              : msg.type === "comment"
+                                ? "bg-purple-500/20 text-purple-400"
+                                : msg.type === "repost"
+                                  ? "bg-orange-500/20 text-orange-400"
+                                  : "bg-green-500/20 text-green-400"
+                          }`}
+                        >
+                          {msg.type}
+                        </span>
+                        {msg.replyTo && (
+                          <span className="text-xs text-[var(--muted-foreground)]">
+                            &rarr; {msg.replyTo}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-[var(--muted-foreground)]">{msg.timestamp}</span>
+                    </div>
+                    <p className="text-sm text-[var(--foreground)] mb-3">{msg.content}</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-4 text-xs text-[var(--muted-foreground)]">
+                        <span>{"\u2665"} {msg.reactions.like}</span>
+                        <span>{"\uD83D\uDCAC"} {msg.reactions.comment}</span>
+                        <span>{"\uD83D\uDD04"} {msg.reactions.repost}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            msg.sentiment === "positive"
+                              ? "bg-[var(--sentiment-positive)]"
+                              : msg.sentiment === "negative"
+                                ? "bg-[var(--sentiment-negative)]"
+                                : "bg-[var(--sentiment-neutral)]"
+                          }`}
+                        />
+                        <span className="text-xs text-[var(--muted-foreground)]">
+                          Reach: {msg.reach}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
