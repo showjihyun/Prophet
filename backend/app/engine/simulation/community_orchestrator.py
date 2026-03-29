@@ -3,6 +3,7 @@ SPEC: docs/spec/04_SIMULATION_SPEC.md#communityorchestrator
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -44,6 +45,8 @@ class CommunityOrchestrator:
     """Manages agent execution within a single community.
     SPEC: docs/spec/04_SIMULATION_SPEC.md#communityorchestrator
     """
+
+    BATCH_SIZE = 32
 
     def __init__(
         self,
@@ -165,34 +168,39 @@ class CommunityOrchestrator:
         llm_calls = 0
         action_counter: Counter[str] = Counter()
 
-        for agent in self.agents:
-            tier = tier_map.get(agent.agent_id, 1)
+        # Process agents in batches to yield to event loop between batches
+        for i in range(0, len(self.agents), self.BATCH_SIZE):
+            batch = self.agents[i:i + self.BATCH_SIZE]
+            for agent in batch:
+                tier = tier_map.get(agent.agent_id, 1)
 
-            result: AgentTickResult = self._agent_tick.tick(
-                agent=agent,
-                environment_events=env_events,
-                neighbor_actions=neighbor_actions_map.get(agent.agent_id, []),
-                cognition_tier=tier,
-                seed=seed,
-                graph_context=graph_context,
-            )
+                result: AgentTickResult = self._agent_tick.tick(
+                    agent=agent,
+                    environment_events=env_events,
+                    neighbor_actions=neighbor_actions_map.get(agent.agent_id, []),
+                    cognition_tier=tier,
+                    seed=seed,
+                    graph_context=graph_context,
+                )
 
-            new_agent = result.updated_state
-            updated.append(new_agent)
-            action_counter[result.action.value] += 1
+                new_agent = result.updated_state
+                updated.append(new_agent)
+                action_counter[result.action.value] += 1
 
-            if result.llm_call_log:
-                llm_calls += 1
+                if result.llm_call_log:
+                    llm_calls += 1
 
-            # Separate intra-community vs outbound propagation
-            for pe in result.propagation_events:
-                target_node = self.agent_node_map.get(pe.target_agent_id)
-                if target_node is not None and target_node in self._bridge_node_ids:
-                    outbound.append(pe)
-                elif pe.target_agent_id in agent_map:
-                    all_propagation.append(pe)
-                else:
-                    outbound.append(pe)  # target not in this community
+                # Separate intra-community vs outbound propagation
+                for pe in result.propagation_events:
+                    target_node = self.agent_node_map.get(pe.target_agent_id)
+                    if target_node is not None and target_node in self._bridge_node_ids:
+                        outbound.append(pe)
+                    elif pe.target_agent_id in agent_map:
+                        all_propagation.append(pe)
+                    else:
+                        outbound.append(pe)  # target not in this community
+            # Yield to event loop between batches (allows other communities to progress)
+            await asyncio.sleep(0)
 
         # 6. Community sentiment
         sentiment = self._sentiment_model.update_community_sentiment(

@@ -148,7 +148,7 @@ A deep technical comparison between CAMEL-AI/OASIS and Prophet (MCASP).
 | **Content Moderation** | report_post action | Not implemented | LOW |
 | **Interview Action** | Agent interrogation API | Not implemented | MED |
 | **TwHIN-BERT RecSys** | Real Twitter recommendation model | Weighted formula (simpler) | MED |
-| **Neo4j Integration** | Graph database for relationships | NetworkX in-memory | MED |
+| **PostgreSQL+pgvector Integration** | Graph database for relationships | NetworkX in-memory | MED |
 | **Scalable Inference** | vLLM distributed inference | Ollama single-node | HIGH |
 | **1M Agent Scale** | Tested (with 27 A100s) | ~200 agents tested | HIGH |
 | **Data Validation** | Twitter15/16 NRMSE 30% | Not validated | HIGH |
@@ -198,7 +198,7 @@ Based on OASIS's strengths, Prophet should consider:
 | **Group Chat / Multi-agent discussion** | OASIS has this. Useful for policy simulation. | MED |
 | **Interview Action** | Query agents mid-simulation. Research tool. | LOW |
 | **TwHIN-BERT or similar RecSys** | More realistic than weighted formula. | MED |
-| **Neo4j or graph DB option** | NetworkX in-memory limits scale. | HIGH |
+| **PostgreSQL+pgvector or graph DB option** | NetworkX in-memory limits scale. | HIGH |
 
 ### LOW Priority (by design choice)
 
@@ -304,11 +304,11 @@ Source: `docs/spec/bench_mark/OASIS Tech stack 분석.txt`
 | Async runtime | asyncio | asyncio | Same |
 | Visualization | `/visualization` scripts | React 18 + Cytoscape.js | **Prophet has real-time web UI** |
 | Logging | `/log` directory | PostgreSQL `llm_calls` + `simulation_events` tables | **Prophet is more structured** |
-| Graph DB | Neo4j integration (optional) | None | **Gap: Prophet has no graph DB option for large-scale** |
+| Graph DB | PostgreSQL+pgvector integration (optional) | None | **Gap: Prophet has no graph DB option for large-scale** |
 | Distributed | None (single process) | None (Docker Compose, single server) | Both single-server |
 
 **Prophet 보완 필요:**
-- Neo4j 또는 graph DB 옵션 (NetworkX 한계: 100K+ edges에서 메모리 병목)
+- PostgreSQL+pgvector 또는 graph DB 옵션 (NetworkX 한계: 100K+ edges에서 메모리 병목)
 - Ray 또는 Celery 분산 처리 (현재 단일 프로세스)
 
 ---
@@ -328,7 +328,7 @@ Source: `docs/spec/bench_mark/OASIS Tech stack 분석.txt`
 | # | Gap | OASIS Has | Prophet Status | Effort | Impact |
 |---|-----|-----------|----------------|--------|--------|
 | G4 | **sentence-transformers** | HuggingFace local embeddings | Ollama embed only | LOW | Better embedding quality, no API cost |
-| G5 | **Graph DB option** | Neo4j integration | NetworkX only | HIGH | Memory limit at 100K+ edges |
+| G5 | **Graph persistence** | PostgreSQL+pgvector (유료 라이선스) | PostgreSQL + pgvector (이미 사용 중) | LOW | pgvector로 그래프 임베딩 저장 가능. NetworkX → DB 동기화만 구현하면 됨 |
 | G6 | **Group Chat / Discussion** | create_group, send_to_group | Not implemented | MED | Policy simulation, focus group simulation |
 | G7 | **RL-style env.step() API** | PettingZoo interface | Not implemented | MED | Research community adoption |
 
@@ -370,7 +370,7 @@ Phase 9: Research API
 
 Phase 10: Infrastructure Scale
 ├── G3: vLLM / text-generation-inference distributed inference
-├── G5: Neo4j graph DB option (alternative to NetworkX)
+├── G5: PostgreSQL+pgvector graph DB option (alternative to NetworkX)
 └── G10: Ray / Celery distribution for multi-server
 ```
 
