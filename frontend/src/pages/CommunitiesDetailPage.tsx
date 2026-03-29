@@ -91,10 +91,10 @@ const CONNECTION_MATRIX: Record<string, Record<string, number>> = {
 };
 
 const statusColors: Record<string, string> = {
-  "Very High": "bg-red-100 text-red-700",
-  High: "bg-green-100 text-green-700",
-  Medium: "bg-yellow-100 text-yellow-700",
-  Low: "bg-gray-100 text-gray-500",
+  "Very High": "bg-[var(--destructive)]/15 text-[var(--destructive)]",
+  High: "bg-[var(--sentiment-positive)]/15 text-[var(--sentiment-positive)]",
+  Medium: "bg-[var(--sentiment-warning)]/15 text-[var(--sentiment-warning)]",
+  Low: "bg-[var(--secondary)] text-[var(--muted-foreground)]",
 };
 
 const emotionColors: Record<string, string> = {
@@ -244,7 +244,7 @@ export default function CommunitiesDetailPage() {
                           e.stopPropagation();
                           navigate(`/agents/${inf.id}`);
                         }}
-                        className="text-blue-600 hover:underline"
+                        className="text-[var(--community-alpha)] hover:underline"
                       >
                         {inf.id}
                       </button>

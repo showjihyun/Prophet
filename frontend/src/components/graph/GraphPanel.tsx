@@ -317,8 +317,8 @@ export default function GraphPanel() {
     const cy = cytoscape({
       container: containerRef.current,
       elements: {
-        nodes: mockData.nodes,
-        edges: mockData.edges,
+        nodes: graphData.nodes,
+        edges: graphData.edges,
       },
       style: CY_STYLE,
       layout: {
@@ -506,7 +506,7 @@ export default function GraphPanel() {
       {/* Selected agent info */}
       {selectedAgent && (
         <div className="absolute top-14 left-4 z-10 pointer-events-none">
-          <span className="text-[11px] font-mono text-green-400 bg-green-950/40 px-2 py-0.5 rounded">
+          <span className="text-[11px] font-mono text-[var(--sentiment-positive)] bg-green-950/40 px-2 py-0.5 rounded">
             Selected: {selectedAgent}
           </span>
         </div>

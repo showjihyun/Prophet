@@ -267,7 +267,7 @@ export default function SettingsPage() {
             {testResult && (
               <span
                 className={`inline-flex items-center gap-1.5 text-sm ${
-                  testResult.status === "ok" ? "text-green-600" : "text-red-600"
+                  testResult.status === "ok" ? "text-[var(--sentiment-positive)]" : "text-[var(--destructive)]"
                 }`}
               >
                 {testResult.status === "ok" ? (
@@ -465,12 +465,12 @@ export default function SettingsPage() {
             Save Settings
           </button>
           {saveSuccess === true && (
-            <span className="text-sm text-green-600 flex items-center gap-1">
+            <span className="text-sm text-[var(--sentiment-positive)] flex items-center gap-1">
               <CheckCircle2 className="w-4 h-4" /> Saved
             </span>
           )}
           {saveSuccess === false && (
-            <span className="text-sm text-red-600 flex items-center gap-1">
+            <span className="text-sm text-[var(--destructive)] flex items-center gap-1">
               <XCircle className="w-4 h-4" /> Save failed
             </span>
           )}

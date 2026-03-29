@@ -111,9 +111,9 @@ const MOCK_MESSAGES: ThreadMsg[] = [
 /* ------------------------------------------------------------------ */
 
 const STANCE_STYLES: Record<string, string> = {
-  Progressive: "bg-blue-500/20 text-blue-400",
-  Conservative: "bg-red-500/20 text-red-400",
-  Neutral: "bg-gray-500/20 text-gray-400",
+  Progressive: "bg-[var(--community-alpha)]/20 text-[var(--community-alpha)]",
+  Conservative: "bg-[var(--destructive)]/20 text-[var(--destructive)]",
+  Neutral: "bg-[var(--muted-foreground)]/20 text-[var(--muted-foreground)]",
 };
 
 /* ------------------------------------------------------------------ */
@@ -125,7 +125,7 @@ export default function ConversationThreadPage() {
   const navigate = useNavigate();
   const t = MOCK_THREAD;
 
-  const sentColor = t.avg_sentiment > 0.1 ? "text-green-400" : t.avg_sentiment < -0.1 ? "text-red-400" : "text-gray-400";
+  const sentColor = t.avg_sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : t.avg_sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
@@ -137,7 +137,7 @@ export default function ConversationThreadPage() {
           { label: "Conversation" },
         ]}
         actions={
-          <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--community-delta)]/20 text-[var(--community-delta)] border border-[var(--community-delta)]/30">
             Level 3
           </span>
         }
@@ -232,21 +232,21 @@ export default function ConversationThreadPage() {
 
               {/* Reactions */}
               <div className="flex items-center gap-4">
-                <button className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-green-400 transition-colors">
+                <button className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--sentiment-positive)] transition-colors">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z" />
                     <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
                   </svg>
                   Agree {msg.reactions.agree}
                 </button>
-                <button className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-red-400 transition-colors">
+                <button className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-colors">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10 15V19a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z" />
                     <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
                   </svg>
                   Disagree {msg.reactions.disagree}
                 </button>
-                <button className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-yellow-400 transition-colors">
+                <button className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--sentiment-warning)] transition-colors">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <path d="M8 15h8" />

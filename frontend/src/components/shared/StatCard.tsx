@@ -15,9 +15,9 @@ interface StatCardProps {
 }
 
 const changeColors: Record<string, string> = {
-  positive: "text-green-600 bg-green-50",
-  negative: "text-red-600 bg-red-50",
-  neutral: "text-gray-500 bg-gray-100",
+  positive: "text-[var(--sentiment-positive)] bg-[var(--sentiment-positive)]/10",
+  negative: "text-[var(--destructive)] bg-[var(--destructive)]/10",
+  neutral: "text-[var(--muted-foreground)] bg-[var(--secondary)]",
 };
 
 export default function StatCard({

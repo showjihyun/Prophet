@@ -114,7 +114,7 @@ export default function InfluencersFilter({
           </h3>
           <button
             onClick={onClose}
-            className="rounded-md p-1 hover:bg-gray-100"
+            className="rounded-md p-1 hover:bg-[var(--secondary)]"
             aria-label="Close filter"
           >
             <svg
@@ -274,7 +274,7 @@ export default function InfluencersFilter({
         >
           <button
             onClick={handleReset}
-            className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-[var(--secondary)]"
             style={{ borderColor: "var(--border)" }}
           >
             Reset

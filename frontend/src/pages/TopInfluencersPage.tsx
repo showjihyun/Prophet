@@ -289,7 +289,7 @@ export default function TopInfluencersPage() {
               </div>
               <button
                 onClick={() => setFilterOpen(true)}
-                className="h-10 px-4 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-gray-50 flex items-center gap-2"
+                className="h-10 px-4 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] flex items-center gap-2"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
@@ -339,7 +339,7 @@ export default function TopInfluencersPage() {
                       <td className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)]">
                         {inf.rank}
                       </td>
-                      <td className="px-3 py-3 font-medium text-blue-600 hover:underline">
+                      <td className="px-3 py-3 font-medium text-[var(--community-alpha)] hover:underline">
                         {inf.agentId}
                       </td>
                       <td className="px-3 py-3">

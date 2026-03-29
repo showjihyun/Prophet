@@ -148,7 +148,7 @@ export default function AgentInterveneModal({
             </h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-gray-100 transition-colors"
+              className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
@@ -271,7 +271,7 @@ export default function AgentInterveneModal({
                 type="checkbox"
                 checked={state.notifyConnected}
                 onChange={(e) => updateField("notifyConnected", e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 accent-[var(--foreground)]"
+                className="w-4 h-4 rounded border-[var(--border)] accent-[var(--foreground)]"
               />
               <span className="text-sm text-[var(--foreground)]">
                 Notify connected agents of intervention
@@ -284,7 +284,7 @@ export default function AgentInterveneModal({
                 type="checkbox"
                 checked={state.logIntervention}
                 onChange={(e) => updateField("logIntervention", e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 accent-[var(--foreground)]"
+                className="w-4 h-4 rounded border-[var(--border)] accent-[var(--foreground)]"
               />
               <span className="text-sm text-[var(--foreground)]">
                 Log intervention in cascade analytics
@@ -309,7 +309,7 @@ export default function AgentInterveneModal({
                 aria-checked={state.overrideTier}
                 onClick={() => updateField("overrideTier", !state.overrideTier)}
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                  state.overrideTier ? "bg-[var(--foreground)]" : "bg-gray-200"
+                  state.overrideTier ? "bg-[var(--foreground)]" : "bg-[var(--secondary)]"
                 }`}
               >
                 <span
@@ -329,7 +329,7 @@ export default function AgentInterveneModal({
         >
           <button
             onClick={onClose}
-            className="h-10 px-4 text-sm font-medium rounded-md border border-[var(--border)] text-[var(--foreground)] hover:bg-gray-50 transition-colors"
+            className="h-10 px-4 text-sm font-medium rounded-md border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
           >
             Cancel
           </button>

@@ -106,10 +106,10 @@ export default function ControlPanel() {
           <span
             className={`w-2 h-2 rounded-full ${
               isRunning
-                ? "bg-green-500 animate-pulse-dot"
+                ? "bg-[var(--sentiment-positive)] animate-pulse-dot"
                 : status === "paused"
-                  ? "bg-yellow-500"
-                  : "bg-gray-400"
+                  ? "bg-[var(--sentiment-warning)]"
+                  : "bg-[var(--muted-foreground)]"
             }`}
           />
           {isRunning

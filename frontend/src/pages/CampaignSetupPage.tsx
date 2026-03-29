@@ -181,7 +181,7 @@ export default function CampaignSetupPage() {
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
                       selected
                         ? "border-transparent text-white"
-                        : "border-[var(--border)] text-[var(--muted-foreground)] bg-[var(--card)] hover:bg-gray-50"
+                        : "border-[var(--border)] text-[var(--muted-foreground)] bg-[var(--card)] hover:bg-[var(--secondary)]"
                     }`}
                     style={selected ? { backgroundColor: c.color } : undefined}
                   >
@@ -256,7 +256,7 @@ export default function CampaignSetupPage() {
 
           {/* Error Display */}
           {error && (
-            <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+            <div className="rounded-md bg-[var(--destructive)]/10 border border-[var(--destructive)]/30 p-3 text-sm text-[var(--destructive)]">
               {error}
             </div>
           )}

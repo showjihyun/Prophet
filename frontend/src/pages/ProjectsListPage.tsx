@@ -50,9 +50,9 @@ const MOCK_PROJECTS = [
 type ProjectStatus = "active" | "draft" | "in-progress";
 
 const STATUS_STYLES: Record<ProjectStatus, { bg: string; text: string; label: string }> = {
-  active: { bg: "bg-green-50", text: "text-green-700", label: "Active" },
-  draft: { bg: "bg-gray-100", text: "text-gray-600", label: "Draft" },
-  "in-progress": { bg: "bg-amber-50", text: "text-amber-700", label: "In-progress" },
+  active: { bg: "bg-[var(--sentiment-positive)]/10", text: "text-[var(--sentiment-positive)]", label: "Active" },
+  draft: { bg: "bg-[var(--secondary)]", text: "text-[var(--muted-foreground)]", label: "Draft" },
+  "in-progress": { bg: "bg-[var(--sentiment-warning)]/15", text: "text-[var(--sentiment-warning)]", label: "In-progress" },
 };
 
 function StatusBadge({ status }: { status: ProjectStatus }) {
@@ -124,7 +124,7 @@ export default function ProjectsListPage() {
                 </div>
                 <button
                   onClick={() => navigate(`/projects/${project.id}`)}
-                  className="shrink-0 h-8 px-3 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-gray-50 transition-colors"
+                  className="shrink-0 h-8 px-3 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] transition-colors"
                 >
                   Open
                 </button>

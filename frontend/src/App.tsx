@@ -32,13 +32,13 @@ class ErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return this.props.fallback || (
-        <div className="flex items-center justify-center h-screen bg-gray-50">
+        <div className="flex items-center justify-center h-screen bg-[var(--secondary)]">
           <div className="text-center p-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Something went wrong</h2>
-            <p className="text-gray-500 mb-4">{this.state.error?.message}</p>
+            <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">Something went wrong</h2>
+            <p className="text-[var(--muted-foreground)] mb-4">{this.state.error?.message}</p>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-gray-900 text-white rounded-md"
+              className="px-4 py-2 bg-[var(--foreground)] text-white rounded-md"
             >
               Reload
             </button>

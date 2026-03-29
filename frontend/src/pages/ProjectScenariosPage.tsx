@@ -91,14 +91,14 @@ const SCENARIO_STATUS_STYLES: Record<
   ScenarioStatus,
   { bg: string; text: string; label: string; pulse?: boolean }
 > = {
-  completed: { bg: "bg-green-50", text: "text-green-700", label: "Completed" },
+  completed: { bg: "bg-[var(--sentiment-positive)]/10", text: "text-[var(--sentiment-positive)]", label: "Completed" },
   running: {
-    bg: "bg-red-50",
-    text: "text-red-700",
+    bg: "bg-[var(--destructive)]/10",
+    text: "text-[var(--destructive)]",
     label: "Running",
     pulse: true,
   },
-  draft: { bg: "bg-gray-100", text: "text-gray-600", label: "Draft" },
+  draft: { bg: "bg-[var(--secondary)]", text: "text-[var(--muted-foreground)]", label: "Draft" },
 };
 
 function ScenarioStatusBadge({ status }: { status: ScenarioStatus }) {
@@ -109,8 +109,8 @@ function ScenarioStatusBadge({ status }: { status: ScenarioStatus }) {
     >
       {s.pulse && (
         <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--destructive)] opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--destructive)]" />
         </span>
       )}
       {s.label}
@@ -124,7 +124,7 @@ function ScenarioStatusBadge({ status }: { status: ScenarioStatus }) {
 
 function ProjectStatusBadge() {
   return (
-    <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-50 text-green-700">
+    <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-[var(--sentiment-positive)]/10 text-[var(--sentiment-positive)]">
       Active
     </span>
   );
@@ -264,13 +264,13 @@ export default function ProjectScenariosPage() {
                   {scenario.status === "completed" && (
                     <button
                       onClick={() => navigate("/")}
-                      className="h-8 px-3 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-gray-50 transition-colors"
+                      className="h-8 px-3 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] transition-colors"
                     >
                       Results
                     </button>
                   )}
                   {scenario.status === "running" && (
-                    <button className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-red-600 border border-red-200 rounded-md bg-red-50 hover:bg-red-100 transition-colors">
+                    <button className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-[var(--destructive)] border border-[var(--destructive)]/30 rounded-md bg-[var(--destructive)]/10 hover:bg-[var(--destructive)]/15 transition-colors">
                       <Square className="w-3.5 h-3.5" />
                       Stop
                     </button>

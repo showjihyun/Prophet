@@ -47,7 +47,7 @@ export default function GlobalMetricsPage() {
       <PageNav
         breadcrumbs={[{ label: "Back to Simulation", href: "/" }, { label: "Global Insight & Metrics" }]}
         actions={
-          <button className="h-9 px-4 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-gray-50 flex items-center gap-2">
+          <button className="h-9 px-4 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] flex items-center gap-2">
             <DownloadIcon />
             Export Data
           </button>

@@ -114,7 +114,7 @@ export default function CommunityOpinionPage() {
   const navigate = useNavigate();
 
   const meta = COMMUNITY_META[communityId ?? "alpha"] ?? COMMUNITY_META.alpha;
-  const sentColor = meta.sentiment > 0.1 ? "text-green-400" : meta.sentiment < -0.1 ? "text-red-400" : "text-gray-400";
+  const sentColor = meta.sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : meta.sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
@@ -127,7 +127,7 @@ export default function CommunityOpinionPage() {
         ]}
         actions={
           <div className="flex items-center gap-2">
-            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--community-alpha)]/20 text-[var(--community-alpha)] border border-[var(--community-alpha)]/30">
               Level 2 Community
             </span>
             <button
@@ -196,9 +196,9 @@ export default function CommunityOpinionPage() {
 
                 {/* Stance percentages */}
                 <div className="flex items-center gap-4 text-xs mb-2">
-                  <span className="text-green-400">Support {cl.stances.support}%</span>
-                  <span className="text-gray-400">Neutral {cl.stances.neutral}%</span>
-                  <span className="text-red-400">Oppose {cl.stances.oppose}%</span>
+                  <span className="text-[var(--sentiment-positive)]">Support {cl.stances.support}%</span>
+                  <span className="text-[var(--muted-foreground)]">Neutral {cl.stances.neutral}%</span>
+                  <span className="text-[var(--destructive)]">Oppose {cl.stances.oppose}%</span>
                 </div>
                 <StanceBar stances={cl.stances} />
               </div>

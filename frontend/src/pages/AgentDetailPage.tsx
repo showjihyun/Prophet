@@ -284,7 +284,7 @@ export default function AgentDetailPage() {
             <h2 className="text-2xl font-bold font-display text-[var(--foreground)]">
               Agent #{agent.agentNumber}
             </h2>
-            <span className="inline-flex items-center gap-1.5 text-sm bg-gray-100 px-3 py-1 rounded-full">
+            <span className="inline-flex items-center gap-1.5 text-sm bg-[var(--secondary)] px-3 py-1 rounded-full">
               <span
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: agent.communityColor }}
@@ -430,7 +430,7 @@ export default function AgentDetailPage() {
                             onClick={() =>
                               navigate(`/agents/${interaction.target}`)
                             }
-                            className="text-blue-600 hover:underline font-medium"
+                            className="text-[var(--community-alpha)] hover:underline font-medium"
                           >
                             {interaction.target}
                           </button>
@@ -478,7 +478,7 @@ export default function AgentDetailPage() {
                   <span className="text-white text-sm font-semibold">
                     Ego Network Graph
                   </span>
-                  <span className="text-gray-400 text-xs block">
+                  <span className="text-[var(--muted-foreground)] text-xs block">
                     {agent.connections} connections found
                   </span>
                 </div>
@@ -573,12 +573,12 @@ export default function AgentDetailPage() {
                         <span
                           className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                             msg.type === "share"
-                              ? "bg-blue-500/20 text-blue-400"
+                              ? "bg-[var(--community-alpha)]/20 text-[var(--community-alpha)]"
                               : msg.type === "comment"
-                                ? "bg-purple-500/20 text-purple-400"
+                                ? "bg-[var(--community-delta)]/20 text-[var(--community-delta)]"
                                 : msg.type === "repost"
-                                  ? "bg-orange-500/20 text-orange-400"
-                                  : "bg-green-500/20 text-green-400"
+                                  ? "bg-[var(--community-gamma)]/20 text-[var(--community-gamma)]"
+                                  : "bg-[var(--sentiment-positive)]/20 text-[var(--sentiment-positive)]"
                           }`}
                         >
                           {msg.type}

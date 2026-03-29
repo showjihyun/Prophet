@@ -53,9 +53,9 @@ const MOCK_CONVERSATIONS: ConversationItem[] = [
 ];
 
 const sentimentColors: Record<string, string> = {
-  Positive: "bg-green-100 text-green-700",
-  Neutral: "bg-gray-100 text-gray-600",
-  Negative: "bg-red-100 text-red-700",
+  Positive: "bg-[var(--sentiment-positive)]/15 text-[var(--sentiment-positive)]",
+  Neutral: "bg-[var(--secondary)] text-[var(--muted-foreground)]",
+  Negative: "bg-[var(--destructive)]/15 text-[var(--destructive)]",
 };
 
 const EVENT_COMMUNITY_COLORS: Record<string, string> = {
@@ -117,7 +117,7 @@ export default function ConversationPanel() {
           <span className="text-xs font-semibold text-[var(--foreground)]">
             Expert Agent Analysis
           </span>
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${latestStep ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700 animate-pulse-dot"}`}>
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${latestStep ? "bg-[var(--sentiment-positive)]/15 text-[var(--sentiment-positive)]" : "bg-[var(--sentiment-warning)]/15 text-[var(--sentiment-warning)] animate-pulse-dot"}`}>
             {latestStep ? `Step ${latestStep.step}` : "Analyzing"}
           </span>
         </div>

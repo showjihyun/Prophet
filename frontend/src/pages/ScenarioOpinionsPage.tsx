@@ -120,10 +120,10 @@ function SentimentBar({ dist }: { dist: { positive: number; neutral: number; neg
 function CommunityOpinionCard({ c, onView }: { c: CommunityOpinion; onView: () => void }) {
   const sentimentColor =
     c.avg_sentiment > 0.1
-      ? "text-green-400"
+      ? "text-[var(--sentiment-positive)]"
       : c.avg_sentiment < -0.1
-        ? "text-red-400"
-        : "text-gray-400";
+        ? "text-[var(--destructive)]"
+        : "text-[var(--muted-foreground)]";
 
   const stanceLabel =
     c.dominant_stance === "positive"
