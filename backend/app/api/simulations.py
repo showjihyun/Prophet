@@ -32,6 +32,8 @@ from app.api.schemas import (
     StepHistoryResponse,
     StepResultResponse,
 )
+from app.engine.agent.group_chat import GroupChatManager, GroupChat, GroupMessage
+from app.engine.agent.interview import AgentInterviewer, InterviewResponse
 from app.engine.network.schema import CommunityConfig
 from app.engine.simulation.schema import (
     CampaignConfig,
@@ -510,3 +512,143 @@ async def recommend_engine(
         estimated_total_time="N/A",
         mode="SLM 모드" if ratio < 0.3 else "Hybrid",
     )
+
+
+# ---- Group Chat & Interview (G6, G8) ----
+
+_group_chat_managers: dict[str, GroupChatManager] = {}
+_interviewer = AgentInterviewer()
+
+
+def _get_group_chat_manager(simulation_id: str) -> GroupChatManager:
+    if simulation_id not in _group_chat_managers:
+        _group_chat_managers[simulation_id] = GroupChatManager()
+    return _group_chat_managers[simulation_id]
+
+
+@router.post("/{simulation_id}/group-chat", status_code=201)
+async def create_group_chat(
+    simulation_id: str,
+    body: dict,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Create a group chat session within a simulation.
+    SPEC: docs/spec/platform/13_SCALE_VALIDATION_SPEC.md#group-chat-action
+    """
+    _get_state_or_404(orchestrator, simulation_id)
+    mgr = _get_group_chat_manager(simulation_id)
+
+    member_ids = [UUID(m) for m in body.get("members", [])]
+    topic = body.get("topic", "")
+    chat = mgr.create_group(members=member_ids, topic=topic)
+
+    return {
+        "group_id": str(chat.group_id),
+        "topic": chat.topic,
+        "member_count": chat.member_count,
+    }
+
+
+@router.get("/{simulation_id}/group-chat/{group_id}")
+async def get_group_chat(
+    simulation_id: str,
+    group_id: str,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Get group chat details and messages.
+    SPEC: docs/spec/platform/13_SCALE_VALIDATION_SPEC.md#group-chat-action
+    """
+    _get_state_or_404(orchestrator, simulation_id)
+    mgr = _get_group_chat_manager(simulation_id)
+    try:
+        chat = mgr.get_group(UUID(group_id))
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Group {group_id} not found")
+
+    return {
+        "group_id": str(chat.group_id),
+        "topic": chat.topic,
+        "member_count": chat.member_count,
+        "message_count": chat.message_count,
+        "messages": [
+            {
+                "agent_id": str(m.agent_id),
+                "content": m.content,
+                "step": m.step,
+                "sentiment": m.sentiment,
+            }
+            for m in chat.get_messages()
+        ],
+    }
+
+
+@router.post("/{simulation_id}/group-chat/{group_id}/message", status_code=201)
+async def add_group_chat_message(
+    simulation_id: str,
+    group_id: str,
+    body: dict,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Add a message to a group chat.
+    SPEC: docs/spec/platform/13_SCALE_VALIDATION_SPEC.md#group-chat-action
+    """
+    _get_state_or_404(orchestrator, simulation_id)
+    mgr = _get_group_chat_manager(simulation_id)
+    try:
+        msg = mgr.add_message(
+            group_id=UUID(group_id),
+            agent_id=UUID(body["agent_id"]),
+            content=body["content"],
+            step=body.get("step", 0),
+            sentiment=body.get("sentiment", 0.0),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "agent_id": str(msg.agent_id),
+        "content": msg.content,
+        "step": msg.step,
+        "sentiment": msg.sentiment,
+    }
+
+
+@router.post("/{simulation_id}/agents/{agent_id}/interview")
+async def interview_agent(
+    simulation_id: str,
+    agent_id: str,
+    body: dict,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Interview an agent about their current state.
+    SPEC: docs/spec/platform/13_SCALE_VALIDATION_SPEC.md#interview-action
+    """
+    state = _get_state_or_404(orchestrator, simulation_id)
+    target_uuid = UUID(agent_id)
+
+    # Find the agent in the simulation
+    agent_state = None
+    for a in state.agents:
+        if a.agent_id == target_uuid:
+            agent_state = a
+            break
+
+    if agent_state is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent {agent_id} not found in simulation {simulation_id}",
+        )
+
+    question = body.get("question", "What do you think?")
+    result = _interviewer.interview(agent_state, question)
+
+    return {
+        "agent_id": str(result.agent_id),
+        "question": result.question,
+        "answer": result.answer,
+        "belief": result.belief,
+        "confidence": result.confidence,
+        "reasoning": result.reasoning,
+    }

@@ -1,5 +1,6 @@
 """Settings endpoints — LLM provider configuration & simulation defaults.
 SPEC: docs/spec/06_API_SPEC.md#7-settings-endpoints
+SPEC: docs/spec/platform/12_PLATFORM_PLUGIN_SPEC.md#6-settings-integration
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import httpx
 from fastapi import APIRouter
 
 from app.config import settings
+from app.engine.platform.registry import PlatformRegistry
 
 router = APIRouter(
     prefix="/api/v1/settings",
@@ -93,6 +95,35 @@ async def list_ollama_models() -> dict[str, list[str]]:
             return {"models": [m["name"] for m in data.get("models", [])]}
     except Exception:
         return {"models": []}
+
+
+@router.get("/platforms")
+async def list_platforms() -> dict[str, Any]:
+    """List available platform plugins.
+    SPEC: docs/spec/platform/12_PLATFORM_PLUGIN_SPEC.md#6-settings-integration
+    """
+    registry = PlatformRegistry()
+    return {
+        "platforms": [
+            {
+                "name": p.name,
+                "display_name": p.display_name,
+                "actions": p.supported_actions,
+            }
+            for p in registry._platforms.values()
+        ]
+    }
+
+
+@router.get("/recsys")
+async def list_recsys() -> dict[str, Any]:
+    """List available RecSys algorithms.
+    SPEC: docs/spec/platform/12_PLATFORM_PLUGIN_SPEC.md#6-settings-integration
+    """
+    registry = PlatformRegistry()
+    return {
+        "algorithms": [{"name": r.name} for r in registry._recsys.values()]
+    }
 
 
 @router.post("/test-ollama")

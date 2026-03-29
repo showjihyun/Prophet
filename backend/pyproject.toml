@@ -45,6 +45,7 @@ markers = [
     "phase5: Phase 5 tests",
     "phase6: Phase 6 tests",
     "phase7: Phase 7 tests",
+    "phase8: Phase 8 tests",
     "acceptance: SPEC acceptance criteria tests",
     "benchmark: Performance benchmark tests",
     "integration: Requires live DB + Ollama",

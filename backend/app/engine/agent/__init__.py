@@ -32,6 +32,8 @@ from app.engine.agent.influence import (
 from app.engine.agent.tick import AgentTick, AgentTickResult, GraphContext
 from app.engine.agent.drift import PersonalityDrift
 from app.engine.agent.tier_selector import TierSelector, TierConfig
+from app.engine.agent.group_chat import GroupChat, GroupMessage, GroupChatManager
+from app.engine.agent.interview import AgentInterviewer, InterviewResponse
 
 __all__ = [
     # Schema
@@ -75,4 +77,11 @@ __all__ = [
     # Tier Selector
     "TierSelector",
     "TierConfig",
+    # Group Chat
+    "GroupChat",
+    "GroupMessage",
+    "GroupChatManager",
+    # Interview
+    "AgentInterviewer",
+    "InterviewResponse",
 ]
