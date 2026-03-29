@@ -120,6 +120,10 @@ LLM calls are abstracted behind `LLMAdapter` interface — provider is swappable
 | UI-09 | [UI_09_INFLUENCERS_FILTER.md](./ui/UI_09_INFLUENCERS_FILTER.md) | Influencers filter popover (Pencil sync) | DRAFT |
 | UI-10 | [UI_10_AGENT_INTERVENE.md](./ui/UI_10_AGENT_INTERVENE.md) | Agent intervention modal (Pencil sync) | DRAFT |
 | UI-11 | [UI_11_AGENT_CONNECTIONS.md](./ui/UI_11_AGENT_CONNECTIONS.md) | Agent connections tab (Pencil sync) | DRAFT |
+| UI-12 | [UI_12_SETTINGS.md](./ui/UI_12_SETTINGS.md) | Settings page (Pencil sync) | DRAFT |
+| UI-13 | [UI_13_SCENARIO_OPINIONS.md](./ui/UI_13_SCENARIO_OPINIONS.md) | Scenario opinions overview (Pencil sync) | DRAFT |
+| UI-14 | [UI_14_COMMUNITY_OPINION.md](./ui/UI_14_COMMUNITY_OPINION.md) | Community opinion detail (Pencil sync) | DRAFT |
+| UI-15 | [UI_15_CONVERSATION_THREAD.md](./ui/UI_15_CONVERSATION_THREAD.md) | Conversation thread view (Pencil sync) | DRAFT |
 
 ---
 

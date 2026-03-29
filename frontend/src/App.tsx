@@ -14,6 +14,9 @@ import CampaignSetupPage from "./pages/CampaignSetupPage";
 import ProjectsListPage from "./pages/ProjectsListPage";
 import ProjectScenariosPage from "./pages/ProjectScenariosPage";
 import SettingsPage from "./pages/SettingsPage";
+import ScenarioOpinionsPage from "./pages/ScenarioOpinionsPage";
+import CommunityOpinionPage from "./pages/CommunityOpinionPage";
+import ConversationThreadPage from "./pages/ConversationThreadPage";
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -61,6 +64,9 @@ function App() {
           <Route path="/metrics" element={<GlobalMetricsPage />} />
           <Route path="/setup" element={<CampaignSetupPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/opinions" element={<ScenarioOpinionsPage />} />
+          <Route path="/opinions/:communityId" element={<CommunityOpinionPage />} />
+          <Route path="/opinions/:communityId/thread/:threadId" element={<ConversationThreadPage />} />
         </Routes>
       </ErrorBoundary>
     </BrowserRouter>
