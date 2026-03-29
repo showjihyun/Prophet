@@ -86,6 +86,7 @@ class TestAgentAcceptanceMissing:
             emotion=AgentEmotion(0.5, 0.5, 0.5, 0.3), belief=0.0,
             action=AgentAction.IGNORE, exposure_count=0, adopted=False,
             community_id=uuid4(), influence_score=0.5, llm_tier_used=None,
+            activity_vector=[1.0] * 24,  # always active to avoid flaky skip
         )
 
         # Mock LLM that always times out
