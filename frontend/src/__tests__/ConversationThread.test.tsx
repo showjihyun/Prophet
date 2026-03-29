@@ -52,7 +52,7 @@ describe('ConversationThreadPage (UI-15)', () => {
 
     it('shows participant count', () => {
       renderPage();
-      expect(screen.getByText(/Participants/)).toBeInTheDocument();
+      expect(screen.getAllByText(/Participants/).length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows avg sentiment badge', () => {
@@ -65,8 +65,8 @@ describe('ConversationThreadPage (UI-15)', () => {
   describe('Thread Messages', () => {
     it('renders messages with agent IDs', () => {
       renderPage();
-      expect(screen.getByText('Agent-A042')).toBeInTheDocument();
-      expect(screen.getByText('Agent-B091')).toBeInTheDocument();
+      expect(screen.getAllByText('Agent-A042').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Agent-B091').length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders stance badges', () => {

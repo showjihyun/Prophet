@@ -73,7 +73,7 @@ class AgentTick:
         self._perception = PerceptionLayer(feed_capacity=20)
         self._memory = MemoryLayer()
         self._emotion = EmotionLayer()
-        self._cognition = CognitionLayer()
+        self._cognition = CognitionLayer(llm_adapter=llm_adapter)
         self._decision = DecisionLayer()
         self._influence = InfluenceLayer()
         self._llm_adapter = llm_adapter

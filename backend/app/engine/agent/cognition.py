@@ -1,12 +1,21 @@
 """Layer 4: Cognition — evaluates content and produces action recommendations.
 SPEC: docs/spec/01_AGENT_SPEC.md#layer-4-cognitionlayer
 """
+from __future__ import annotations
+
+import json
+import logging
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from app.engine.agent.schema import AgentAction, AgentState
 from app.engine.agent.perception import PerceptionResult
 from app.engine.agent.memory import MemoryRecord
+
+if TYPE_CHECKING:
+    from app.llm.adapter import LLMAdapter
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -67,8 +76,11 @@ class CognitionLayer:
     Three tiers with IDENTICAL output shape (CognitionResult):
         Tier 1: Rule Engine
         Tier 2: Heuristic (Tier 1 + personality adjustment)
-        Tier 3: LLM (falls back to Tier 2 in Phase 2)
+        Tier 3: LLM (async, falls back to Tier 2 on failure)
     """
+
+    def __init__(self, llm_adapter: LLMAdapter | None = None) -> None:
+        self._llm_adapter = llm_adapter
 
     def evaluate(
         self,
@@ -78,13 +90,11 @@ class CognitionLayer:
         cognition_tier: Literal[1, 2, 3],
         community_bias: float = 0.0,
     ) -> CognitionResult:
-        """Evaluates content and returns CognitionResult.
+        """Synchronous evaluate — Tier 3 falls back to Tier 2.
 
         SPEC: docs/spec/01_AGENT_SPEC.md#layer-4-cognitionlayer
 
-        Determinism:
-            Tier 1/2: Pure function (deterministic).
-            Tier 3: Falls back to Tier 2 in Phase 2.
+        For async Tier 3 LLM path, use evaluate_async() instead.
         """
         if cognition_tier not in (1, 2, 3):
             raise ValueError(f"cognition_tier must be 1, 2, or 3, got {cognition_tier}")
@@ -127,8 +137,8 @@ class CognitionLayer:
             tier_used = 2
 
         if cognition_tier == 3:
-            # TODO: async LLM path — await llm_adapter.complete(prompt)
-            # For now, fall back to Tier 2 (heuristic with personality adjustment)
+            # Sync context: Tier 3 falls back to Tier 2
+            # Use evaluate_async() for real LLM path
             tier_used = 2
 
         confidence = abs(evaluation) / 2.0
@@ -143,6 +153,83 @@ class CognitionLayer:
             confidence=confidence,
             tier_used=tier_used,
         )
+
+
+    async def evaluate_async(
+        self,
+        agent: AgentState,
+        perception: PerceptionResult,
+        memories: list[MemoryRecord],
+        cognition_tier: Literal[1, 2, 3],
+        community_bias: float = 0.0,
+        campaign: object | None = None,
+    ) -> CognitionResult:
+        """Async evaluate with real LLM for Tier 3.
+
+        SPEC: docs/spec/01_AGENT_SPEC.md#layer-4-cognitionlayer
+
+        Falls back to sync evaluate() on LLM failure.
+        """
+        # Tier 1/2: delegate to sync path
+        if cognition_tier < 3 or self._llm_adapter is None:
+            return self.evaluate(agent, perception, memories, cognition_tier, community_bias)
+
+        # Tier 3: async LLM path
+        try:
+            from app.llm.prompt_builder import PromptBuilder
+            from app.llm.schema import LLMOptions
+
+            builder = PromptBuilder()
+            prompt = builder.build_agent_cognition_prompt(
+                agent=agent,
+                perception=perception,
+                memories=memories,
+                campaign=campaign,
+            )
+            response = await self._llm_adapter.complete(
+                prompt,
+                LLMOptions(temperature=0.7, max_tokens=256),
+            )
+
+            # Parse LLM response — expects JSON with evaluation_score and reasoning
+            evaluation, reasoning = _parse_llm_cognition(response.content)
+            evaluation = max(-2.0, min(2.0, evaluation))
+            confidence = abs(evaluation) / 2.0
+            confidence = max(0.0, min(1.0, confidence))
+
+            return CognitionResult(
+                evaluation_score=evaluation,
+                reasoning=reasoning,
+                recommended_action=_map_score_to_action(evaluation),
+                confidence=confidence,
+                tier_used=3,
+            )
+        except Exception:
+            logger.warning(
+                "Tier 3 LLM failed for agent %s, falling back to Tier 2",
+                agent.agent_id,
+                exc_info=True,
+            )
+            return self.evaluate(agent, perception, memories, 2, community_bias)
+
+
+def _parse_llm_cognition(content: str) -> tuple[float, str]:
+    """Parse LLM JSON response for cognition.
+
+    Expected format: {"evaluation_score": float, "reasoning": str}
+    Falls back to heuristic parsing if JSON is invalid.
+    """
+    try:
+        data = json.loads(content)
+        score = float(data.get("evaluation_score", 0.0))
+        reasoning = str(data.get("reasoning", ""))
+        return score, reasoning
+    except (json.JSONDecodeError, ValueError, TypeError):
+        # Heuristic: try to extract a number from the text
+        import re
+        match = re.search(r"[-+]?\d*\.?\d+", content)
+        score = float(match.group()) if match else 0.0
+        return max(-2.0, min(2.0, score)), content[:200]
 
 
 __all__ = ["CognitionLayer", "CognitionResult"]

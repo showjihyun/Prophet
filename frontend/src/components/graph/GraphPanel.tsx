@@ -455,16 +455,19 @@ export default function GraphPanel() {
       {/* Zoom Controls — top-right */}
       <div className="absolute top-4 right-4 z-10 flex flex-col gap-1">
         <GraphButton
+          testId="zoom-in-btn"
           icon={<ZoomIn className="w-4 h-4" />}
           label="Zoom in"
           onClick={handleZoomIn}
         />
         <GraphButton
+          testId="zoom-out-btn"
           icon={<ZoomOut className="w-4 h-4" />}
           label="Zoom out"
           onClick={handleZoomOut}
         />
         <GraphButton
+          testId="zoom-maximize-btn"
           icon={<Maximize2 className="w-4 h-4" />}
           label="Fit to screen"
           onClick={handleFit}
@@ -472,14 +475,14 @@ export default function GraphPanel() {
       </div>
 
       {/* Cascade Badge */}
-      {emergentEvents.length > 0 && (
-        <div className="absolute bottom-20 left-6 z-10 pointer-events-none">
+      <div data-testid="cascade-badge" className="absolute bottom-20 left-6 z-10 pointer-events-none">
+        {emergentEvents.length > 0 && (
           <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--sentiment-positive)] bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)]">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--sentiment-positive)] animate-pulse-dot" />
             {emergentEvents[emergentEvents.length - 1].event_type.replace("_", " ")} detected
           </span>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Tooltip overlay */}
       {hoverInfo && (
@@ -513,7 +516,7 @@ export default function GraphPanel() {
       )}
 
       {/* Legend — bottom-left */}
-      <div className="absolute bottom-4 left-4 z-10 bg-black/40 rounded-lg p-3 backdrop-blur-sm">
+      <div data-testid="network-legend" className="absolute bottom-4 left-4 z-10 bg-black/40 rounded-lg p-3 backdrop-blur-sm">
         <div className="flex flex-col gap-1.5">
           {legendItems.map((item) => (
             <div key={item.name} className="flex items-center gap-2">
@@ -533,7 +536,7 @@ export default function GraphPanel() {
       </div>
 
       {/* Status Bar — bottom-right */}
-      <div className="absolute bottom-4 right-4 z-10 pointer-events-none">
+      <div data-testid="status-overlay" className="absolute bottom-4 right-4 z-10 pointer-events-none">
         <span className="text-[11px] font-mono text-white/40">
           60 FPS · {nodeCount} nodes · {edgeCount} edges · WebGL
         </span>
@@ -549,13 +552,16 @@ function GraphButton({
   icon,
   label,
   onClick,
+  testId,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick?: () => void;
+  testId?: string;
 }) {
   return (
     <button
+      data-testid={testId}
       title={label}
       aria-label={label}
       onClick={onClick}

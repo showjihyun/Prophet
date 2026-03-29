@@ -101,7 +101,7 @@ export default function MetricsPanel() {
         <span className="text-sm font-semibold text-[var(--foreground)]">
           Real-Time Metrics
         </span>
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--live-badge)] uppercase">
+        <span data-testid="live-badge" className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--live-badge)] uppercase">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--live-badge)] animate-pulse-dot" />
           Live
         </span>
@@ -109,7 +109,7 @@ export default function MetricsPanel() {
 
       <div className="flex flex-col" style={{ gap: "var(--card-gap)" }}>
         {/* Active Agents */}
-        <MetricCard>
+        <MetricCard testId="active-agents-metric">
           <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1">
             Active Agents
           </div>
@@ -130,7 +130,7 @@ export default function MetricsPanel() {
         </MetricCard>
 
         {/* Sentiment Distribution */}
-        <MetricCard>
+        <MetricCard testId="sentiment-distribution">
           <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2">
             Sentiment Distribution
           </div>
@@ -140,7 +140,7 @@ export default function MetricsPanel() {
         </MetricCard>
 
         {/* Polarization Index */}
-        <MetricCard>
+        <MetricCard testId="polarization-index">
           <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1">
             Polarization Index
           </div>
@@ -164,7 +164,7 @@ export default function MetricsPanel() {
 
         {/* Cascade Stats */}
         <div className="grid grid-cols-2 gap-2">
-          <MetricCard>
+          <MetricCard testId="cascade-depth">
             <div className="text-[11px] text-[var(--muted-foreground)] font-medium">
               Depth
             </div>
@@ -172,7 +172,7 @@ export default function MetricsPanel() {
               {cascadeDepth}
             </span>
           </MetricCard>
-          <MetricCard>
+          <MetricCard testId="cascade-width">
             <div className="text-[11px] text-[var(--muted-foreground)] font-medium">
               Width
             </div>
@@ -183,7 +183,7 @@ export default function MetricsPanel() {
         </div>
 
         {/* Top Influencers */}
-        <MetricCard>
+        <MetricCard testId="top-influencers">
           <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2">
             Top Influencers
           </div>
@@ -219,9 +219,9 @@ export default function MetricsPanel() {
   );
 }
 
-function MetricCard({ children }: { children: React.ReactNode }) {
+function MetricCard({ children, testId }: { children: React.ReactNode; testId?: string }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-3">
+    <div data-testid={testId} className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-3">
       {children}
     </div>
   );
