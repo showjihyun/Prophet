@@ -7,7 +7,7 @@
  * Right: Play/Pause/Step/Reset/Replay + Settings + Avatar
  */
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Brain,
   Play,
@@ -53,6 +53,42 @@ export default function ControlPanel() {
   const [replayOpen, setReplayOpen] = useState(false);
   const [monteCarloOpen, setMonteCarloOpen] = useState(false);
   const [engineOpen, setEngineOpen] = useState(false);
+
+  const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auto-step loop: runs steps automatically while status is "running"
+  useEffect(() => {
+    if (status !== "running" || !simulation?.simulation_id) {
+      if (stepIntervalRef.current) {
+        clearInterval(stepIntervalRef.current);
+        stepIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const runStep = async () => {
+      try {
+        const result = await apiClient.simulations.step(simulation.simulation_id);
+        appendStep(result);
+        // Check completion
+        if (result.step + 1 >= (simulation.max_steps ?? 50)) {
+          setStatus("completed");
+        }
+      } catch {
+        // Step failed — pause
+        setStatus("paused");
+      }
+    };
+
+    stepIntervalRef.current = setInterval(runStep, 1000 / speed);
+
+    return () => {
+      if (stepIntervalRef.current) {
+        clearInterval(stepIntervalRef.current);
+        stepIntervalRef.current = null;
+      }
+    };
+  }, [status, speed, simulation?.simulation_id]);
 
   // Load projects list on mount
   useEffect(() => {

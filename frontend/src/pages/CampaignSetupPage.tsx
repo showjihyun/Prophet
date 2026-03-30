@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { apiClient } from "../api/client";
 import type { CreateSimulationConfig } from "../api/client";
 import PageNav from "../components/shared/PageNav";
+import { useSimulationStore } from "../store/simulationStore";
 
 const CHANNELS = ["SNS", "Influencer", "Online Ads", "TV", "Email"] as const;
 const COMMUNITIES = [
@@ -69,7 +70,18 @@ export default function CampaignSetupPage() {
         random_seed: randomSeed,
         slm_llm_ratio: slmLlmRatio / 100,
       };
-      await apiClient.simulations.create(config);
+      const sim = await apiClient.simulations.create(config);
+      // Store the created simulation in Zustand so SimulationPage can use it
+      const { setSimulation, setStatus } = useSimulationStore.getState();
+      setSimulation({
+        simulation_id: sim.simulation_id,
+        name: config.name,
+        status: sim.status as any,
+        current_step: 0,
+        max_steps: config.max_steps ?? 50,
+        created_at: new Date().toISOString(),
+      });
+      setStatus(sim.status as any);
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create simulation");
