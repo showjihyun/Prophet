@@ -40,7 +40,7 @@ export default function ProjectsListPage() {
 
   useEffect(() => {
     apiClient.projects.list()
-      .then((res) => setProjects(res.items))
+      .then((res) => setProjects(Array.isArray(res) ? res : []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);

@@ -285,7 +285,7 @@ async def run_scenario(
     await persist.persist_creation(session, state.simulation_id, sim_config, state.agents, edges)
 
     # Start the simulation
-    orchestrator.start_simulation(state.simulation_id)
+    orchestrator.start(state.simulation_id)
 
     # Update scenario with simulation_id and running status
     scenario.simulation_id = state.simulation_id

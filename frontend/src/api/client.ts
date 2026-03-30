@@ -206,7 +206,7 @@ export const apiClient = {
       request<{ communities: CommunityInfo[] }>(`/simulations/${simId}/communities/`),
   },
   projects: {
-    list: () => request<{ items: ProjectSummary[]; total: number }>("/projects/"),
+    list: () => request<ProjectSummary[]>("/projects/"),
     get: (id: string) => request<ProjectDetail>(`/projects/${id}`),
     create: (data: { name: string; description?: string }) =>
       request<ProjectSummary>("/projects/", { method: "POST", body: JSON.stringify(data) }),

@@ -92,7 +92,7 @@ export default function ControlPanel() {
 
   // Load projects list on mount
   useEffect(() => {
-    apiClient.projects.list().then((res) => setProjects(res.items)).catch(() => {});
+    apiClient.projects.list().then((res) => setProjects(Array.isArray(res) ? res : [])).catch(() => {});
   }, [setProjects]);
 
   // When project changes, load its scenarios
