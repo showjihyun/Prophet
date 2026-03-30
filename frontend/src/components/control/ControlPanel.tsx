@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
+import type { SimulationRun } from '../../types/simulation';
 import ThemeToggle from '../shared/ThemeToggle';
 import InjectEventModal from '../shared/InjectEventModal';
 import ReplayModal from '../shared/ReplayModal';
@@ -53,6 +54,11 @@ export default function ControlPanel() {
   const [replayOpen, setReplayOpen] = useState(false);
   const [monteCarloOpen, setMonteCarloOpen] = useState(false);
   const [engineOpen, setEngineOpen] = useState(false);
+
+  // Previous simulations list for the "Load Previous" dropdown
+  const [prevSimulations, setPrevSimulations] = useState<SimulationRun[]>([]);
+  const [prevSimOpen, setPrevSimOpen] = useState(false);
+  const setSteps = useSimulationStore((s) => s.appendStep);
 
   const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -127,6 +133,30 @@ export default function ControlPanel() {
     try {
       const scenario = await apiClient.projects.createScenario(currentProjectId, { name: name.trim() });
       setScenarios([...scenarios, scenario]);
+    } catch { /* ignore */ }
+  };
+
+  // Load list of previous simulations when dropdown is opened
+  const handleOpenPrevSimulations = async () => {
+    setPrevSimOpen((open) => !open);
+    if (prevSimulations.length === 0) {
+      try {
+        const res = await apiClient.simulations.list();
+        setPrevSimulations(res.items ?? []);
+      } catch { /* ignore */ }
+    }
+  };
+
+  // Load a previous simulation into the store
+  const handleLoadPrevSimulation = async (simId: string) => {
+    setPrevSimOpen(false);
+    try {
+      const sim = await apiClient.simulations.get(simId);
+      setSimulation(sim);
+      const stepsData = await apiClient.simulations.getSteps(simId);
+      for (const step of stepsData) {
+        setSteps(step);
+      }
     } catch { /* ignore */ }
   };
 
@@ -268,6 +298,37 @@ export default function ControlPanel() {
               {s}x
             </button>
           ))}
+        </div>
+
+        {/* Load Previous simulation dropdown */}
+        <div className="relative">
+          <button
+            data-testid="load-prev-btn"
+            onClick={handleOpenPrevSimulations}
+            className="h-8 px-2.5 text-xs font-medium rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors"
+          >
+            Load Previous
+          </button>
+          {prevSimOpen && (
+            <div className="absolute left-0 top-9 z-50 w-64 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg overflow-hidden">
+              {prevSimulations.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-[var(--muted-foreground)]">No simulations found</div>
+              ) : (
+                prevSimulations.slice(0, 10).map((sim) => (
+                  <button
+                    key={sim.simulation_id}
+                    onClick={() => handleLoadPrevSimulation(sim.simulation_id)}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--secondary)] transition-colors border-b border-[var(--border)] last:border-0"
+                  >
+                    <span className="font-medium text-[var(--foreground)] block truncate">{sim.name}</span>
+                    <span className="text-[var(--muted-foreground)]">
+                      {sim.status} · Step {sim.current_step}/{sim.max_steps}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
 

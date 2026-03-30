@@ -77,20 +77,94 @@ export default function ConversationPanel() {
   const steps = useSimulationStore((s) => s.steps);
   const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
 
-  // Convert emergent events to conversation items, or use mock data
+  // Build step-derived insight messages, or fall back to emergent events, or mock data
   const conversations = useMemo<ConversationItem[]>(() => {
-    if (emergentEvents.length === 0) return MOCK_CONVERSATIONS;
+    // If steps exist, generate insight messages from step data (most recent first)
+    if (steps.length > 0) {
+      const insightItems: ConversationItem[] = [];
 
-    return emergentEvents.slice(-6).reverse().map((event, i) => ({
-      id: `event-${i}`,
-      agentId: event.community_id ?? "System",
-      community: event.community_id ?? "System",
-      communityColor: EVENT_COMMUNITY_COLORS[event.community_id?.toLowerCase() ?? ""] ?? "var(--community-bridge)",
-      message: event.description,
-      sentiment: severityToSentiment(event.severity),
-      time: `Step ${event.step}`,
-    }));
-  }, [emergentEvents]);
+      // Walk steps in reverse to produce most-recent-first messages
+      const recentSteps = steps.slice(-6).reverse();
+      for (const stepData of recentSteps) {
+        const prevStep = steps[stepData.step - 1] ?? null;
+
+        // Adoption delta message
+        const rate = (stepData.adoption_rate * 100).toFixed(1);
+        const delta = prevStep
+          ? ((stepData.adoption_rate - prevStep.adoption_rate) * 100).toFixed(1)
+          : null;
+        insightItems.push({
+          id: `step-${stepData.step}-adopt`,
+          agentId: `Step ${stepData.step}`,
+          community: "System",
+          communityColor: "var(--community-alpha)",
+          message: delta !== null
+            ? `Adoption reached ${rate}% (+${delta}% from last step)`
+            : `Adoption at ${rate}%`,
+          sentiment: stepData.adoption_rate > 0.3 ? "Positive" : stepData.adoption_rate > 0.1 ? "Neutral" : "Negative",
+          time: `Step ${stepData.step}`,
+        });
+
+        // Sentiment message
+        const sentimentPct = (stepData.mean_sentiment * 100).toFixed(0);
+        const sentimentDir = stepData.mean_sentiment >= 0 ? "positive" : "negative";
+        insightItems.push({
+          id: `step-${stepData.step}-sentiment`,
+          agentId: `Step ${stepData.step}`,
+          community: "Sentiment",
+          communityColor: stepData.mean_sentiment >= 0 ? "var(--sentiment-positive)" : "var(--destructive)",
+          message: `Sentiment shifted to ${sentimentDir}: ${sentimentPct}%`,
+          sentiment: stepData.mean_sentiment >= 0.2 ? "Positive" : stepData.mean_sentiment <= -0.2 ? "Negative" : "Neutral",
+          time: `Step ${stepData.step}`,
+        });
+
+        // Dominant action from action_distribution
+        const actionDist = stepData.action_distribution;
+        const topAction = Object.entries(actionDist).sort((a, b) => b[1] - a[1])[0];
+        if (topAction) {
+          insightItems.push({
+            id: `step-${stepData.step}-action`,
+            agentId: `Step ${stepData.step}`,
+            community: "Actions",
+            communityColor: "var(--community-delta)",
+            message: `Top action: ${topAction[0]} (${topAction[1]} agents)`,
+            sentiment: "Neutral",
+            time: `Step ${stepData.step}`,
+          });
+        }
+
+        // Emergent events from this step
+        for (const event of stepData.emergent_events) {
+          insightItems.push({
+            id: `step-${stepData.step}-event-${event.event_type}`,
+            agentId: event.community_id ?? "System",
+            community: event.community_id ?? "Alert",
+            communityColor: EVENT_COMMUNITY_COLORS[event.community_id?.toLowerCase() ?? ""] ?? "var(--destructive)",
+            message: `Alert: ${event.event_type.replace(/_/g, " ")} detected! ${event.description}`,
+            sentiment: severityToSentiment(event.severity),
+            time: `Step ${event.step}`,
+          });
+        }
+      }
+
+      return insightItems.slice(0, 12);
+    }
+
+    // Fall back to emergent events as conversation items
+    if (emergentEvents.length > 0) {
+      return emergentEvents.slice(-6).reverse().map((event, i) => ({
+        id: `event-${i}`,
+        agentId: event.community_id ?? "System",
+        community: event.community_id ?? "System",
+        communityColor: EVENT_COMMUNITY_COLORS[event.community_id?.toLowerCase() ?? ""] ?? "var(--community-bridge)",
+        message: event.description,
+        sentiment: severityToSentiment(event.severity),
+        time: `Step ${event.step}`,
+      }));
+    }
+
+    return MOCK_CONVERSATIONS;
+  }, [steps, emergentEvents]);
 
   // Build expert analysis from latest step data or use mock text
   const expertAnalysis = useMemo(() => {

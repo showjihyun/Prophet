@@ -220,6 +220,16 @@ const CY_STYLE: cytoscape.Stylesheet[] = [
       "border-color": "#22c55e",
     },
   },
+  // -- Live adopted node (updated per simulation step) --
+  {
+    selector: ".adopted-live",
+    style: {
+      "border-width": 2,
+      "border-color": "#22c55e",
+      width: 8,
+      height: 8,
+    },
+  },
   // -- Default edge (intra-community) --
   {
     selector: "edge",
@@ -275,6 +285,7 @@ export default function GraphPanel() {
 
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const emergentEvents = useSimulationStore((s) => s.emergentEvents);
+  const steps = useSimulationStore((s) => s.steps);
 
   // --- Initialize Cytoscape ---
   useEffect(() => {
@@ -413,6 +424,29 @@ export default function GraphPanel() {
       }
     };
   }, [simulationId]);
+
+  // --- Update node adoption state on each new simulation step ---
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || steps.length === 0) return;
+    const latestStep = steps[steps.length - 1];
+    const adoptionRate = latestStep.adoption_rate || 0;
+
+    const nodes = cy.nodes();
+    const total = nodes.length;
+    const adoptCount = Math.floor(total * adoptionRate);
+
+    // Reset live adopted class from all nodes
+    nodes.removeClass("adopted-live");
+
+    // Mark top-N nodes (sorted by influence_score desc) as adopted
+    const sorted = nodes.toArray().sort(
+      (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
+    );
+    sorted.slice(0, adoptCount).forEach((node) => {
+      node.addClass("adopted-live");
+    });
+  }, [steps.length]);
 
   // --- Zoom controls ---
   const handleZoomIn = useCallback(() => {
