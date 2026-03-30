@@ -129,6 +129,25 @@ export interface CommunityInfo {
   dominant_action: string;
 }
 
+/** Community template. @spec docs/spec/06_API_SPEC.md#community-template-endpoints */
+export interface CommunityTemplate {
+  template_id: string;
+  name: string;
+  agent_type: string;
+  default_size: number;
+  description: string;
+  personality_profile: Record<string, number>;
+}
+
+/** Input for creating/updating a community template. */
+export interface CommunityTemplateInput {
+  name: string;
+  agent_type: string;
+  default_size: number;
+  description?: string;
+  personality_profile?: Record<string, number>;
+}
+
 /** Cytoscape graph format. @spec docs/spec/06_API_SPEC.md#get-network */
 export interface CytoscapeGraph {
   nodes: Array<{ data: Record<string, unknown> }>;
@@ -207,6 +226,15 @@ export const apiClient = {
   communities: {
     list: (simId: string) =>
       request<{ communities: CommunityInfo[] }>(`/simulations/${simId}/communities/`),
+  },
+  communityTemplates: {
+    list: () => request<{ templates: CommunityTemplate[] }>("/communities/templates/"),
+    create: (data: CommunityTemplateInput) =>
+      request<CommunityTemplate>("/communities/templates/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: CommunityTemplateInput) =>
+      request<CommunityTemplate>(`/communities/templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<void>(`/communities/templates/${id}`, { method: "DELETE" }),
   },
   projects: {
     list: () => request<ProjectSummary[]>("/projects/"),

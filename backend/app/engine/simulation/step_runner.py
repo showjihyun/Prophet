@@ -196,6 +196,8 @@ class StepRunner:
         self._network_evolver = NetworkEvolver()
         self._gateway = LLMGateway()
         self._negative_cascade = NegativeCascadeModel()
+        from app.engine.platform.registry import PlatformRegistry
+        self._platform_registry = PlatformRegistry()
 
     def _build_community_orchestrators(
         self,
@@ -327,6 +329,16 @@ class StepRunner:
             max_tier2_ratio=config.llm_tier3_ratio,
         )
 
+        # Resolve platform RecSys config: prefer explicit config, then platform plugin
+        recsys_config = config.recsys_config
+        if recsys_config is None:
+            platform_name = getattr(config, "platform", "default")
+            try:
+                plugin = self._platform_registry.get_platform(platform_name)
+                recsys_config = plugin.get_feed_config()
+            except (ValueError, AttributeError):
+                recsys_config = None  # ExposureModel will use its own default
+
         # ── Phase 1: Intra-Community (parallel) ──
         community_orchs = self._build_community_orchestrators(state)
         community_results: list[CommunityTickResult] = await asyncio.gather(*[
@@ -336,6 +348,7 @@ class StepRunner:
                 env_events=env_events,
                 tier_config=tier_config,
                 seed=seed,
+                recsys_config=recsys_config,
             )
             for co in community_orchs
         ])
@@ -432,10 +445,20 @@ class StepRunner:
 
         emergent_events = self._cascade_detector.detect(cascade_step, cascade_history)
 
-        # Network evolution
+        # Network evolution — build agent_id → node_id map for the full graph
         if config.enable_dynamic_edges:
-            action_results = [a for a in updated_agents]
-            state.network = self._network_evolver.evolve(network, action_results, step_num)
+            G_evolve = state.network.graph
+            agent_to_node_evolve: dict = {}
+            for node, data in G_evolve.nodes(data=True):
+                aid = data.get("agent_id")
+                if aid is not None:
+                    agent_to_node_evolve[aid] = node
+            state.network = self._network_evolver.evolve(
+                state.network,
+                updated_agents,
+                step_num,
+                node_map=agent_to_node_evolve,
+            )
 
         # Tier distribution (approximate from community results)
         tier_dist: dict[int, int] = {}

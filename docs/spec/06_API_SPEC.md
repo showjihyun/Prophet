@@ -389,6 +389,56 @@ List all communities with current metrics.
 }
 ```
 
+### 5.2 Community Configuration (Template) Endpoints
+
+Communities can be configured as templates before simulation creation.
+
+### GET /communities/templates
+List available community templates.
+
+**Response 200:**
+```json
+{
+  "templates": [
+    {
+      "template_id": "uuid",
+      "name": "Early Adopters",
+      "agent_type": "early_adopter",
+      "default_size": 100,
+      "description": "Tech-savvy, high openness, trend-following"
+    }
+  ]
+}
+```
+
+### POST /communities/templates
+Create a community template.
+
+**Request:**
+```json
+{
+  "name": "Custom Community",
+  "agent_type": "consumer",
+  "default_size": 200,
+  "description": "Custom consumer segment",
+  "personality_profile": {
+    "openness": 0.6,
+    "skepticism": 0.4,
+    "trend_following": 0.5,
+    "brand_loyalty": 0.3,
+    "social_influence": 0.4
+  }
+}
+```
+
+**Response 201:** Template object with template_id.
+
+### PUT /communities/templates/{template_id}
+Update a community template.
+
+### DELETE /communities/templates/{template_id}
+Delete a community template.
+
 ---
 
 ## 6. LLM Dashboard Endpoints

@@ -156,7 +156,17 @@ export default function CommunitiesDetailPage() {
           { label: "Home", href: "/" },
           { label: "Communities Overview" },
         ]}
-        actions={<span className="font-semibold text-sm text-[var(--foreground)]">MCASP Prophet Engine</span>}
+        actions={
+          <div className="flex items-center gap-3">
+            <span className="font-semibold text-sm text-[var(--foreground)]">MCASP Prophet Engine</span>
+            <button
+              onClick={() => navigate("/communities/manage")}
+              className="px-3 py-1.5 text-xs font-medium border border-[var(--border)] rounded-md text-[var(--foreground)] hover:bg-[var(--secondary)]"
+            >
+              Manage Templates
+            </button>
+          </div>
+        }
       />
 
       <div className="flex-1 p-6 flex flex-col gap-6 overflow-auto">
