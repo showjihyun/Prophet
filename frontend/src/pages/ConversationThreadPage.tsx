@@ -2,8 +2,10 @@
  * ConversationThreadPage — Agent conversation thread with reactions (UI-15).
  * @spec docs/spec/ui/UI_15_CONVERSATION_THREAD.md
  */
+import { useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
+import { useSimulationStore } from "../store/simulationStore";
 
 /* ------------------------------------------------------------------ */
 /* Mock Data                                                           */
@@ -120,10 +122,78 @@ const STANCE_STYLES: Record<string, string> = {
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
+const COMMUNITY_COLORS_ARRAY = [
+  "var(--community-alpha)",
+  "var(--community-beta)",
+  "var(--community-gamma)",
+  "var(--community-delta)",
+  "var(--community-bridge)",
+];
+
 export default function ConversationThreadPage() {
   const { communityId, threadId: _threadId } = useParams<{ communityId: string; threadId: string }>();
   const navigate = useNavigate();
-  const t = MOCK_THREAD;
+  const steps = useSimulationStore((st) => st.steps);
+  const emergentEvents = useSimulationStore((st) => st.emergentEvents);
+
+  // Derive thread header from store data
+  const derivedThread = useMemo(() => {
+    if (steps.length === 0) return null;
+    const latest = steps[steps.length - 1];
+    const cm = communityId ? latest.community_metrics?.[communityId] : null;
+    const participantIds = Object.keys(latest.community_metrics ?? {});
+    return {
+      thread_id: _threadId ?? "auto",
+      topic: cm
+        ? `Step ${latest.step}: ${cm.dominant_action} dominant — ${Math.round(cm.adoption_rate * 100)}% adoption`
+        : `Simulation at Step ${latest.step}`,
+      category_tag: cm?.dominant_action ?? "simulation",
+      participant_count: participantIds.length,
+      timespan: `${latest.step_duration_ms ? (latest.step_duration_ms / 1000).toFixed(1) : "0"} s/step`,
+      avg_sentiment: latest.mean_sentiment,
+      message_count: steps.length,
+    };
+  }, [steps, communityId, _threadId]);
+
+  // Derive messages from step history — each step with change becomes a message
+  const derivedMessages = useMemo<ThreadMsg[]>(() => {
+    if (steps.length === 0) return [];
+    const communityKeys = steps.length > 0 ? Object.keys(steps[0].community_metrics ?? {}) : [];
+    return steps.map((step, idx): ThreadMsg => {
+      const topAction = Object.entries(step.action_distribution ?? {})
+        .sort((a, b) => b[1] - a[1])[0];
+      const actionName = topAction?.[0] ?? "observe";
+      const adoptPct = Math.round(step.adoption_rate * 100);
+      const sentiment = step.mean_sentiment;
+      const communityColorIdx = idx % communityKeys.length;
+      const stance: ThreadMsg["stance"] =
+        sentiment > 0.1 ? "Progressive" : sentiment < -0.1 ? "Conservative" : "Neutral";
+
+      // Check if any emergent event occurred at this step
+      const event = emergentEvents.find((e) => e.step === step.step);
+
+      return {
+        message_id: `step-${step.step}`,
+        agent_id: `Step-${step.step}`,
+        community_color: COMMUNITY_COLORS_ARRAY[communityColorIdx] ?? "var(--community-alpha)",
+        stance,
+        relative_time: `Step ${step.step}`,
+        content: event
+          ? `[${event.event_type.replace(/_/g, " ").toUpperCase()}] ${event.description} — ${step.llm_calls_this_step} LLM calls, ${adoptPct}% adoption rate.`
+          : `${step.llm_calls_this_step} LLM calls this step. Dominant action: ${actionName} (${adoptPct}% adoption). Sentiment: ${sentiment > 0 ? "+" : ""}${sentiment.toFixed(2)}.`,
+        reactions: {
+          agree: Math.round(step.adoption_rate * 20),
+          disagree: Math.round((1 - step.adoption_rate) * 10),
+          nuanced: step.llm_calls_this_step,
+        },
+        is_reply: idx > 0,
+        reply_to_id: idx > 0 ? `step-${steps[idx - 1].step}` : null,
+      };
+    });
+  }, [steps, emergentEvents]);
+
+  const t = derivedThread ?? MOCK_THREAD;
+  const messages = derivedMessages.length > 0 ? derivedMessages : MOCK_MESSAGES;
 
   const sentColor = t.avg_sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : t.avg_sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";
 
@@ -190,7 +260,7 @@ export default function ConversationThreadPage() {
       {/* Thread body */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto">
-          {MOCK_MESSAGES.map((msg, idx) => (
+          {messages.map((msg, idx) => (
             <div
               key={msg.message_id}
               data-testid={msg.is_reply ? "thread-reply" : "thread-message"}
@@ -260,7 +330,7 @@ export default function ConversationThreadPage() {
               {/* Reply indicator */}
               {msg.is_reply && idx > 0 && (
                 <div className="mt-2 text-xs text-[var(--muted-foreground)] opacity-60">
-                  Replying to {MOCK_MESSAGES.find((m) => m.message_id === msg.reply_to_id)?.agent_id ?? "..."}
+                  Replying to {messages.find((m) => m.message_id === msg.reply_to_id)?.agent_id ?? "..."}
                 </div>
               )}
             </div>

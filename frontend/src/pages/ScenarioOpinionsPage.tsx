@@ -2,9 +2,11 @@
  * ScenarioOpinionsPage — Scenario-wide opinion landscape (UI-13).
  * @spec docs/spec/ui/UI_13_SCENARIO_OPINIONS.md
  */
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
+import { useSimulationStore } from "../store/simulationStore";
 
 /* ------------------------------------------------------------------ */
 /* Mock Data                                                           */
@@ -178,9 +180,68 @@ function CommunityOpinionCard({ c, onView }: { c: CommunityOpinion; onView: () =
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
+const COMMUNITY_COLORS_MAP: Record<number, string> = {
+  0: "var(--community-alpha)",
+  1: "var(--community-beta)",
+  2: "var(--community-gamma)",
+  3: "var(--community-delta)",
+  4: "var(--community-bridge)",
+};
+
 export default function ScenarioOpinionsPage() {
   const navigate = useNavigate();
-  const s = MOCK_SUMMARY;
+  const simulation = useSimulationStore((st) => st.simulation);
+  const steps = useSimulationStore((st) => st.steps);
+
+  // Derive community opinions from the latest step's community_metrics
+  const derivedCommunities = useMemo<CommunityOpinion[]>(() => {
+    const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
+    if (!latestStep || !latestStep.community_metrics) return [];
+    return Object.entries(latestStep.community_metrics).map(([cid, metrics], idx) => {
+      const adoptionPct = Math.round(metrics.adoption_rate * 100);
+      const beliefScore = metrics.mean_belief;
+      const positivePct = Math.round(Math.max(0, beliefScore) * 100);
+      const negativePct = Math.round(Math.max(0, -beliefScore) * 100);
+      const neutralPct = 100 - positivePct - negativePct;
+      const dominant: CommunityOpinion["dominant_stance"] =
+        beliefScore > 0.1 ? "positive" : beliefScore < -0.1 ? "negative" : "mixed";
+      return {
+        community_id: cid,
+        community_name: `Community ${cid}`,
+        agent_count: metrics.adoption_count > 0 ? Math.round(metrics.adoption_count / Math.max(0.001, metrics.adoption_rate)) : 0,
+        avg_sentiment: beliefScore,
+        conversation_count: metrics.new_propagation_count,
+        dominant_stance: dominant,
+        dominant_pct: dominant === "positive" ? positivePct : dominant === "negative" ? negativePct : neutralPct,
+        sentiment_distribution: { positive: positivePct, neutral: Math.max(0, neutralPct), negative: negativePct },
+        color: COMMUNITY_COLORS_MAP[idx % 5] ?? "var(--muted-foreground)",
+      } satisfies CommunityOpinion;
+    });
+  }, [steps]);
+
+  const communities = derivedCommunities.length > 0 ? derivedCommunities : MOCK_COMMUNITIES;
+
+  const derivedSummary = useMemo(() => {
+    const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
+    if (!latestStep || !simulation) return null;
+    const totalConversations = Object.values(latestStep.community_metrics ?? {}).reduce(
+      (acc, m) => acc + m.new_propagation_count, 0,
+    );
+    return {
+      avg_sentiment: latestStep.mean_sentiment,
+      polarization: latestStep.sentiment_variance,
+      total_conversations: totalConversations,
+      active_cascades: Math.round(latestStep.adoption_rate * 1000),
+      day: latestStep.step,
+      total_agents: Object.values(latestStep.community_metrics ?? {}).reduce(
+        (acc, m) => acc + (m.adoption_count > 0 ? Math.round(m.adoption_count / Math.max(0.001, m.adoption_rate)) : 0),
+        0,
+      ),
+      community_count: Object.keys(latestStep.community_metrics ?? {}).length,
+    };
+  }, [steps, simulation]);
+
+  const s = derivedSummary ?? MOCK_SUMMARY;
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
@@ -265,7 +326,7 @@ export default function ScenarioOpinionsPage() {
 
         {/* Community cards grid */}
         <div className="grid grid-cols-3 gap-4">
-          {MOCK_COMMUNITIES.map((c) => (
+          {communities.map((c) => (
             <CommunityOpinionCard
               key={c.community_id}
               c={c}

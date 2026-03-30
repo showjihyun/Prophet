@@ -2,8 +2,10 @@
  * CommunityOpinionPage — Community-level opinion clusters + conversations (UI-14).
  * @spec docs/spec/ui/UI_14_COMMUNITY_OPINION.md
  */
+import { useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
+import { useSimulationStore } from "../store/simulationStore";
 
 /* ------------------------------------------------------------------ */
 /* Mock Data                                                           */
@@ -112,8 +114,60 @@ function StanceBar({ stances }: { stances: { support: number; neutral: number; o
 export default function CommunityOpinionPage() {
   const { communityId } = useParams<{ communityId: string }>();
   const navigate = useNavigate();
+  const steps = useSimulationStore((st) => st.steps);
 
-  const meta = COMMUNITY_META[communityId ?? "alpha"] ?? COMMUNITY_META.alpha;
+  // Derive community meta from store steps
+  const derivedMeta = useMemo(() => {
+    if (!communityId || steps.length === 0) return null;
+    const latestStep = steps[steps.length - 1];
+    const cm = latestStep.community_metrics?.[communityId];
+    if (!cm) return null;
+    const totalAgents = cm.adoption_count > 0 ? Math.round(cm.adoption_count / Math.max(0.001, cm.adoption_rate)) : 0;
+    return {
+      name: `Community ${communityId}`,
+      color: "var(--community-alpha)",
+      agents: totalAgents,
+      sentiment: cm.mean_belief,
+      conversations: cm.new_propagation_count,
+      positive_pct: Math.round(Math.max(0, cm.mean_belief) * 100),
+    };
+  }, [communityId, steps]);
+
+  // Build time-series clusters from steps
+  const derivedClusters = useMemo<ClusterData[]>(() => {
+    if (!communityId || steps.length === 0) return [];
+    const recent = steps.slice(-5);
+    return recent.map((step, idx) => {
+      const cm = step.community_metrics?.[communityId];
+      const adoptRate = cm?.adoption_rate ?? 0;
+      const support = Math.round(adoptRate * 100);
+      const oppose = Math.round(Math.max(0, (cm?.mean_belief ?? 0) < 0 ? -cm!.mean_belief * 100 : 0));
+      return {
+        cluster_id: `step-${step.step}`,
+        topic_name: `Step ${step.step} Activity`,
+        description: `Dominant action: ${cm?.dominant_action ?? "unknown"}. Propagation events: ${cm?.new_propagation_count ?? 0}.`,
+        agent_count: cm ? Math.round(cm.adoption_count / Math.max(0.001, cm.adoption_rate)) : 0,
+        stances: { support, neutral: Math.max(0, 100 - support - oppose), oppose },
+      } satisfies ClusterData;
+    });
+  }, [communityId, steps]);
+
+  // Build conversations from action_distribution in steps
+  const derivedConversations = useMemo<ConversationData[]>(() => {
+    if (steps.length === 0) return [];
+    return steps.slice(-4).reverse().map((step, idx) => ({
+      thread_id: `step-thread-${step.step}`,
+      topic_title: `Step ${step.step}: ${Object.entries(step.action_distribution ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "activity"} dominant (${Math.round(step.adoption_rate * 100)}% adoption)`,
+      participant_ids: Object.keys(step.community_metrics ?? {}).slice(0, 4),
+      message_count: step.llm_calls_this_step,
+      relative_time: `${idx + 1} step${idx > 0 ? "s" : ""} ago`,
+    }));
+  }, [steps]);
+
+  const meta = derivedMeta ?? COMMUNITY_META[communityId ?? "alpha"] ?? COMMUNITY_META.alpha;
+  const clusters = derivedClusters.length > 0 ? derivedClusters : MOCK_CLUSTERS;
+  const conversations = derivedConversations.length > 0 ? derivedConversations : MOCK_CONVERSATIONS;
+
   const sentColor = meta.sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : meta.sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";
 
   return (
@@ -181,7 +235,7 @@ export default function CommunityOpinionPage() {
           </div>
 
           <div className="flex flex-col gap-3">
-            {MOCK_CLUSTERS.map((cl) => (
+            {clusters.map((cl) => (
               <div
                 key={cl.cluster_id}
                 className="bg-[var(--card)] border border-[var(--border)] rounded-lg p-5 hover:border-[var(--muted-foreground)] transition-colors"
@@ -211,12 +265,12 @@ export default function CommunityOpinionPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-[var(--foreground)]">Recent Conversations</h2>
             <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)]">
-              {MOCK_CONVERSATIONS.length}
+              {conversations.length}
             </span>
           </div>
 
           <div className="flex flex-col gap-2">
-            {MOCK_CONVERSATIONS.map((conv) => (
+            {conversations.map((conv) => (
               <button
                 key={conv.thread_id}
                 onClick={() => navigate(`/opinions/${communityId}/thread/${conv.thread_id}`)}

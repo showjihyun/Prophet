@@ -292,6 +292,38 @@ export default function AgentDetailPage() {
     [connections, connSearch],
   );
 
+  // Derive interactions from step history — each step where action_distribution changes
+  const derivedInteractions = useMemo<Interaction[]>(() => {
+    if (steps.length === 0) return [];
+    const ACTION_TYPE_MAP: Record<string, Interaction["type"]> = {
+      share: "Share",
+      repost: "Share",
+      comment: "Reply",
+      reply: "Reply",
+      follow: "Influence",
+      mention: "Mention",
+      adopt: "Influence",
+    };
+    return steps.slice(-6).reverse().map((step): Interaction => {
+      const topAction = Object.entries(step.action_distribution ?? {})
+        .sort((a, b) => b[1] - a[1])[0];
+      const actionKey = topAction?.[0] ?? "view";
+      const type: Interaction["type"] = ACTION_TYPE_MAP[actionKey] ?? "Influence";
+      const sentiment: Interaction["sentiment"] =
+        step.mean_sentiment > 0.1 ? "Positive" : step.mean_sentiment < -0.1 ? "Negative" : "Neutral";
+      const topCommunity = Object.keys(step.community_metrics ?? {})[0] ?? "—";
+      return {
+        target: `Community-${topCommunity}`,
+        type,
+        sentiment,
+        message: `Step ${step.step}: ${actionKey} action dominant (${Math.round((topAction?.[1] ?? 0) * 10)}% of agents). Adoption: ${Math.round(step.adoption_rate * 100)}%.`,
+        time: `Step ${step.step}`,
+      };
+    });
+  }, [steps]);
+
+  const interactions = derivedInteractions.length > 0 ? derivedInteractions : MOCK_INTERACTIONS;
+
   const filteredMessages = useMemo(
     () =>
       msgFilter === "all"
@@ -480,7 +512,7 @@ export default function AgentDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {MOCK_INTERACTIONS.map((interaction, i) => (
+                    {interactions.map((interaction, i) => (
                       <tr
                         key={i}
                         className="border-b border-[var(--border)] hover:bg-[var(--accent)] transition-colors"

@@ -47,6 +47,8 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 | Backend API | http://localhost:8000 |
 | API Docs (Swagger) | http://localhost:8000/docs |
 | Ollama | http://localhost:11434 |
+| PostgreSQL | localhost:5433 |
+| Valkey | localhost:6379 |
 
 ### Local Development
 
@@ -98,6 +100,13 @@ Perception → Memory (GraphRAG) → Emotion → Cognition → Decision → Infl
 - RecSys-inspired exposure model (OASIS-inspired feed ranking)
 - 5 emergent behavior detections: Viral Cascade, Polarization, Echo Chamber, Collapse, Slow Adoption
 - Monte Carlo simulation (N-run probability analysis)
+- Export JSON/CSV for post-analysis
+
+## Additional Features
+
+- **Communities Management** — create, edit, and template community types (Early Adopters, Consumers, Skeptics, Experts, Influencers)
+- **Project / Scenario Management** — organize simulations under projects with multi-scenario comparison
+- **Export JSON/CSV** — download full simulation data per step for external analysis
 
 ## Project Structure
 
@@ -110,10 +119,10 @@ Prophet/
 ├── backend/               # FastAPI backend (71 Python files)
 │   ├── app/engine/        # Agent, Network, Diffusion, Simulation
 │   ├── app/llm/           # LLM Adapter (Ollama/Claude/OpenAI)
-│   ├── app/api/           # 30 REST endpoints + WebSocket
-│   └── tests/             # 424 GREEN tests
-├── frontend/              # React 18 frontend (41 TS/TSX files)
-│   ├── src/pages/         # 10 pages
+│   ├── app/api/           # 49 REST endpoints + WebSocket
+│   └── tests/             # 737+ GREEN tests
+├── frontend/              # React 18 frontend (50+ TS/TSX files)
+│   ├── src/pages/         # 16 pages
 │   ├── src/components/    # Graph, Timeline, Control, Metrics, Shared
 │   └── src/store/         # Zustand state management
 └── docker-compose.yml     # PostgreSQL + Valkey + Ollama + App
