@@ -206,6 +206,9 @@ export const apiClient = {
       request<Record<string, unknown>>(`/simulations/${id}/engine-control`, { method: "POST", body: JSON.stringify(body) }),
     recommendEngine: (body: { agent_count: number; budget_usd: number; max_steps?: number }) =>
       request<Record<string, unknown>>("/simulations/recommend-engine", { method: "POST", body: JSON.stringify(body) }),
+    export: (id: string, format: 'json' | 'csv' = 'json') => {
+      window.open(`${BASE_URL}/simulations/${id}/export?format=${format}`, '_blank');
+    },
   },
   agents: {
     list: (simId: string, params?: { community_id?: string; limit?: number; offset?: number }) => {

@@ -9,7 +9,12 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+import csv
+import io
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -865,3 +870,71 @@ async def interview_agent(
         "confidence": result.confidence,
         "reasoning": result.reasoning,
     }
+
+
+# ---- Export (G9) ----
+
+@router.get("/{simulation_id}/export")
+async def export_simulation(
+    simulation_id: str,
+    format: str = Query("json", pattern="^(json|csv)$"),
+    orchestrator: Any = Depends(get_orchestrator),
+) -> StreamingResponse:
+    """Export simulation results as JSON or CSV download.
+    SPEC: docs/spec/06_API_SPEC.md#simulation-endpoints
+    """
+    state = _get_state_or_404(orchestrator, simulation_id)
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "step", "adoption_rate", "mean_sentiment", "diffusion_rate",
+            "sentiment_variance", "llm_calls",
+        ])
+        for step in state.step_history:
+            writer.writerow([
+                step.step,
+                step.adoption_rate,
+                step.mean_sentiment,
+                step.diffusion_rate,
+                step.sentiment_variance,
+                step.llm_calls_this_step,
+            ])
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=simulation_{simulation_id}.csv"
+            },
+        )
+    else:
+        data = {
+            "simulation_id": str(state.simulation_id),
+            "config": {
+                "name": state.config.name,
+                "max_steps": state.config.max_steps,
+            },
+            "status": state.status,
+            "current_step": state.current_step,
+            "total_agents": len(state.agents),
+            "steps": [
+                {
+                    "step": s.step,
+                    "adoption_rate": s.adoption_rate,
+                    "mean_sentiment": s.mean_sentiment,
+                    "diffusion_rate": s.diffusion_rate,
+                    "total_adoption": s.total_adoption,
+                }
+                for s in state.step_history
+            ],
+        }
+        content = json.dumps(data, indent=2, default=str)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f"attachment; filename=simulation_{simulation_id}.json"
+            },
+        )

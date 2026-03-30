@@ -46,6 +46,19 @@ class MemoryConfig:
             raise ValueError(f"MemoryConfig weights must sum to 1.0, got {total}")
 
 
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Compute cosine similarity between two vectors.
+
+    SPEC: docs/spec/01_AGENT_SPEC.md#layer-2-memorylayer
+    """
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(x * x for x in b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
 class MemoryLayer:
     """Agent memory storage and retrieval using GraphRAG-style scoring.
 
@@ -65,8 +78,13 @@ class MemoryLayer:
 
     MAX_MEMORIES_PER_AGENT: int = 1000
 
-    def __init__(self, config: MemoryConfig | None = None):
-        """SPEC: docs/spec/01_AGENT_SPEC.md#layer-2-memorylayer"""
+    def __init__(self, config: MemoryConfig | None = None, llm_adapter=None):
+        """SPEC: docs/spec/01_AGENT_SPEC.md#layer-2-memorylayer
+
+        Args:
+            config: Optional MemoryConfig with scoring weights.
+            llm_adapter: Optional LLMAdapter for embedding-based retrieval.
+        """
         if config is None:
             # Use fallback weights since we have no pgvector in Phase 2
             self._alpha = 0.6
@@ -79,6 +97,21 @@ class MemoryLayer:
             self._gamma = config.gamma
             self._delta = config.delta
         self._store: dict[UUID, list[MemoryRecord]] = {}
+        self._llm_adapter = llm_adapter
+
+    async def embed_text(self, text: str) -> list[float] | None:
+        """Generate embedding for text using the configured LLM adapter.
+
+        SPEC: docs/spec/01_AGENT_SPEC.md#layer-2-memorylayer
+
+        Returns None if no adapter is configured or embedding fails.
+        """
+        if self._llm_adapter is None:
+            return None
+        try:
+            return await self._llm_adapter.embed(text)
+        except Exception:
+            return None
 
     def retrieve(
         self,
@@ -86,6 +119,7 @@ class MemoryLayer:
         query_context: str,
         top_k: int = 10,
         current_step: int = 0,
+        query_embedding: list[float] | None = None,
     ) -> list[MemoryRecord]:
         """Retrieves top-K relevant memories for the given agent.
 
@@ -94,7 +128,8 @@ class MemoryLayer:
         Algorithm:
             For each memory m of agent_id:
               recency_score   = 1.0 / (1 + (current_step - m.timestamp))
-              relevance_score = 0.0 (no embedding in Phase 2)
+              relevance_score = cosine_similarity(query_embedding, m.embedding)
+                                if both are available, else 0.0
               score = alpha * recency_score
                     + beta  * relevance_score
                     + gamma * m.emotion_weight
@@ -113,7 +148,12 @@ class MemoryLayer:
         scored: list[tuple[float, int, MemoryRecord]] = []
         for idx, m in enumerate(memories):
             recency_score = 1.0 / (1 + abs(current_step - m.timestamp))
-            relevance_score = 0.0  # No embedding support in Phase 2
+
+            # Use cosine similarity when both query and memory embeddings are available
+            if query_embedding is not None and m.embedding is not None:
+                relevance_score = _cosine_similarity(query_embedding, m.embedding)
+            else:
+                relevance_score = 0.0
 
             score = (
                 self._alpha * recency_score
@@ -141,6 +181,33 @@ class MemoryLayer:
                 relevance_score=score,
             ))
         return result
+
+    async def retrieve_async(
+        self,
+        agent_id: UUID,
+        query_context: str,
+        top_k: int = 10,
+        current_step: int = 0,
+        query_text: str | None = None,
+    ) -> list[MemoryRecord]:
+        """Async retrieval that embeds the query first, then uses similarity scoring.
+
+        SPEC: docs/spec/01_AGENT_SPEC.md#layer-2-memorylayer
+
+        Args:
+            agent_id: Agent to retrieve memories for.
+            query_context: Text context for retrieval (fallback if no embedding).
+            top_k: Maximum number of memories to return.
+            current_step: Current simulation step for recency scoring.
+            query_text: Optional text to embed for similarity scoring.
+        """
+        query_embedding = None
+        if query_text and self._llm_adapter:
+            query_embedding = await self.embed_text(query_text)
+        return self.retrieve(
+            agent_id, query_context, top_k=top_k,
+            current_step=current_step, query_embedding=query_embedding,
+        )
 
     def store(
         self,
@@ -193,4 +260,4 @@ class MemoryLayer:
         return record
 
 
-__all__ = ["MemoryLayer", "MemoryRecord", "MemoryConfig"]
+__all__ = ["MemoryLayer", "MemoryRecord", "MemoryConfig", "_cosine_similarity"]

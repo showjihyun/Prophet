@@ -2,10 +2,10 @@
  * CampaignSetupPage — Campaign creation form with simulation parameters.
  * @spec docs/spec/07_FRONTEND_SPEC.md#campaign-setup
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../api/client";
-import type { CreateSimulationConfig } from "../api/client";
+import type { CreateSimulationConfig, ProjectSummary } from "../api/client";
 import PageNav from "../components/shared/PageNav";
 import { useSimulationStore } from "../store/simulationStore";
 
@@ -22,6 +22,13 @@ export default function CampaignSetupPage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+
+  useEffect(() => {
+    apiClient.projects.list().then((res) => setProjects(Array.isArray(res) ? res : [])).catch(() => {});
+  }, []);
 
   const [name, setName] = useState("");
   const [budget, setBudget] = useState("");
@@ -82,6 +89,13 @@ export default function CampaignSetupPage() {
         created_at: new Date().toISOString(),
       });
       setStatus(sim.status as any);
+      // Link simulation to selected project as a scenario
+      if (selectedProjectId) {
+        await apiClient.projects.createScenario(selectedProjectId, {
+          name: config.name,
+          config: { simulation_id: sim.simulation_id },
+        }).catch(() => {});
+      }
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create simulation");
@@ -109,6 +123,25 @@ export default function CampaignSetupPage() {
           <h1 className="text-xl font-bold font-display text-[var(--foreground)]">
             Create New Simulation
           </h1>
+
+          {/* Project Selector */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-[var(--foreground)]">
+              Project (optional)
+            </label>
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+            >
+              <option value="">No Project</option>
+              {projects.map((p) => (
+                <option key={p.project_id} value={p.project_id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Campaign Name */}
           <div className="flex flex-col gap-1.5">

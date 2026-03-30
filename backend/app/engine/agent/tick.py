@@ -71,7 +71,7 @@ class AgentTick:
     def __init__(self, llm_adapter=None):
         """SPEC: docs/spec/01_AGENT_SPEC.md#agent-tick"""
         self._perception = PerceptionLayer(feed_capacity=20)
-        self._memory = MemoryLayer()
+        self._memory = MemoryLayer(llm_adapter=llm_adapter)
         self._emotion = EmotionLayer()
         self._cognition = CognitionLayer(llm_adapter=llm_adapter)
         self._decision = DecisionLayer()

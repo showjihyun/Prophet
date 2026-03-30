@@ -13,6 +13,8 @@ import {
 } from "recharts";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
+import { apiClient } from "../api/client";
+import { useSimulationStore } from "../store/simulationStore";
 
 const POLARIZATION_DATA = [
   { day: "D41", value: 0.42 },
@@ -39,6 +41,15 @@ const SENTIMENT_BY_COMMUNITY = [
 ];
 
 export default function GlobalMetricsPage() {
+  const simulation = useSimulationStore((s) => s.simulation);
+  const simId = simulation?.simulation_id ?? null;
+
+  function handleExport(format: 'json' | 'csv') {
+    if (simId) {
+      apiClient.simulations.export(simId, format);
+    }
+  }
+
   return (
     <div
       data-testid="global-metrics-page"
@@ -47,10 +58,26 @@ export default function GlobalMetricsPage() {
       <PageNav
         breadcrumbs={[{ label: "Back to Simulation", href: "/" }, { label: "Global Insight & Metrics" }]}
         actions={
-          <button className="h-9 px-4 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] flex items-center gap-2">
-            <DownloadIcon />
-            Export Data
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleExport('json')}
+              disabled={!simId}
+              className="h-9 px-4 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={simId ? "Export as JSON" : "No active simulation"}
+            >
+              <DownloadIcon />
+              Export JSON
+            </button>
+            <button
+              onClick={() => handleExport('csv')}
+              disabled={!simId}
+              className="h-9 px-4 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={simId ? "Export as CSV" : "No active simulation"}
+            >
+              <DownloadIcon />
+              Export CSV
+            </button>
+          </div>
         }
       />
 
