@@ -15,6 +15,7 @@ import GraphPanel from "../components/graph/GraphPanel";
 import MetricsPanel from "../components/graph/MetricsPanel";
 import TimelinePanel from "../components/timeline/TimelinePanel";
 import ConversationPanel from "../components/control/ConversationPanel";
+import LLMDashboard from "../components/llm/LLMDashboard";
 import { useSimulationSocket } from "../hooks/useSimulationSocket";
 import { useSimulationStore } from "../store/simulationStore";
 import type { StepResult, EmergentEvent, SimulationStatus } from "../types/simulation";
@@ -24,6 +25,7 @@ export default function SimulationPage() {
   const appendStep = useSimulationStore((s) => s.appendStep);
   const appendEmergentEvent = useSimulationStore((s) => s.appendEmergentEvent);
   const setStatus = useSimulationStore((s) => s.setStatus);
+  const isLLMDashboardOpen = useSimulationStore((s) => s.isLLMDashboardOpen);
 
   const simulationId = simulation?.simulation_id ?? null;
   const { lastMessage } = useSimulationSocket(simulationId);
@@ -72,6 +74,13 @@ export default function SimulationPage() {
         {/* Conversations / Expert Agent — remaining */}
         <ConversationPanel />
       </div>
+
+      {/* LLM Dashboard — collapsible overlay at bottom */}
+      {isLLMDashboardOpen && (
+        <div className="shrink-0 border-t border-[var(--border)] bg-[var(--card)]">
+          <LLMDashboard />
+        </div>
+      )}
     </div>
   );
 }

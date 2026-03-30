@@ -384,6 +384,11 @@ export default function ControlPanel() {
           label="Engine Control"
           onClick={() => setEngineOpen(!engineOpen)}
         />
+        <ControlButton
+          icon={<Brain className="w-4 h-4" />}
+          label="LLM Dashboard"
+          onClick={() => useSimulationStore.getState().toggleLLMDashboard()}
+        />
 
         <div className="w-px h-6 bg-[var(--border)] mx-1" />
 

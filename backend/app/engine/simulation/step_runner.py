@@ -20,7 +20,8 @@ from app.engine.diffusion.cascade_detector import (
     StepResult as CascadeStepResult,
 )
 from app.engine.diffusion.exposure_model import ExposureModel
-from app.engine.diffusion.schema import CampaignEvent, EmergentEvent, RecSysConfig
+from app.engine.diffusion.schema import CampaignEvent, EmergentEvent, NegativeEvent, RecSysConfig
+from app.engine.diffusion.negative_cascade import NegativeCascadeModel
 from app.engine.diffusion.sentiment_model import SentimentModel
 from app.engine.network.evolution import NetworkEvolver
 from app.engine.network.schema import CommunityConfig, SocialNetwork
@@ -194,6 +195,7 @@ class StepRunner:
         self._cascade_detector = CascadeDetector()
         self._network_evolver = NetworkEvolver()
         self._gateway = LLMGateway()
+        self._negative_cascade = NegativeCascadeModel()
 
     def _build_community_orchestrators(
         self,
@@ -290,10 +292,34 @@ class StepRunner:
         campaign_events = _build_campaign_events(config, step_num, agents)
         env_events = _build_environment_events(campaign_events, step_num)
 
-        # Add any injected events
+        # Add any injected events; process NegativeEvents via NegativeCascadeModel
         if state.injected_events:
-            env_events.extend(state.injected_events)
+            negative_deltas: dict[UUID, float] = {}
+            remaining: list = []
+            for ev in state.injected_events:
+                if isinstance(ev, NegativeEvent):
+                    pairs = self._negative_cascade.process_negative_event(
+                        ev, agents, network
+                    )
+                    for aid, delta in pairs:
+                        negative_deltas[aid] = negative_deltas.get(aid, 0.0) + delta
+                else:
+                    remaining.append(ev)
             state.injected_events.clear()
+            # Apply belief deltas from negative cascade before agent ticks
+            if negative_deltas:
+                from dataclasses import replace as _replace
+                updated_with_deltas: list[AgentState] = []
+                for a in agents:
+                    d = negative_deltas.get(a.agent_id, 0.0)
+                    if d != 0.0:
+                        new_belief = max(-1.0, min(1.0, a.belief + d))
+                        updated_with_deltas.append(_replace(a, belief=new_belief))
+                    else:
+                        updated_with_deltas.append(a)
+                state.agents = updated_with_deltas
+                agents = state.agents
+            env_events.extend(remaining)
 
         # Tier config for communities
         tier_config = TierConfig(

@@ -22,7 +22,7 @@ from app.models.agent import Agent
 from app.models.community import Community
 from app.models.campaign import Campaign
 from app.models.network import NetworkEdge
-from app.models.propagation import EmergentEvent as EmergentEventORM, MonteCarloRun
+from app.models.propagation import EmergentEvent as EmergentEventORM, LLMCall, MonteCarloRun
 
 if TYPE_CHECKING:
     from app.engine.simulation.schema import SimulationConfig, StepResult
@@ -224,6 +224,50 @@ class SimulationPersistence:
             await session.rollback()
             logger.exception("Failed to persist event for %s", sim_id)
         return event_id
+
+    async def persist_llm_calls(
+        self,
+        session: AsyncSession,
+        sim_id: uuid.UUID,
+        call_records: list[dict],
+    ) -> None:
+        """Persist a batch of LLM call records to the llm_calls table.
+
+        SPEC: docs/spec/08_DB_SPEC.md
+
+        Each record dict should contain:
+            agent_id (UUID | None), step (int), provider (str),
+            latency_ms (float | None), tokens (int | None),
+            cached (bool), tier (int)
+        """
+        if not call_records:
+            return
+        try:
+            for rec in call_records:
+                row = LLMCall(
+                    call_id=uuid.uuid4(),
+                    simulation_id=sim_id,
+                    agent_id=rec.get("agent_id"),
+                    step=rec.get("step", 0),
+                    provider=rec.get("provider", "unknown"),
+                    model=rec.get("model", "unknown"),
+                    prompt_hash=rec.get("prompt_hash", ""),
+                    prompt_tokens=rec.get("tokens"),
+                    completion_tokens=None,
+                    latency_ms=rec.get("latency_ms"),
+                    cached=rec.get("cached", False),
+                    tier=rec.get("tier", 1),
+                )
+                session.add(row)
+            await session.commit()
+            logger.debug(
+                "Persisted %d LLM call records for simulation %s",
+                len(call_records),
+                sim_id,
+            )
+        except Exception:
+            await session.rollback()
+            logger.exception("Failed to persist LLM calls for %s", sim_id)
 
     async def load_simulations(self, session: AsyncSession) -> list[dict]:
         """Load all simulations from DB for listing."""

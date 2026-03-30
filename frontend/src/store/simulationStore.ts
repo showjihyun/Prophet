@@ -58,6 +58,8 @@ interface SimulationStore {
   selectAgent: (agentId: string | null) => void;
   setSlmLlmRatio: (ratio: number) => void;
   setSpeed: (speed: number) => void;
+  toggleLLMDashboard: () => void;
+  setHighlightedCommunity: (communityId: string | null) => void;
 }
 
 export const useSimulationStore = create<SimulationStore>((set) => ({
@@ -112,4 +114,6 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
     set({ selectedAgentId: agentId, isAgentInspectorOpen: agentId !== null }),
   setSlmLlmRatio: (ratio) => set({ slmLlmRatio: ratio }),
   setSpeed: (speed) => set({ speed }),
+  toggleLLMDashboard: () => set((state) => ({ isLLMDashboardOpen: !state.isLLMDashboardOpen })),
+  setHighlightedCommunity: (communityId) => set({ highlightedCommunity: communityId }),
 }));

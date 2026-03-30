@@ -286,6 +286,8 @@ export default function GraphPanel() {
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const emergentEvents = useSimulationStore((s) => s.emergentEvents);
   const steps = useSimulationStore((s) => s.steps);
+  const highlightedCommunity = useSimulationStore((s) => s.highlightedCommunity);
+  const setHighlightedCommunity = useSimulationStore((s) => s.setHighlightedCommunity);
 
   // --- Initialize Cytoscape ---
   useEffect(() => {
@@ -448,6 +450,22 @@ export default function GraphPanel() {
     });
   }, [steps.length]);
 
+  // --- Community highlight: dim non-matching nodes when a community is selected ---
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    if (!highlightedCommunity) {
+      cy.nodes().style("opacity", 1);
+      cy.edges().removeStyle("opacity");
+      return;
+    }
+    cy.nodes().forEach((node) => {
+      const comm = node.data("community") as string;
+      node.style("opacity", comm === highlightedCommunity ? 1 : 0.15);
+    });
+    cy.edges().style("opacity", 0.05);
+  }, [highlightedCommunity]);
+
   // --- Zoom controls ---
   const handleZoomIn = useCallback(() => {
     const cy = cyRef.current;
@@ -552,20 +570,31 @@ export default function GraphPanel() {
       {/* Legend — bottom-left */}
       <div data-testid="network-legend" className="absolute bottom-4 left-4 z-10 bg-black/40 rounded-lg p-3 backdrop-blur-sm">
         <div className="flex flex-col gap-1.5">
-          {legendItems.map((item) => (
-            <div key={item.name} className="flex items-center gap-2">
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: item.color }}
-              />
-              <span className="text-[11px] text-white/80 w-12">
-                {item.name}
-              </span>
-              <span className="text-[10px] text-white/50 font-mono">
-                {item.count}
-              </span>
-            </div>
-          ))}
+          {legendItems.map((item) => {
+            const commId = COMMUNITIES.find((c) => c.name === item.name)?.id ?? item.name;
+            const isHighlighted = highlightedCommunity === commId;
+            return (
+              <button
+                key={item.name}
+                onClick={() => setHighlightedCommunity(isHighlighted ? null : commId)}
+                title={isHighlighted ? `Clear highlight` : `Highlight ${item.name}`}
+                className={`flex items-center gap-2 rounded px-1 transition-opacity cursor-pointer text-left ${
+                  highlightedCommunity && !isHighlighted ? "opacity-40" : "opacity-100"
+                }`}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="text-[11px] text-white/80 w-12">
+                  {item.name}
+                </span>
+                <span className="text-[10px] text-white/50 font-mono">
+                  {item.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

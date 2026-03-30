@@ -6,6 +6,20 @@ import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiClient, type AgentDetail } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";
+
+// Community color map for deriving connection colors from graph data
+const COMMUNITY_COLORS: Record<string, string> = {
+  A: "#3b82f6",
+  B: "#22c55e",
+  C: "#f97316",
+  D: "#a855f7",
+  E: "#ef4444",
+  Alpha: "#3b82f6",
+  Beta: "#22c55e",
+  Gamma: "#f97316",
+  Delta: "#a855f7",
+  Bridge: "#ef4444",
+};
 import {
   LineChart,
   Line,
@@ -210,12 +224,16 @@ export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
+  const steps = useSimulationStore((s) => s.steps);
+  const status = useSimulationStore((s) => s.status);
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Activity");
   const [interveneOpen, setInterveneOpen] = useState(false);
   const [connSearch, setConnSearch] = useState("");
   const [msgFilter, setMsgFilter] = useState("all");
 
   const [agent, setAgent] = useState({ ...MOCK_AGENT, id: agentId ?? MOCK_AGENT.id });
+  // Connections: start with MOCK_CONNECTIONS as fallback; replaced when network data loads
+  const [connections, setConnections] = useState<ConnectionItem[]>(MOCK_CONNECTIONS);
 
   // Fetch real agent data from API
   useEffect(() => {
@@ -227,14 +245,51 @@ export default function AgentDetailPage() {
     });
   }, [simulationId, agentId]);
 
+  // Fetch real connections from network graph
+  useEffect(() => {
+    if (!simulationId || !agentId) return;
+    apiClient.network.get(simulationId).then((graph) => {
+      const connected = graph.edges
+        .filter((e) => String(e.data.source) === agentId || String(e.data.target) === agentId)
+        .slice(0, 20);
+      const conns: ConnectionItem[] = connected.map((e, i) => {
+        const peerId =
+          String(e.data.source) === agentId
+            ? String(e.data.target)
+            : String(e.data.source);
+        const peerNode = graph.nodes.find((n) => String(n.data.id) === peerId);
+        const community = (peerNode?.data.community as string) ?? "Unknown";
+        return {
+          id: `c${i}`,
+          name: `Agent ${peerId}`,
+          community,
+          color: COMMUNITY_COLORS[community] ?? "#888",
+          trust: (e.data.weight as number) ?? 0.5,
+          influence: (peerNode?.data.influence_score as number) ?? 0.5,
+        };
+      });
+      if (conns.length > 0) setConnections(conns);
+    }).catch(() => {});
+  }, [simulationId, agentId]);
+
+  // Derive sentiment chart data from store steps (last 7), fallback to SENTIMENT_DATA
+  const sentimentData = useMemo(() => {
+    if (steps.length === 0) return SENTIMENT_DATA;
+    return steps.slice(-7).map((s) => ({
+      day: `D${s.step}`,
+      positive: Math.max(0, s.mean_sentiment) * 100,
+      negative: Math.max(0, -s.mean_sentiment) * 100,
+    }));
+  }, [steps]);
+
   const filteredConnections = useMemo(
     () =>
-      MOCK_CONNECTIONS.filter(
+      connections.filter(
         (c) =>
           c.name.toLowerCase().includes(connSearch.toLowerCase()) ||
           c.community.toLowerCase().includes(connSearch.toLowerCase()),
       ),
-    [connSearch],
+    [connections, connSearch],
   );
 
   const filteredMessages = useMemo(
@@ -259,7 +314,9 @@ export default function AgentDetailPage() {
         actions={
           <button
             onClick={() => setInterveneOpen(true)}
-            className="h-9 px-4 text-sm font-medium text-white rounded-md transition-colors"
+            disabled={status !== 'paused'}
+            title={status !== 'paused' ? "Pause simulation to intervene" : undefined}
+            className="h-9 px-4 text-sm font-medium text-white rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: 'var(--sentiment-positive)' }}
           >
             Intervene
@@ -382,7 +439,7 @@ export default function AgentDetailPage() {
                   Sentiment Over Time
                 </h3>
                 <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={SENTIMENT_DATA}>
+                  <LineChart data={sentimentData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                     <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
@@ -496,7 +553,7 @@ export default function AgentDetailPage() {
                     Top Connections
                   </span>
                   <span className="text-xs text-[var(--muted-foreground)]">
-                    {agent.connections}
+                    {connections.length}
                   </span>
                 </div>
                 <input

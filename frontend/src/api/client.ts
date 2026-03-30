@@ -169,7 +169,10 @@ export const apiClient = {
     pause: (id: string) => request<{ status: string }>(`/simulations/${id}/pause`, { method: "POST" }),
     resume: (id: string) => request<{ status: string }>(`/simulations/${id}/resume`, { method: "POST" }),
     stop: (id: string) => request<{ status: string }>(`/simulations/${id}/stop`, { method: "POST" }),
-    getSteps: (id: string) => request<StepResult[]>(`/simulations/${id}/steps`),
+    getSteps: async (id: string) => {
+      const res = await request<{ steps: StepResult[] }>(`/simulations/${id}/steps`);
+      return res.steps ?? [];
+    },
     injectEvent: (id: string, event: { event_type: string; content: string; controversy?: number; target_communities?: string[] }) =>
       request<{ event_id: string; effective_step: number }>(`/simulations/${id}/inject-event`, { method: "POST", body: JSON.stringify(event) }),
     replay: (id: string, step: number) =>

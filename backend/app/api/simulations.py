@@ -296,6 +296,24 @@ async def step_simulation(
     await persist.persist_step(session, sim_uuid, result)
     await persist.persist_status(session, sim_uuid, state.status, state.current_step)
 
+    # Persist LLM call summary for this step (one synthetic record per LLM call)
+    if result.llm_calls_this_step > 0:
+        llm_records = [
+            {
+                "agent_id": None,
+                "step": result.step,
+                "provider": "ollama",
+                "model": "unknown",
+                "prompt_hash": "",
+                "latency_ms": None,
+                "tokens": None,
+                "cached": False,
+                "tier": 1,
+            }
+            for _ in range(result.llm_calls_this_step)
+        ]
+        await persist.persist_llm_calls(session, sim_uuid, llm_records)
+
     # Broadcast step result via WebSocket
     asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
         "type": "step_result",
