@@ -426,6 +426,9 @@ class SimulationOrchestrator:
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
 
+        Finds the step in history, then resets current_step to target_step so
+        the simulation can be re-run from that point forward.
+
         Raises:
             ValueError: target_step > current_step
             StepNotFoundError: step not in history
@@ -437,14 +440,27 @@ class SimulationOrchestrator:
                 f"target_step {target_step} > current_step {state.current_step}"
             )
 
-        # Check if step is in history
+        # Find the step result in history
+        step_result = None
         for sr in state.step_history:
             if sr.step == target_step:
-                return sr
+                step_result = sr
+                break
 
-        raise StepNotFoundError(
-            f"Step {target_step} not found in history for simulation {simulation_id}"
-        )
+        if step_result is None:
+            raise StepNotFoundError(
+                f"Step {target_step} not found in history for simulation {simulation_id}"
+            )
+
+        # Reset current_step to target so simulation can be re-run from this point.
+        # Trim history to only include steps up to and including target_step.
+        state.current_step = target_step
+        state.step_history = [sr for sr in state.step_history if sr.step <= target_step]
+        # Re-enable running from this branch point
+        if state.status == SimulationStatus.COMPLETED.value:
+            state.status = SimulationStatus.PAUSED.value
+
+        return step_result
 
     # ------------------------------------------------------------------ #
     # Helpers

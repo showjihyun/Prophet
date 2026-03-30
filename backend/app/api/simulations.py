@@ -40,10 +40,12 @@ from app.api.schemas import (
 from app.engine.agent.group_chat import GroupChatManager, GroupChat, GroupMessage
 from app.engine.agent.interview import AgentInterviewer, InterviewResponse
 from app.engine.network.schema import CommunityConfig
+from app.engine.simulation.monte_carlo import MonteCarloRunner
 from app.engine.simulation.schema import (
     CampaignConfig,
     SimulationConfig,
 )
+from app.llm.engine_control import EngineController
 
 router = APIRouter(prefix="/api/v1/simulations", tags=["simulations"])
 
@@ -496,8 +498,9 @@ async def replay_from_step(
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
         orchestrator.replay_step(sim_uuid, step)
-    except (ValueError, NotImplementedError, AttributeError, TypeError):
-        pass
+    except (ValueError, NotImplementedError, AttributeError, TypeError) as e:
+        import logging
+        logging.getLogger(__name__).warning(f"replay_step fallback: {e}")
 
     return ReplayResponse(replay_id=replay_id, from_step=step)
 
@@ -514,13 +517,71 @@ async def compare_simulations(
     """Compare two simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idcompareother_simulation_id
     """
-    _get_state_or_404(orchestrator, simulation_id)
-    _get_state_or_404(orchestrator, other_id)
+    state_a = _get_state_or_404(orchestrator, simulation_id)
+    state_b = _get_state_or_404(orchestrator, other_id)
+
+    last_a = state_a.step_history[-1] if state_a.step_history else None
+    last_b = state_b.step_history[-1] if state_b.step_history else None
+
+    comparison: dict[str, Any] = {}
+    if last_a and last_b:
+        viral_a = sum(
+            1 for sr in state_a.step_history
+            for ev in sr.emergent_events
+            if ev.event_type == "viral_cascade"
+        )
+        viral_b = sum(
+            1 for sr in state_b.step_history
+            for ev in sr.emergent_events
+            if ev.event_type == "viral_cascade"
+        )
+        winner = (
+            str(state_a.simulation_id)
+            if last_a.adoption_rate >= last_b.adoption_rate
+            else str(state_b.simulation_id)
+        )
+        comparison = {
+            "adoption_rate_a": last_a.adoption_rate,
+            "adoption_rate_b": last_b.adoption_rate,
+            "mean_sentiment_a": last_a.mean_sentiment,
+            "mean_sentiment_b": last_b.mean_sentiment,
+            "total_propagation_a": last_a.diffusion_rate,
+            "total_propagation_b": last_b.diffusion_rate,
+            "viral_cascades_a": viral_a,
+            "viral_cascades_b": viral_b,
+            "winner": winner,
+        }
+
     return ScenarioComparisonResponse(
         simulation_a=simulation_id,
         simulation_b=other_id,
-        comparison={},
+        comparison=comparison,
     )
+
+
+async def _run_monte_carlo(job_id: str, config: Any, n_runs: int) -> None:
+    """Background task to actually run Monte Carlo.
+    SPEC: docs/spec/04_SIMULATION_SPEC.md#metriccollector
+    """
+    try:
+        _monte_carlo_jobs[job_id]["status"] = "running"
+        runner = MonteCarloRunner()
+        result = await runner.run(config, n_runs=n_runs)
+        _monte_carlo_jobs[job_id].update({
+            "status": "completed",
+            "viral_probability": result.viral_probability,
+            "expected_reach": result.expected_reach,
+            "p5_reach": result.p5_reach,
+            "p50_reach": result.p50_reach,
+            "p95_reach": result.p95_reach,
+            "community_adoption": result.community_adoption,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        _monte_carlo_jobs[job_id].update({
+            "status": "failed",
+            "error_message": str(e),
+        })
 
 
 @router.post(
@@ -536,7 +597,7 @@ async def start_monte_carlo(
     """Run Monte Carlo analysis.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idmonte-carlo
     """
-    _get_state_or_404(orchestrator, simulation_id)
+    state = _get_state_or_404(orchestrator, simulation_id)
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     job = {
@@ -546,6 +607,9 @@ async def start_monte_carlo(
         "started_at": now,
     }
     _monte_carlo_jobs[job_id] = job
+
+    # Fire background task using the simulation's config
+    asyncio.create_task(_run_monte_carlo(job_id, state.config, body.n_runs))
 
     return MonteCarloStatusResponse(
         job_id=job_id,
@@ -595,7 +659,30 @@ async def engine_control(
     state = _get_state_or_404(orchestrator, simulation_id)
     _require_status(state, SimulationStatus.PAUSED)
 
-    return EngineControlResponse()
+    controller = EngineController()
+    dist = controller.compute_tier_distribution(
+        total_agents=len(state.agents),
+        slm_llm_ratio=body.slm_llm_ratio,
+        budget_usd=body.budget_usd,
+    )
+    impact = controller.get_impact_assessment(dist)
+
+    from app.api.schemas import ImpactAssessment, TierDistribution as ApiTierDistribution
+    return EngineControlResponse(
+        tier_distribution=ApiTierDistribution(
+            tier1_count=dist.tier1_count,
+            tier2_count=dist.tier2_count,
+            tier3_count=dist.tier3_count,
+            estimated_cost_per_step=dist.estimated_cost_per_step,
+            estimated_latency_ms=dist.estimated_latency_ms,
+        ),
+        impact_assessment=ImpactAssessment(
+            cost_efficiency=impact.cost_efficiency,
+            reasoning_depth=impact.reasoning_depth,
+            simulation_velocity=impact.simulation_velocity,
+            prediction_type=impact.prediction_type,
+        ),
+    )
 
 
 @router.post("/recommend-engine", response_model=RecommendEngineResponse)
