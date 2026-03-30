@@ -333,6 +333,14 @@ Prophet/
 > - Frontend: `npx vitest run` → 145 passed (13 test files)
 > - Docker E2E: 5 services healthy, create→start→step 검증 완료
 
+### 성능 벤치마크 (2026-03-30)
+
+| 측정 | 결과 | SPEC 목표 |
+|------|------|----------|
+| 1,000 agents × 1 step | **287ms avg** | <1,000ms (NF01) |
+| 시뮬레이션 생성 (1,000 agents + network) | 1,362ms | — |
+| Docker E2E (5 services healthy) | ✅ | — |
+
 ---
 
 ## 중요 원칙
