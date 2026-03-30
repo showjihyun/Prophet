@@ -169,8 +169,11 @@ const BASE_URL = import.meta.env.VITE_API_URL
   : "http://localhost:8000/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('prophet-token');
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers,
     ...options,
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -259,6 +262,19 @@ export const apiClient = {
   llm: {
     getStats: (simId: string) => request(`/simulations/${simId}/llm/stats`),
     getImpact: (simId: string) => request(`/simulations/${simId}/llm/impact`),
+  },
+  auth: {
+    register: (username: string, password: string) =>
+      request<{ user_id: string; username: string }>("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      }),
+    login: (username: string, password: string) =>
+      request<{ token: string; user_id: string; username: string }>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      }),
+    me: () => request<{ user_id: string; username: string }>("/auth/me"),
   },
   settings: {
     get: () => request<SettingsResponse>("/settings/"),

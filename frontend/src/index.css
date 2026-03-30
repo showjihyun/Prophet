@@ -180,3 +180,19 @@ body {
     animation: none !important;
   }
 }
+
+/* ── Responsive: Zone 2 stacks vertically on tablet / mobile ── */
+@media (max-width: 1024px) {
+  .zone2-panels {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+}
+
+/* ── Responsive: table overflow on small screens ── */
+@media (max-width: 768px) {
+  .table-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

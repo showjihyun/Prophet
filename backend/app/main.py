@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import agents, communities, llm_dashboard, network, settings as settings_api, simulations, ws
 from app.api.projects import router as projects_router
 from app.api.community_templates import router as community_templates_router
+from app.api.auth import router as auth_router
 from app.config import settings
 import sqlalchemy
 from app.database import engine, Base
@@ -54,6 +55,7 @@ app.include_router(settings_api.router)
 app.include_router(ws.router)
 app.include_router(projects_router)
 app.include_router(community_templates_router)
+app.include_router(auth_router)
 
 
 @app.get("/health")

@@ -101,8 +101,8 @@ export default function SimulationPage() {
       {/* Zone 1: Simulation Control Bar — 56px */}
       <ControlPanel />
 
-      {/* Zone 2: Middle Content — fills available space */}
-      <div className="flex flex-1 min-h-0">
+      {/* Zone 2: Middle Content — fills available space; stacks vertically on tablet/mobile */}
+      <div className="flex flex-1 min-h-0 zone2-panels">
         {/* Left: Community Panel — 260px */}
         <CommunityPanel />
 

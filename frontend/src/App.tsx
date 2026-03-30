@@ -20,6 +20,7 @@ import CommunityOpinionPage from "./pages/CommunityOpinionPage";
 import ConversationThreadPage from "./pages/ConversationThreadPage";
 import ComparisonPage from "./pages/ComparisonPage";
 import CommunityManagePage from "./pages/CommunityManagePage";
+import LoginPage from "./pages/LoginPage";
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -71,6 +72,9 @@ function App() {
         <Routes>
           {/* SimulationPage has its own full-screen layout with ControlPanel */}
           <Route path="/" element={<SimulationPage />} />
+
+          {/* Login page — no sidebar */}
+          <Route path="/login" element={<LoginPage />} />
 
           {/* All other pages get the sidebar layout */}
           <Route element={<SidebarLayout />}>

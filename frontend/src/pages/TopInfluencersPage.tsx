@@ -315,7 +315,7 @@ export default function TopInfluencersPage() {
             </div>
 
             {/* Data Table */}
-            <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm overflow-hidden">
+            <div className="table-scroll-wrapper bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-[var(--muted)]">

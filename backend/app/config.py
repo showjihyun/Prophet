@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # CORS
     cors_allow_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
+    # JWT Auth
+    jwt_secret: str = "prophet-dev-secret-change-in-production"
+
     # Simulation Defaults
     default_llm_provider: str = "ollama"
     slm_llm_ratio: float = 0.5
