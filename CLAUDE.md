@@ -312,7 +312,7 @@ Prophet/
 
 | Phase | 내용 | 상태 |
 |-------|------|------|
-| **Phase 0** | SPEC 작성 | ✅ 완료 (14개 SPEC + 11개 UI SPEC) |
+| **Phase 0** | SPEC 작성 | ✅ 완료 (15개 SPEC + 15개 UI SPEC) |
 | **Phase 1** | 프로젝트 구조 + 하네스 기반 | ✅ 완료 (8/8 GREEN 테스트) |
 | **Phase 2** | Agent Core (6-Layer) | ✅ 완료 (81/81 GREEN 테스트) |
 | **Phase 3** | Network Generator | ✅ 완료 (19/19 GREEN 테스트) |
@@ -320,13 +320,18 @@ Prophet/
 | **Phase 5** | LLM Integration | ✅ 완료 (92/92 GREEN 테스트) |
 | **Phase 6** | Simulation Orchestrator + API | ✅ 완료 (127/127 GREEN 테스트) |
 | **Phase 7** | Visualization (Frontend) | ✅ 완료 (tsc 0 errors, build OK) |
+| **Phase A** | API→Frontend 37개 엔드포인트 연결 | ✅ 완료 |
+| **Phase B** | 5개 기능 UI (Inject/Replay/MC/Engine/Compare) | ✅ 완료 |
+| **Phase C** | Mock→Real API (5개 페이지) | ✅ 완료 |
+| **Phase D** | Design tokens (70+색상) + Vitest (145 tests) | ✅ 완료 |
+| **DB** | PostgreSQL persistence (fire-and-forget) | ✅ 완료 |
+| **LLM** | Async Tier 3 cognition (evaluate_async) | ✅ 완료 |
+| **VAL** | Validation pipeline VAL-01~08 (33 tests) | ✅ 완료 |
 
-> 참고: 위 테스트 수는 구현 완료된 GREEN 테스트만 카운트 (총 413 GREEN).
-> 미구현 기능의 RED 테스트 (32개)는 향후 구현 시 GREEN으로 전환 예정:
-> - `test_05_llm_errors.py` (12개): LLM rate limit, auth fallback, quota, timeout 에러 핸들링
-> - `test_07_frontend_errors.py` (5개): RFC 7807 에러 포맷, WebSocket 에러 프로토콜
-> - `test_08_db_errors.py` (12개): DB constraint, cascade delete, pgvector fallback, connection pool
-> - `test_09_harness_memory.py` (3개): simulation cleanup, memory eviction
+> **총 테스트: 731 GREEN** (Backend 586 + Frontend 145)
+> - Backend: `uv run pytest tests/` → 586 passed, 1 skipped (external_data)
+> - Frontend: `npx vitest run` → 145 passed (13 test files)
+> - Docker E2E: 5 services healthy, create→start→step 검증 완료
 
 ---
 
