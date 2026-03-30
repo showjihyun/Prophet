@@ -328,10 +328,13 @@ Prophet/
 | **LLM** | Async Tier 3 cognition (evaluate_async) | ✅ 완료 |
 | **VAL** | Validation pipeline VAL-01~08 (33 tests) | ✅ 완료 |
 
-> **총 테스트: 731 GREEN** (Backend 586 + Frontend 145)
-> - Backend: `uv run pytest tests/` → 586 passed, 1 skipped (external_data)
-> - Frontend: `npx vitest run` → 145 passed (13 test files)
-> - Docker E2E: 5 services healthy, create→start→step 검증 완료
+> **총 테스트: 763+ GREEN** (Backend 586 + Frontend 151 + E2E 26)
+> - Backend: `uv run pytest tests/` → 586 passed, 1 skipped
+> - Frontend: `npx vitest run` → 151 passed (16 test files)
+> - E2E: `npx playwright test` → 26 passed (Chromium)
+> - Docker: 5 services healthy, QA health score 95/100
+> - API: 49 endpoints, 16 pages, 15 routes
+> - Sidebar: 전역 레이아웃 (SimulationPage 제외)
 
 ### 성능 벤치마크 (2026-03-30)
 
