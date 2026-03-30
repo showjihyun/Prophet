@@ -30,6 +30,9 @@ export default function CampaignSetupPage() {
     apiClient.projects.list().then((res) => setProjects(Array.isArray(res) ? res : [])).catch(() => {});
   }, []);
 
+  const cloneConfig = useSimulationStore((s) => s.cloneConfig);
+  const setCloneConfig = useSimulationStore((s) => s.setCloneConfig);
+
   const [name, setName] = useState("");
   const [budget, setBudget] = useState("");
   const [channels, setChannels] = useState<Set<string>>(new Set());
@@ -40,6 +43,22 @@ export default function CampaignSetupPage() {
   const [maxSteps, setMaxSteps] = useState(365);
   const [randomSeed, setRandomSeed] = useState(42);
   const [slmLlmRatio, setSlmLlmRatio] = useState(80);
+
+  // Pre-fill form from cloneConfig if present
+  useEffect(() => {
+    if (!cloneConfig) return;
+    setName(cloneConfig.name ?? "");
+    setChannels(new Set(cloneConfig.campaign?.channels ?? []));
+    setMessage(cloneConfig.campaign?.message ?? "");
+    setTargetCommunities(new Set(cloneConfig.campaign?.target_communities ?? []));
+    if (cloneConfig.max_steps) setMaxSteps(cloneConfig.max_steps);
+    if (cloneConfig.random_seed) setRandomSeed(cloneConfig.random_seed);
+    if (cloneConfig.slm_llm_ratio != null) setSlmLlmRatio(Math.round(cloneConfig.slm_llm_ratio * 100));
+    if (cloneConfig.campaign?.budget) setBudget(String(cloneConfig.campaign.budget));
+    // Clear clone config so next visit starts fresh
+    setCloneConfig(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function toggleChannel(ch: string) {
     setChannels((prev) => {

@@ -21,6 +21,8 @@ import {
   BarChart3,
   Cpu,
   Plus,
+  Copy,
+  GitCompare,
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
@@ -50,10 +52,13 @@ export default function ControlPanel() {
   const setProjects = useSimulationStore((s) => s.setProjects);
   const setScenarios = useSimulationStore((s) => s.setScenarios);
 
+  const setCloneConfig = useSimulationStore((s) => s.setCloneConfig);
+
   const [injectOpen, setInjectOpen] = useState(false);
   const [replayOpen, setReplayOpen] = useState(false);
   const [monteCarloOpen, setMonteCarloOpen] = useState(false);
   const [engineOpen, setEngineOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
 
   // Previous simulations list for the "Load Previous" dropdown
   const [prevSimulations, setPrevSimulations] = useState<SimulationRun[]>([]);
@@ -160,6 +165,22 @@ export default function ControlPanel() {
     } catch { /* ignore */ }
   };
 
+  // Clone: copy current sim config to setup page
+  const handleClone = () => {
+    if (!simulation) return;
+    setCloneConfig({
+      name: `${simulation.name} (clone)`,
+      campaign: {
+        name: `${simulation.name} (clone)`,
+        channels: [],
+        message: "",
+        target_communities: [],
+      },
+      max_steps: simulation.max_steps,
+    });
+    navigate("/setup");
+  };
+
   const isRunning = status === "running";
 
   const handlePlay = async () => {
@@ -201,6 +222,28 @@ export default function ControlPanel() {
       }
     } catch { /* ignore */ }
   };
+
+  // Keyboard shortcuts: Space=Play/Pause, ArrowRight=Step, Escape=Reset
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          if (isRunning) handlePause(); else handlePlay();
+          break;
+        case 'ArrowRight':
+          handleStep();
+          break;
+        case 'Escape':
+          handleReset();
+          break;
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]);
 
   return (
     <div
@@ -339,6 +382,56 @@ export default function ControlPanel() {
             </div>
           )}
         </div>
+
+        {/* Compare: opens dropdown of other simulations to compare */}
+        {simulation && (
+          <div className="relative">
+            <button
+              onClick={() => {
+                setCompareOpen((open) => !open);
+                if (prevSimulations.length === 0) {
+                  apiClient.simulations.list().then((res) => setPrevSimulations(res.items ?? [])).catch(() => {});
+                }
+              }}
+              className="h-8 px-2.5 text-xs font-medium rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors flex items-center gap-1"
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              Compare
+            </button>
+            {compareOpen && (
+              <div className="absolute left-0 top-9 z-50 w-64 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg overflow-hidden">
+                {prevSimulations.filter((s) => s.simulation_id !== simulation.simulation_id).length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-[var(--muted-foreground)]">No other simulations to compare</div>
+                ) : (
+                  prevSimulations
+                    .filter((s) => s.simulation_id !== simulation.simulation_id)
+                    .slice(0, 10)
+                    .map((s) => (
+                      <button
+                        key={s.simulation_id}
+                        onClick={() => { navigate(`/compare/${s.simulation_id}`); setCompareOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--secondary)] transition-colors border-b border-[var(--border)] last:border-0"
+                      >
+                        <span className="font-medium text-[var(--foreground)] block truncate">{s.name}</span>
+                        <span className="text-[var(--muted-foreground)]">{s.status}</span>
+                      </button>
+                    ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Clone: copies current sim config to setup page */}
+        {simulation && (
+          <button
+            onClick={handleClone}
+            className="h-8 px-2.5 text-xs font-medium rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors flex items-center gap-1"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            Clone
+          </button>
+        )}
       </div>
 
       {/* Right: Playback controls + Settings + Avatar */}

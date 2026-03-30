@@ -11,7 +11,13 @@ import type {
   TierDistribution,
   EngineImpactReport,
 } from "../types/simulation";
-import type { ProjectSummary, ScenarioInfo } from "../api/client";
+import type { ProjectSummary, ScenarioInfo, CreateSimulationConfig } from "../api/client";
+
+export interface Toast {
+  id: string;
+  type: "info" | "success" | "warning" | "error";
+  message: string;
+}
 
 interface SimulationStore {
   simulation: SimulationRun | null;
@@ -37,6 +43,15 @@ interface SimulationStore {
 
   // Speed
   speed: number;
+
+  // Toast notifications
+  toasts: Toast[];
+  addToast: (toast: Omit<Toast, 'id'>) => void;
+  removeToast: (id: string) => void;
+
+  // Clone config (for cloning simulation to setup page)
+  cloneConfig: CreateSimulationConfig | null;
+  setCloneConfig: (config: CreateSimulationConfig | null) => void;
 
   // Theme
   theme: 'dark' | 'light';
@@ -78,6 +93,15 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   tierDistribution: null,
   impactAssessment: null,
   speed: 2,
+  toasts: [],
+  addToast: (toast) =>
+    set((state) => ({
+      toasts: [...state.toasts, { ...toast, id: `${Date.now()}-${Math.random()}` }],
+    })),
+  removeToast: (id) =>
+    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+  cloneConfig: null,
+  setCloneConfig: (config) => set({ cloneConfig: config }),
   theme: 'dark',
   currentProjectId: null,
   projects: [],

@@ -8,7 +8,7 @@
  * Zone 2: Community Panel (260px) | Graph Engine (fill) | Metrics Panel (280px)
  * Zone 3: Timeline (120px) + Conversations (fill remaining)
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
@@ -18,6 +18,8 @@ import MetricsPanel from "../components/graph/MetricsPanel";
 import TimelinePanel from "../components/timeline/TimelinePanel";
 import ConversationPanel from "../components/control/ConversationPanel";
 import LLMDashboard from "../components/llm/LLMDashboard";
+import SimulationReportModal from "../components/shared/SimulationReportModal";
+import ToastContainer from "../components/shared/ToastNotification";
 import { useSimulationSocket } from "../hooks/useSimulationSocket";
 import { useSimulationStore } from "../store/simulationStore";
 import type { StepResult, EmergentEvent, SimulationStatus } from "../types/simulation";
@@ -29,6 +31,11 @@ export default function SimulationPage() {
   const appendEmergentEvent = useSimulationStore((s) => s.appendEmergentEvent);
   const setStatus = useSimulationStore((s) => s.setStatus);
   const isLLMDashboardOpen = useSimulationStore((s) => s.isLLMDashboardOpen);
+  const status = useSimulationStore((s) => s.status);
+  const steps = useSimulationStore((s) => s.steps);
+  const addToast = useSimulationStore((s) => s.addToast);
+
+  const [reportOpen, setReportOpen] = useState(false);
 
   const simulationId = simulation?.simulation_id ?? null;
   const { lastMessage } = useSimulationSocket(simulationId);
@@ -39,14 +46,27 @@ export default function SimulationPage() {
       case 'step_result':
         appendStep(lastMessage.data as StepResult);
         break;
-      case 'emergent_event':
-        appendEmergentEvent(lastMessage.data as EmergentEvent);
+      case 'emergent_event': {
+        const event = lastMessage.data as EmergentEvent;
+        appendEmergentEvent(event);
+        addToast({
+          type: 'warning',
+          message: `${event.event_type.replace(/_/g, ' ')} detected at step ${event.step}`,
+        });
         break;
+      }
       case 'status_change':
         setStatus((lastMessage.data as { status: SimulationStatus }).status);
         break;
     }
-  }, [lastMessage, appendStep, appendEmergentEvent, setStatus]);
+  }, [lastMessage, appendStep, appendEmergentEvent, setStatus, addToast]);
+
+  // Show report modal when simulation completes
+  useEffect(() => {
+    if (status === 'completed' && steps.length > 0) {
+      setReportOpen(true);
+    }
+  }, [status, steps.length]);
 
   if (!simulation) {
     return (
@@ -68,6 +88,7 @@ export default function SimulationPage() {
             </button>
           </div>
         </div>
+        <ToastContainer />
       </div>
     );
   }
@@ -109,6 +130,12 @@ export default function SimulationPage() {
           <LLMDashboard />
         </div>
       )}
+
+      {/* Simulation Report Modal — shown on completion */}
+      {reportOpen && <SimulationReportModal onClose={() => setReportOpen(false)} />}
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   );
 }
