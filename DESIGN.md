@@ -38,12 +38,16 @@ Pencil (.pen) 파일의 디자인 시스템과 5개 화면 SPEC을 연결하며,
   │   UI_01: AI Social World Engine     │
   │   (메인 시뮬레이션 - 1440x900)        │
   │   Frame: FuHqi                      │
-  └─────────┬───────────────────────────┘
-            │
-┌───────────┼───────────────┐
-│           │               │
-▼           ▼               ▼
-┌──────────────┐ ┌─────────────────┐ ┌───────────────┐
+  │                                     │
+  │   [Empty State when no simulation]  │
+  │   ControlPanel "New Simulation" btn ├──────────────┐
+  │   or empty state CTA                │              │
+  └─────────┬───────────────────────────┘              │
+            │                                          ▼
+┌───────────┼───────────────┐               ┌────────────────────┐
+│           │               │               │  Campaign Setup    │
+▼           ▼               ▼               │  (/setup)          │
+┌──────────────┐ ┌─────────────────┐ ┌───────────────┐ └────────────────────┘
 │  UI_02:      │ │  UI_08:         │ │  UI_05:       │
 │ Communities  │ │ Influencers     │ │ Global Metrics│
 │  Detail      │ │ (w/ Pagination) │ │               │
@@ -71,6 +75,13 @@ Pencil (.pen) 파일의 디자인 시스템과 5개 화면 SPEC을 연결하며,
 │  Tab (vJLFD)    │
 └─────────────────┘
 ```
+
+> **Note:** `/setup` (Campaign Setup) is NOT a sidebar navigation item.
+> It is only accessible from:
+> 1. SimulationPage empty state "Create New Simulation" CTA (when no simulation is loaded)
+> 2. ControlPanel "New Simulation" button (visible only when `simulation === null`)
+> 3. Direct URL navigation
+
 
 ### 화면-SPEC 매핑
 

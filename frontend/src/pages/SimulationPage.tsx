@@ -9,6 +9,8 @@
  * Zone 3: Timeline (120px) + Conversations (fill remaining)
  */
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
 import CommunityPanel from "../components/graph/CommunityPanel";
 import GraphPanel from "../components/graph/GraphPanel";
@@ -21,6 +23,7 @@ import { useSimulationStore } from "../store/simulationStore";
 import type { StepResult, EmergentEvent, SimulationStatus } from "../types/simulation";
 
 export default function SimulationPage() {
+  const navigate = useNavigate();
   const simulation = useSimulationStore((s) => s.simulation);
   const appendStep = useSimulationStore((s) => s.appendStep);
   const appendEmergentEvent = useSimulationStore((s) => s.appendEmergentEvent);
@@ -44,6 +47,31 @@ export default function SimulationPage() {
         break;
     }
   }, [lastMessage, appendStep, appendEmergentEvent, setStatus]);
+
+  if (!simulation) {
+    return (
+      <div className="h-screen w-screen flex flex-col bg-[var(--background)]">
+        <ControlPanel />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center flex flex-col items-center gap-4">
+            <Brain className="w-16 h-16 text-[var(--muted-foreground)]" />
+            <h2 className="text-xl font-semibold text-[var(--foreground)]">No Active Simulation</h2>
+            <p className="text-sm text-[var(--muted-foreground)] max-w-md">
+              Create a new simulation to start analyzing campaign diffusion across your virtual social network.
+            </p>
+            <button
+              onClick={() => navigate("/setup")}
+              className="h-10 px-6 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create New Simulation
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="simulation-page"

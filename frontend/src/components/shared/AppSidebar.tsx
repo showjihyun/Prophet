@@ -13,7 +13,6 @@ import {
   Users,
   Crown,
   MessageSquare,
-  PlusCircle,
 } from "lucide-react";
 import ThemeToggle from './ThemeToggle';
 
@@ -24,7 +23,6 @@ interface AppSidebarProps {
 const NAV_ITEMS = [
   { icon: Play, label: "Simulation", href: "/" },
   { icon: FolderOpen, label: "Projects", href: "/projects" },
-  { icon: PlusCircle, label: "New Simulation", href: "/setup" },
   { icon: Users, label: "Communities", href: "/communities" },
   { icon: Crown, label: "Influencers", href: "/influencers" },
   { icon: BarChart3, label: "Global Insights", href: "/metrics" },

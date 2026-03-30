@@ -216,6 +216,15 @@ export default function ControlPanel() {
             MCASP Prophet Engine
           </span>
         </div>
+        {!simulation && (
+          <button
+            onClick={() => navigate("/setup")}
+            className="h-8 px-3 text-xs font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity flex items-center gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Simulation
+          </button>
+        )}
         <span data-testid="status-badge" className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--card)]">
           <span
             className={`w-2 h-2 rounded-full ${

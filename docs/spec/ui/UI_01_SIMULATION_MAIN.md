@@ -45,6 +45,17 @@ The screen is divided into 4 horizontal zones stacked vertically:
 +------------------------------------------------------------------------+
 ```
 
+### 2.1 Empty State (No Active Simulation)
+
+When no simulation is loaded, the page shows:
+- ControlPanel (top bar) with "New Simulation" button visible
+- Centered empty state: icon + title + description + "Create New Simulation" CTA
+- CTA navigates to /setup (Campaign Setup page)
+- /setup is NOT a separate sidebar menu item — it is only accessible from:
+  1. SimulationPage empty state CTA
+  2. ControlPanel "New Simulation" button (when simulation is null)
+  3. Direct URL navigation
+
 ---
 
 ## 3. Components
