@@ -62,12 +62,10 @@ export default function ProjectsListPage() {
   return (
     <div
       data-testid="projects-list-page"
-      className="min-h-screen flex bg-[var(--background)]"
+      className="min-h-screen bg-[var(--background)]"
     >
-      <AppSidebar />
-
       {/* Main Content */}
-      <main className="flex-1 overflow-auto" style={{ padding: 32 }}>
+      <main className="overflow-auto" style={{ padding: 32 }}>
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
           <div>

@@ -180,20 +180,15 @@ export default function SettingsPage() {
   /* ---------- render ---------- */
   if (loading) {
     return (
-      <div className="flex h-screen">
-        <AppSidebar activePath="/settings" />
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-[var(--muted-foreground)]" />
-        </div>
+      <div className="flex-1 flex items-center justify-center h-full">
+        <Loader2 className="w-6 h-6 animate-spin text-[var(--muted-foreground)]" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-[var(--background)]">
-      <AppSidebar activePath="/settings" />
-
-      <main className="flex-1 overflow-y-auto p-8">
+    <div className="h-full bg-[var(--background)]">
+      <main className="overflow-y-auto p-8">
         <h1 className="text-2xl font-bold font-display text-[var(--foreground)] mb-6">Settings</h1>
 
         {/* ---- LLM Provider Configuration ---- */}

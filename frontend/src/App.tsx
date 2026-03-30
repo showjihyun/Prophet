@@ -4,7 +4,8 @@
  * @spec docs/spec/ui/UI_01_SIMULATION_MAIN.md
  */
 import { Component, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+import AppSidebar from "./components/shared/AppSidebar";
 import SimulationPage from "./pages/SimulationPage";
 import CommunitiesDetailPage from "./pages/CommunitiesDetailPage";
 import TopInfluencersPage from "./pages/TopInfluencersPage";
@@ -51,26 +52,43 @@ class ErrorBoundary extends Component<
   }
 }
 
+/** Layout with sidebar for all pages except SimulationPage */
+function SidebarLayout() {
+  return (
+    <div className="flex h-screen bg-[var(--background)]">
+      <AppSidebar />
+      <main className="flex-1 overflow-auto">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary>
         <Routes>
-          <Route path="/projects" element={<ProjectsListPage />} />
-          <Route path="/projects/:projectId" element={<ProjectScenariosPage />} />
+          {/* SimulationPage has its own full-screen layout with ControlPanel */}
           <Route path="/" element={<SimulationPage />} />
-          <Route path="/communities" element={<CommunitiesDetailPage />} />
-          <Route path="/communities/:communityId" element={<CommunitiesDetailPage />} />
-          <Route path="/influencers" element={<TopInfluencersPage />} />
-          <Route path="/agents/:agentId" element={<AgentDetailPage />} />
-          <Route path="/metrics" element={<GlobalMetricsPage />} />
-          <Route path="/setup" element={<CampaignSetupPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/opinions" element={<ScenarioOpinionsPage />} />
-          <Route path="/opinions/:communityId" element={<CommunityOpinionPage />} />
-          <Route path="/opinions/:communityId/thread/:threadId" element={<ConversationThreadPage />} />
-          <Route path="/compare/:otherId" element={<ComparisonPage />} />
-          <Route path="/communities/manage" element={<CommunityManagePage />} />
+
+          {/* All other pages get the sidebar layout */}
+          <Route element={<SidebarLayout />}>
+            <Route path="/projects" element={<ProjectsListPage />} />
+            <Route path="/projects/:projectId" element={<ProjectScenariosPage />} />
+            <Route path="/communities" element={<CommunitiesDetailPage />} />
+            <Route path="/communities/:communityId" element={<CommunitiesDetailPage />} />
+            <Route path="/communities/manage" element={<CommunityManagePage />} />
+            <Route path="/influencers" element={<TopInfluencersPage />} />
+            <Route path="/agents/:agentId" element={<AgentDetailPage />} />
+            <Route path="/metrics" element={<GlobalMetricsPage />} />
+            <Route path="/setup" element={<CampaignSetupPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/opinions" element={<ScenarioOpinionsPage />} />
+            <Route path="/opinions/:communityId" element={<CommunityOpinionPage />} />
+            <Route path="/opinions/:communityId/thread/:threadId" element={<ConversationThreadPage />} />
+            <Route path="/compare/:otherId" element={<ComparisonPage />} />
+          </Route>
         </Routes>
       </ErrorBoundary>
     </BrowserRouter>
