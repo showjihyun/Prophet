@@ -470,6 +470,213 @@ class SimulationOrchestrator:
         """Public accessor for simulation state."""
         return self._get_state(simulation_id)
 
+    # ------------------------------------------------------------------ #
+    # Agent / Community query methods (called from API endpoints)
+    # SPEC: docs/spec/06_API_SPEC.md#3-agent-endpoints
+    # SPEC: docs/spec/06_API_SPEC.md#5-community-endpoints
+    # ------------------------------------------------------------------ #
+
+    def list_agents(
+        self,
+        simulation_id: str | UUID,
+        community_id: str | None = None,
+        action: str | None = None,
+        adopted: bool | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict:
+        """Return a paginated, filtered list of agents for a simulation.
+
+        SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagents
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+
+        agents = state.agents
+
+        # Apply filters
+        if community_id is not None:
+            agents = [a for a in agents if str(a.community_id) == community_id]
+        if action is not None:
+            agents = [a for a in agents if a.action.value == action]
+        if adopted is not None:
+            agents = [a for a in agents if a.adopted == adopted]
+
+        total = len(agents)
+        page = agents[offset: offset + limit]
+
+        items = [
+            {
+                "agent_id": str(a.agent_id),
+                "community_id": str(a.community_id),
+                "agent_type": a.agent_type.value,
+                "action": a.action.value,
+                "adopted": a.adopted,
+                "influence_score": a.influence_score,
+                "belief": a.belief,
+            }
+            for a in page
+        ]
+        return {"items": items, "total": total}
+
+    def get_agent(self, simulation_id: str | UUID, agent_id_str: str) -> dict:
+        """Return full agent state dict.
+
+        SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagentsagent_id
+
+        Raises:
+            ValueError: agent not found
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+
+        agent = None
+        for a in state.agents:
+            if str(a.agent_id) == agent_id_str:
+                agent = a
+                break
+
+        if agent is None:
+            raise ValueError(f"Agent {agent_id_str} not found in simulation {simulation_id}")
+
+        return {
+            "agent_id": str(agent.agent_id),
+            "community_id": str(agent.community_id),
+            "agent_type": agent.agent_type.value,
+            "action": agent.action.value,
+            "adopted": agent.adopted,
+            "influence_score": agent.influence_score,
+            "belief": agent.belief,
+            "personality": {
+                "openness": agent.personality.openness,
+                "skepticism": agent.personality.skepticism,
+                "trend_following": agent.personality.trend_following,
+                "brand_loyalty": agent.personality.brand_loyalty,
+                "social_influence": agent.personality.social_influence,
+            },
+            "emotion": {
+                "interest": agent.emotion.interest,
+                "trust": agent.emotion.trust,
+                "skepticism": agent.emotion.skepticism,
+                "excitement": agent.emotion.excitement,
+            },
+            "memories": [],
+        }
+
+    def list_communities(self, simulation_id: str | UUID) -> dict:
+        """Return community-level aggregate metrics.
+
+        SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idcommunities
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+
+        # Group agents by community_id
+        from collections import defaultdict
+        groups: dict = defaultdict(list)
+        for a in state.agents:
+            groups[a.community_id].append(a)
+
+        communities = []
+        for cid, members in groups.items():
+            count = len(members)
+            adopted_count = sum(1 for a in members if a.adopted)
+            adoption_rate = adopted_count / count if count > 0 else 0.0
+            mean_belief = sum(a.belief for a in members) / count if count > 0 else 0.0
+
+            # Dominant action
+            action_counts: Counter = Counter(a.action.value for a in members)
+            dominant_action = action_counts.most_common(1)[0][0] if action_counts else "ignore"
+
+            communities.append({
+                "community_id": str(cid),
+                "name": str(cid)[:8],
+                "size": count,
+                "adoption_rate": adoption_rate,
+                "mean_belief": mean_belief,
+                "sentiment_variance": 0.0,
+                "dominant_action": dominant_action,
+            })
+
+        return {"communities": communities}
+
+    def patch_agent(
+        self,
+        simulation_id: str | UUID,
+        agent_id_str: str,
+        updates_dict: dict,
+    ) -> dict:
+        """Apply field updates to an agent and return the updated agent dict.
+
+        SPEC: docs/spec/06_API_SPEC.md#patch-simulationssimulation_idagentsagent_id
+
+        Raises:
+            ValueError: agent not found
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+
+        agent_idx = None
+        for i, a in enumerate(state.agents):
+            if str(a.agent_id) == agent_id_str:
+                agent_idx = i
+                break
+
+        if agent_idx is None:
+            raise ValueError(f"Agent {agent_id_str} not found in simulation {simulation_id}")
+
+        agent = state.agents[agent_idx]
+        update_kwargs: dict = {}
+
+        if "belief" in updates_dict:
+            update_kwargs["belief"] = max(-1.0, min(1.0, float(updates_dict["belief"])))
+        if "personality" in updates_dict:
+            p = updates_dict["personality"]
+            if isinstance(p, dict):
+                from app.engine.agent.schema import AgentPersonality
+                update_kwargs["personality"] = AgentPersonality(
+                    openness=p.get("openness", agent.personality.openness),
+                    skepticism=p.get("skepticism", agent.personality.skepticism),
+                    trend_following=p.get("trend_following", agent.personality.trend_following),
+                    brand_loyalty=p.get("brand_loyalty", agent.personality.brand_loyalty),
+                    social_influence=p.get("social_influence", agent.personality.social_influence),
+                )
+            else:
+                update_kwargs["personality"] = p
+        if "emotion" in updates_dict:
+            e = updates_dict["emotion"]
+            if isinstance(e, dict):
+                from app.engine.agent.schema import AgentEmotion
+                update_kwargs["emotion"] = AgentEmotion(
+                    interest=e.get("interest", agent.emotion.interest),
+                    trust=e.get("trust", agent.emotion.trust),
+                    skepticism=e.get("skepticism", agent.emotion.skepticism),
+                    excitement=e.get("excitement", agent.emotion.excitement),
+                )
+            else:
+                update_kwargs["emotion"] = e
+
+        if update_kwargs:
+            state.agents[agent_idx] = replace(agent, **update_kwargs)
+
+        return self.get_agent(sim_uuid, agent_id_str)
+
+    def get_agent_memory(
+        self,
+        simulation_id: str | UUID,
+        agent_id_str: str,
+        memory_type: str | None = None,
+        limit: int = 10,
+    ) -> dict:
+        """Return agent memory records (stub — memory records are in-memory only).
+
+        SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagentsagent_idmemory
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        # Validate agent exists (raises ValueError if not found)
+        self.get_agent(sim_uuid, agent_id_str)
+        return {"memories": []}
+
     async def delete_simulation(self, simulation_id: UUID) -> None:
         """Remove simulation state from memory.
         SPEC: docs/spec/09_HARNESS_SPEC.md#memory-eviction-policy

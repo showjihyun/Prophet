@@ -3,6 +3,7 @@ SPEC: docs/spec/06_API_SPEC.md#2-simulation-endpoints
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -13,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_orchestrator, get_session, get_persistence
+from app.api.ws import manager as ws_manager
 from app.engine.simulation.persistence import SimulationPersistence
 from app.api.schemas import (
     CreateSimulationRequest,
@@ -56,6 +58,20 @@ _DEFAULT_COMMUNITIES: list[CommunityConfig] = [
     CommunityConfig(id="D", name="experts", size=30, agent_type="expert"),
     CommunityConfig(id="E", name="influencers", size=170, agent_type="influencer"),
 ]
+
+
+def _community_metric_dict(metric: Any) -> dict:
+    """Convert CommunityStepMetrics to a plain dict (handles dataclass and dict)."""
+    if isinstance(metric, dict):
+        return metric
+    # Dataclass / object with attributes
+    result: dict = {}
+    for attr in ("community_id", "adoption_rate", "mean_belief", "sentiment_variance",
+                 "active_agents", "dominant_action"):
+        val = getattr(metric, attr, None)
+        if val is not None:
+            result[attr] = str(val) if attr == "community_id" else val
+    return result
 
 
 def _sim_id_to_uuid(simulation_id: str) -> UUID:
@@ -251,6 +267,10 @@ async def start_simulation(
     sim_uuid = _sim_id_to_uuid(simulation_id)
     orchestrator.start(sim_uuid)
     await persist.persist_status(session, sim_uuid, "running")
+    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        "type": "status_change",
+        "data": {"status": "running"},
+    }))
     return StatusResponse(status=SimulationStatus.RUNNING, started_at=now)
 
 
@@ -273,6 +293,57 @@ async def step_simulation(
     # Persist step result + status update
     await persist.persist_step(session, sim_uuid, result)
     await persist.persist_status(session, sim_uuid, state.status, state.current_step)
+
+    # Broadcast step result via WebSocket
+    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        "type": "step_result",
+        "data": {
+            "simulation_id": str(sim_uuid),
+            "step": result.step,
+            "total_adoption": result.total_adoption,
+            "adoption_rate": result.adoption_rate,
+            "diffusion_rate": result.diffusion_rate,
+            "mean_sentiment": result.mean_sentiment,
+            "sentiment_variance": result.sentiment_variance,
+            "community_metrics": {
+                k: _community_metric_dict(v)
+                for k, v in result.community_metrics.items()
+            },
+            "emergent_events": [
+                {
+                    "event_type": e.event_type,
+                    "step": e.step,
+                    "community_id": str(e.community_id) if e.community_id else None,
+                    "severity": e.severity,
+                    "description": e.description,
+                }
+                for e in result.emergent_events
+            ],
+            "action_distribution": {k: v for k, v in result.action_distribution.items()},
+            "llm_calls_this_step": result.llm_calls_this_step,
+            "step_duration_ms": result.step_duration_ms,
+        },
+    }))
+
+    # Broadcast individual emergent events
+    for event in result.emergent_events:
+        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+            "type": "emergent_event",
+            "data": {
+                "event_type": event.event_type,
+                "step": event.step,
+                "community_id": str(event.community_id) if event.community_id else None,
+                "severity": event.severity,
+                "description": event.description,
+            },
+        }))
+
+    # Broadcast status change if simulation completed
+    if state.status == "completed":
+        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+            "type": "status_change",
+            "data": {"status": "completed"},
+        }))
 
     return StepResultResponse(
         step=result.step,
@@ -298,6 +369,10 @@ async def pause_simulation(
     sim_uuid = _sim_id_to_uuid(simulation_id)
     await orchestrator.pause(sim_uuid)
     await persist.persist_status(session, sim_uuid, "paused", state.current_step)
+    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        "type": "status_change",
+        "data": {"status": "paused"},
+    }))
     return StatusResponse(
         status=SimulationStatus.PAUSED, current_step=state.current_step,
     )
@@ -315,6 +390,10 @@ async def resume_simulation(
     _require_status(state, SimulationStatus.PAUSED)
     sim_uuid = _sim_id_to_uuid(simulation_id)
     await orchestrator.resume(sim_uuid)
+    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        "type": "status_change",
+        "data": {"status": "running"},
+    }))
     return StatusResponse(status=SimulationStatus.RUNNING)
 
 
@@ -338,6 +417,10 @@ async def stop_simulation(
     state.status = "completed"
     sim_uuid = _sim_id_to_uuid(simulation_id)
     await persist.persist_status(session, sim_uuid, "completed")
+    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        "type": "status_change",
+        "data": {"status": "completed"},
+    }))
     return StatusResponse(status=SimulationStatus.COMPLETED)
 
 
