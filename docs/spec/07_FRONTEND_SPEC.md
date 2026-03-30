@@ -377,6 +377,35 @@ const apiClient = {
 
 ---
 
+## 9.5. Testing
+
+### Unit Tests (Vitest)
+- Framework: **Vitest** + **@testing-library/react** + **jsdom**
+- Config: `vite.config.ts` (test section) + `src/test/setup.ts`
+- Run: `npx vitest run`
+- Tests: `src/__tests__/*.test.{ts,tsx}` (145 tests, 13 files)
+- Covers: API client methods, Zustand store actions, component rendering
+
+### E2E Tests (Playwright)
+- Framework: **Playwright** (Chromium)
+- Config: `playwright.config.ts`
+- Run: `npx playwright test`
+- Tests: `e2e/*.spec.ts` (26 tests, 3 files)
+- Covers:
+  - All page routes render without errors
+  - Simulation main page 4-zone layout
+  - Phase B modals (InjectEvent, Replay, MonteCarlo, EngineControl)
+  - API lifecycle (create → start → step → list)
+  - Console error detection
+  - Navigation flow
+
+### Test Requirements
+- Requires Docker Compose running (backend + frontend + PostgreSQL)
+- Frontend: `http://localhost:5173`, Backend: `http://localhost:8000`
+- No external data dependencies for default test suite
+
+---
+
 ## 10. Acceptance Criteria
 
 | ID | Test | Expected |

@@ -560,3 +560,21 @@ uv run pytest backend/tests/ --cov=backend/app --cov-report=html
 - `@pytest.mark.benchmark` — performance tests
 - `@pytest.mark.integration` — requires live DB + Ollama
 - `@pytest.mark.unit` — pure unit tests, no external deps
+- `@pytest.mark.external_data` — requires Twitter15/16 dataset on disk
+
+**Frontend tests:**
+```bash
+# Unit tests (Vitest)
+cd frontend && npx vitest run              # 145 tests
+
+# E2E tests (Playwright, requires Docker Compose)
+cd frontend && npx playwright test         # 26 tests
+```
+
+**Total test counts:**
+| Layer | Framework | Tests | Command |
+|-------|-----------|-------|---------|
+| Backend | pytest | 586 | `uv run pytest tests/` |
+| Frontend Unit | Vitest | 145 | `npx vitest run` |
+| Frontend E2E | Playwright | 26 | `npx playwright test` |
+| **Total** | | **757** | |
