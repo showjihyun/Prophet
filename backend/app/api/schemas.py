@@ -396,6 +396,62 @@ class PaginatedResponse(BaseModel):
     total: int = 0
 
 
+# --- Project / Scenario ---
+
+class CreateProjectRequest(BaseModel):
+    """Create project request.
+    SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
+    """
+    name: str
+    description: str = ""
+
+
+class ProjectResponse(BaseModel):
+    """Project summary response.
+    SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
+    """
+    project_id: str
+    name: str
+    description: str = ""
+    status: str = "active"
+    scenario_count: int = 0
+    created_at: datetime | None = None
+
+
+class ScenarioResponse(BaseModel):
+    """Scenario response.
+    SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
+    """
+    scenario_id: str
+    name: str
+    description: str = ""
+    status: str = "draft"
+    simulation_id: str | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+
+
+class ProjectDetailResponse(BaseModel):
+    """Project detail with scenarios.
+    SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
+    """
+    project_id: str
+    name: str
+    description: str = ""
+    status: str = "active"
+    scenarios: list[ScenarioResponse] = Field(default_factory=list)
+    created_at: datetime | None = None
+
+
+class CreateScenarioRequest(BaseModel):
+    """Create scenario request.
+    SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
+    """
+    name: str
+    description: str = ""
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
 # --- Error ---
 
 class ErrorResponse(BaseModel):

@@ -3,142 +3,52 @@
  * @spec docs/spec/ui/UI_07_PROJECT_SCENARIOS.md
  */
 import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   Plus,
   Settings,
-  Users,
   Clock,
   Play,
   Square,
   MoreHorizontal,
+  Trash2,
 } from "lucide-react";
 import AppSidebar from "../components/shared/AppSidebar";
-
-/* ------------------------------------------------------------------ */
-/* Mock Data                                                           */
-/* ------------------------------------------------------------------ */
-
-const MOCK_PROJECT = {
-  id: "p1",
-  name: "Korea Election 2026 Simulation",
-  description:
-    "Simulate the 2026 Korean presidential election with agent-based modeling across multiple community networks.",
-  status: "active" as const,
-  scenarios: 4,
-  totalAgents: 10000,
-  created: "2026-03-15",
-  lastRun: "2 hours ago",
-};
-
-const MOCK_SCENARIOS = [
-  {
-    id: "s1",
-    name: "Baseline — No Intervention",
-    status: "completed" as const,
-    description: "Control scenario with default parameters...",
-    agents: 2500,
-    tier1: 2000,
-    tier2: 400,
-    tier3: 100,
-    runTime: "2h 15m",
-    viralProb: "64.2%",
-  },
-  {
-    id: "s2",
-    name: "Media Influence Campaign",
-    status: "running" as const,
-    description: "Simulates large-scale media campaign...",
-    agents: 3000,
-    tier1: 2400,
-    tier2: 480,
-    tier3: 120,
-    runTime: "1h 45m",
-    viralProb: "\u2014",
-  },
-  {
-    id: "s3",
-    name: "Echo Chamber Formation",
-    status: "draft" as const,
-    description: "Tests echo chamber dynamics...",
-    agents: 2000,
-    tier1: 1600,
-    tier2: 320,
-    tier3: 80,
-    runTime: "\u2014",
-    viralProb: "\u2014",
-  },
-  {
-    id: "s4",
-    name: "Fact-Check Bot Intervention",
-    status: "completed" as const,
-    description: "Deploy AI fact-checker agents...",
-    agents: 2500,
-    tier1: 1800,
-    tier2: 500,
-    tier3: 200,
-    runTime: "3h 20m",
-    viralProb: "31.2%",
-  },
-];
+import { apiClient } from "../api/client";
+import type { ProjectDetail, ScenarioInfo } from "../api/client";
+import { useSimulationStore } from "../store/simulationStore";
 
 /* ------------------------------------------------------------------ */
 /* Status Badge                                                        */
 /* ------------------------------------------------------------------ */
 
-type ScenarioStatus = "completed" | "running" | "draft";
-
-const SCENARIO_STATUS_STYLES: Record<
-  ScenarioStatus,
-  { bg: string; text: string; label: string; pulse?: boolean }
-> = {
-  completed: { bg: "bg-[var(--sentiment-positive)]/10", text: "text-[var(--sentiment-positive)]", label: "Completed" },
-  running: {
-    bg: "bg-[var(--destructive)]/10",
-    text: "text-[var(--destructive)]",
-    label: "Running",
-    pulse: true,
-  },
-  draft: { bg: "bg-[var(--secondary)]", text: "text-[var(--muted-foreground)]", label: "Draft" },
-};
-
-function ScenarioStatusBadge({ status }: { status: ScenarioStatus }) {
-  const s = SCENARIO_STATUS_STYLES[status];
+function ScenarioStatusBadge({ status }: { status: string }) {
+  const styles: Record<string, { bg: string; text: string; pulse?: boolean }> = {
+    completed: { bg: "bg-[var(--sentiment-positive)]/10", text: "text-[var(--sentiment-positive)]" },
+    running: { bg: "bg-[var(--destructive)]/10", text: "text-[var(--destructive)]", pulse: true },
+    draft: { bg: "bg-[var(--secondary)]", text: "text-[var(--muted-foreground)]" },
+  };
+  const s = styles[status] ?? { bg: "bg-[var(--secondary)]", text: "text-[var(--muted-foreground)]" };
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${s.bg} ${s.text}`}
-    >
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${s.bg} ${s.text}`}>
       {s.pulse && (
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--destructive)] opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--destructive)]" />
         </span>
       )}
-      {s.label}
+      {status}
     </span>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Project Status Badge (for info bar)                                 */
-/* ------------------------------------------------------------------ */
-
-function ProjectStatusBadge() {
+function ProjectStatusBadge({ status }: { status: string }) {
   return (
     <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-[var(--sentiment-positive)]/10 text-[var(--sentiment-positive)]">
-      Active
+      {status}
     </span>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Tier Colors                                                         */
-/* ------------------------------------------------------------------ */
-
-const TIER_COLORS = {
-  tier1: "#94a3b8",
-  tier2: "#f59e0b",
-  tier3: "#a855f7",
-};
 
 /* ------------------------------------------------------------------ */
 /* Page                                                                */
@@ -147,10 +57,64 @@ const TIER_COLORS = {
 export default function ProjectScenariosPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const setSimulation = useSimulationStore((s) => s.setSimulation);
+  const setCurrentProject = useSimulationStore((s) => s.setCurrentProject);
 
-  // In real app, fetch project by projectId. For now use mock.
-  void projectId;
-  const project = MOCK_PROJECT;
+  const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!projectId) return;
+    setCurrentProject(projectId);
+    apiClient.projects.get(projectId)
+      .then((detail) => {
+        setProject(detail);
+        setScenarios(detail.scenarios);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [projectId, setCurrentProject]);
+
+  const handleNewScenario = async () => {
+    if (!projectId) return;
+    const name = window.prompt("New scenario name:");
+    if (!name?.trim()) return;
+    try {
+      const scenario = await apiClient.projects.createScenario(projectId, { name: name.trim() });
+      setScenarios((prev) => [...prev, scenario]);
+    } catch { /* ignore */ }
+  };
+
+  const handleRun = async (scenario: ScenarioInfo) => {
+    if (!projectId) return;
+    try {
+      await apiClient.projects.runScenario(projectId, scenario.scenario_id);
+      navigate("/");
+    } catch { /* ignore */ }
+  };
+
+  const handleResults = async (scenario: ScenarioInfo) => {
+    if (scenario.simulation_id) {
+      try {
+        const sim = await apiClient.simulations.get(scenario.simulation_id);
+        setSimulation(sim);
+      } catch { /* ignore */ }
+    }
+    navigate("/");
+  };
+
+  const handleDelete = async (scenario: ScenarioInfo) => {
+    if (!projectId) return;
+    if (!window.confirm(`Delete scenario "${scenario.name}"?`)) return;
+    try {
+      await apiClient.projects.deleteScenario(projectId, scenario.scenario_id);
+      setScenarios((prev) => prev.filter((s) => s.scenario_id !== scenario.scenario_id));
+    } catch { /* ignore */ }
+  };
+
+  const projectName = project?.name ?? "Project";
+  const projectDescription = project?.description ?? "";
 
   return (
     <div
@@ -170,128 +134,134 @@ export default function ProjectScenariosPage() {
             Projects
           </button>
           <span className="text-[var(--muted-foreground)]">&gt;</span>
-          <span className="text-[var(--foreground)] font-medium">{project.name}</span>
+          <span className="text-[var(--foreground)] font-medium">{projectName}</span>
         </nav>
 
-        {/* Project Header */}
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold font-display text-[var(--foreground)]">
-              {project.name}
-            </h1>
-            <p className="text-sm text-[var(--muted-foreground)] mt-1">{project.description}</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button className="inline-flex items-center gap-2 h-9 px-3 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors">
-              <Settings className="w-4 h-4" />
-              Settings
-            </button>
-            <button className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors">
-              <Plus className="w-4 h-4" />
-              New Scenario
-            </button>
-          </div>
-        </div>
+        {/* Loading */}
+        {loading && (
+          <p className="text-sm text-[var(--muted-foreground)]">Loading project...</p>
+        )}
 
-        {/* Project Info Bar */}
-        <div className="flex items-center gap-6 bg-[var(--muted)] rounded-lg px-5 py-3 mb-6 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--muted-foreground)]">Status</span>
-            <ProjectStatusBadge />
-          </div>
-          <Divider />
-          <InfoItem label="Scenarios" value={String(project.scenarios)} />
-          <Divider />
-          <InfoItem
-            label="Total Agents"
-            value={project.totalAgents.toLocaleString()}
-          />
-          <Divider />
-          <InfoItem label="Created" value={project.created} />
-          <Divider />
-          <InfoItem label="Last Run" value={project.lastRun} />
-        </div>
-
-        {/* Scenarios Section */}
-        <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
-          Scenarios
-        </h2>
-
-        <div className="flex flex-col gap-4">
-          {MOCK_SCENARIOS.map((scenario) => (
-            <div
-              key={scenario.id}
-              className="interactive bg-[var(--card)] border border-[var(--border)] rounded-lg p-5"
-            >
-              {/* Header: name + status */}
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-base font-semibold text-[var(--foreground)]">
-                  {scenario.name}
-                </h3>
-                <ScenarioStatusBadge status={scenario.status} />
+        {!loading && project && (
+          <>
+            {/* Project Header */}
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h1 className="text-2xl font-bold font-display text-[var(--foreground)]">
+                  {projectName}
+                </h1>
+                <p className="text-sm text-[var(--muted-foreground)] mt-1">{projectDescription}</p>
               </div>
-
-              {/* Description */}
-              <p className="text-sm text-[var(--muted-foreground)] mb-3">
-                {scenario.description}
-              </p>
-
-              {/* Metadata + Actions */}
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                {/* Metadata */}
-                <div className="flex items-center gap-4 flex-wrap">
-                  <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
-                    <Users className="w-3.5 h-3.5" />
-                    Agents: {scenario.agents.toLocaleString()}
-                  </span>
-                  <span className="text-xs" style={{ color: TIER_COLORS.tier1 }}>
-                    Tier 1: {scenario.tier1.toLocaleString()}
-                  </span>
-                  <span className="text-xs" style={{ color: TIER_COLORS.tier2 }}>
-                    Tier 2: {scenario.tier2.toLocaleString()}
-                  </span>
-                  <span className="text-xs" style={{ color: TIER_COLORS.tier3 }}>
-                    Tier 3: {scenario.tier3.toLocaleString()}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
-                    <Clock className="w-3.5 h-3.5" />
-                    Run time: {scenario.runTime}
-                  </span>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2">
-                  {scenario.status === "completed" && (
-                    <button
-                      onClick={() => navigate("/")}
-                      className="h-8 px-3 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] transition-colors"
-                    >
-                      Results
-                    </button>
-                  )}
-                  {scenario.status === "running" && (
-                    <button className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-[var(--destructive)] border border-[var(--destructive)]/30 rounded-md bg-[var(--destructive)]/10 hover:bg-[var(--destructive)]/15 transition-colors">
-                      <Square className="w-3.5 h-3.5" />
-                      Stop
-                    </button>
-                  )}
-                  {scenario.status === "draft" && (
-                    <button
-                      onClick={() => navigate("/")}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors"
-                    >
-                      <Play className="w-3.5 h-3.5" />
-                      Run
-                    </button>
-                  )}
-                  <button className="h-8 w-8 flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
-                </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button className="inline-flex items-center gap-2 h-9 px-3 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors">
+                  <Settings className="w-4 h-4" />
+                  Settings
+                </button>
+                <button
+                  onClick={handleNewScenario}
+                  className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Scenario
+                </button>
               </div>
             </div>
-          ))}
-        </div>
+
+            {/* Project Info Bar */}
+            <div className="flex items-center gap-6 bg-[var(--muted)] rounded-lg px-5 py-3 mb-6 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--muted-foreground)]">Status</span>
+                <ProjectStatusBadge status={project.status} />
+              </div>
+              <Divider />
+              <InfoItem label="Scenarios" value={String(project.scenario_count)} />
+              <Divider />
+              <InfoItem
+                label="Created"
+                value={project.created_at ? new Date(project.created_at).toLocaleDateString() : "—"}
+              />
+            </div>
+
+            {/* Scenarios Section */}
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
+              Scenarios
+            </h2>
+
+            {scenarios.length === 0 && (
+              <p className="text-sm text-[var(--muted-foreground)]">No scenarios yet. Create one to get started.</p>
+            )}
+
+            <div className="flex flex-col gap-4">
+              {scenarios.map((scenario) => (
+                <div
+                  key={scenario.scenario_id}
+                  className="interactive bg-[var(--card)] border border-[var(--border)] rounded-lg p-5"
+                >
+                  {/* Header: name + status */}
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-base font-semibold text-[var(--foreground)]">
+                      {scenario.name}
+                    </h3>
+                    <ScenarioStatusBadge status={scenario.status} />
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-sm text-[var(--muted-foreground)] mb-3">
+                    {scenario.description}
+                  </p>
+
+                  {/* Metadata + Actions */}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    {/* Metadata */}
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+                        <Clock className="w-3.5 h-3.5" />
+                        Created: {scenario.created_at ? new Date(scenario.created_at).toLocaleDateString() : "—"}
+                      </span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2">
+                      {scenario.status === "completed" && (
+                        <button
+                          onClick={() => handleResults(scenario)}
+                          className="h-8 px-3 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] transition-colors"
+                        >
+                          Results
+                        </button>
+                      )}
+                      {scenario.status === "running" && (
+                        <button className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-[var(--destructive)] border border-[var(--destructive)]/30 rounded-md bg-[var(--destructive)]/10 hover:bg-[var(--destructive)]/15 transition-colors">
+                          <Square className="w-3.5 h-3.5" />
+                          Stop
+                        </button>
+                      )}
+                      {(scenario.status === "draft" || scenario.status === "created") && (
+                        <button
+                          onClick={() => handleRun(scenario)}
+                          className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                          Run
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(scenario)}
+                        title="Delete scenario"
+                        className="h-8 w-8 flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--destructive)] hover:bg-[var(--accent)] rounded-md transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <button className="h-8 w-8 flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </main>
     </div>
   );

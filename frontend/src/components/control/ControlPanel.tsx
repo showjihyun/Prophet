@@ -7,7 +7,7 @@
  * Right: Play/Pause/Step/Reset/Replay + Settings + Avatar
  */
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Brain,
   Play,
@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   BarChart3,
   Cpu,
+  Plus,
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
@@ -38,13 +39,60 @@ export default function ControlPanel() {
   const currentStep = useSimulationStore((s) => s.currentStep);
   const setStatus = useSimulationStore((s) => s.setStatus);
   const appendStep = useSimulationStore((s) => s.appendStep);
+  const setSimulation = useSimulationStore((s) => s.setSimulation);
   const speed = useSimulationStore((s) => s.speed);
   const setSpeed = useSimulationStore((s) => s.setSpeed);
+  const currentProjectId = useSimulationStore((s) => s.currentProjectId);
+  const projects = useSimulationStore((s) => s.projects);
+  const scenarios = useSimulationStore((s) => s.scenarios);
+  const setCurrentProject = useSimulationStore((s) => s.setCurrentProject);
+  const setProjects = useSimulationStore((s) => s.setProjects);
+  const setScenarios = useSimulationStore((s) => s.setScenarios);
 
   const [injectOpen, setInjectOpen] = useState(false);
   const [replayOpen, setReplayOpen] = useState(false);
   const [monteCarloOpen, setMonteCarloOpen] = useState(false);
   const [engineOpen, setEngineOpen] = useState(false);
+
+  // Load projects list on mount
+  useEffect(() => {
+    apiClient.projects.list().then((res) => setProjects(res.items)).catch(() => {});
+  }, [setProjects]);
+
+  // When project changes, load its scenarios
+  const handleProjectChange = async (projectId: string) => {
+    setCurrentProject(projectId || null);
+    if (!projectId) {
+      setScenarios([]);
+      return;
+    }
+    try {
+      const detail = await apiClient.projects.get(projectId);
+      setScenarios(detail.scenarios);
+    } catch { /* ignore */ }
+  };
+
+  // When scenario changes, load its simulation if it has one
+  const handleScenarioChange = async (scenarioId: string) => {
+    const scenario = scenarios.find((s) => s.scenario_id === scenarioId);
+    if (scenario?.simulation_id) {
+      try {
+        const sim = await apiClient.simulations.get(scenario.simulation_id);
+        setSimulation(sim);
+      } catch { /* ignore */ }
+    }
+  };
+
+  // Create new scenario via prompt
+  const handleNewScenario = async () => {
+    if (!currentProjectId) return;
+    const name = window.prompt("New scenario name:");
+    if (!name?.trim()) return;
+    try {
+      const scenario = await apiClient.projects.createScenario(currentProjectId, { name: name.trim() });
+      setScenarios([...scenarios, scenario]);
+    } catch { /* ignore */ }
+  };
 
   const isRunning = status === "running";
 
@@ -134,15 +182,41 @@ export default function ControlPanel() {
           Global Insights
         </button>
 
+        {/* Project selector */}
         <select
-          data-testid="scenario-select"
+          data-testid="project-select"
           className="h-8 px-2 text-xs border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-1 focus:ring-gray-300"
-          defaultValue="default"
+          value={currentProjectId ?? ""}
+          onChange={(e) => handleProjectChange(e.target.value)}
         >
-          <option value="default">Default Scenario</option>
-          <option value="viral">Viral Campaign</option>
-          <option value="polarized">Polarized Market</option>
+          <option value="">-- Project --</option>
+          {projects.map((p) => (
+            <option key={p.project_id} value={p.project_id}>{p.name}</option>
+          ))}
         </select>
+
+        {/* Scenario selector + add button */}
+        <div className="flex items-center gap-1">
+          <select
+            data-testid="scenario-select"
+            className="h-8 px-2 text-xs border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-1 focus:ring-gray-300"
+            defaultValue=""
+            onChange={(e) => handleScenarioChange(e.target.value)}
+          >
+            <option value="">-- Scenario --</option>
+            {scenarios.map((s) => (
+              <option key={s.scenario_id} value={s.scenario_id}>{s.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleNewScenario}
+            title="New scenario"
+            disabled={!currentProjectId}
+            className="h-8 w-8 flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
         <div className="flex items-center rounded-md border border-[var(--border)]">
           {SPEEDS.map((s) => (

@@ -59,4 +59,14 @@ describe('apiClient', () => {
     expect(apiClient.settings.listPlatforms).toBeDefined();
     expect(apiClient.settings.listRecsys).toBeDefined();
   });
+
+  /** @spec 06_API_SPEC.md#project-endpoints */
+  it('has projects methods', () => {
+    expect(apiClient.projects.list).toBeDefined();
+    expect(apiClient.projects.get).toBeDefined();
+    expect(apiClient.projects.create).toBeDefined();
+    expect(apiClient.projects.createScenario).toBeDefined();
+    expect(apiClient.projects.runScenario).toBeDefined();
+    expect(apiClient.projects.deleteScenario).toBeDefined();
+  });
 });

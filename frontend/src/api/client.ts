@@ -92,6 +92,32 @@ export interface MemoryRecord {
   source_agent_id?: string;
 }
 
+/** Project summary from list endpoint. @spec docs/spec/06_API_SPEC.md#project-endpoints */
+export interface ProjectSummary {
+  project_id: string;
+  name: string;
+  description: string;
+  status: string;
+  scenario_count: number;
+  created_at: string | null;
+}
+
+/** Scenario info. @spec docs/spec/06_API_SPEC.md#project-endpoints */
+export interface ScenarioInfo {
+  scenario_id: string;
+  name: string;
+  description: string;
+  status: string;
+  simulation_id: string | null;
+  config: Record<string, unknown>;
+  created_at: string | null;
+}
+
+/** Full project detail including scenarios. @spec docs/spec/06_API_SPEC.md#project-endpoints */
+export interface ProjectDetail extends ProjectSummary {
+  scenarios: ScenarioInfo[];
+}
+
 /** Community info. @spec docs/spec/06_API_SPEC.md#get-communities */
 export interface CommunityInfo {
   community_id: string;
@@ -178,6 +204,18 @@ export const apiClient = {
   communities: {
     list: (simId: string) =>
       request<{ communities: CommunityInfo[] }>(`/simulations/${simId}/communities/`),
+  },
+  projects: {
+    list: () => request<{ items: ProjectSummary[]; total: number }>("/projects/"),
+    get: (id: string) => request<ProjectDetail>(`/projects/${id}`),
+    create: (data: { name: string; description?: string }) =>
+      request<ProjectSummary>("/projects/", { method: "POST", body: JSON.stringify(data) }),
+    createScenario: (projectId: string, data: { name: string; description?: string; config?: Record<string, unknown> }) =>
+      request<ScenarioInfo>(`/projects/${projectId}/scenarios`, { method: "POST", body: JSON.stringify(data) }),
+    runScenario: (projectId: string, scenarioId: string) =>
+      request<{ simulation_id: string; status: string }>(`/projects/${projectId}/scenarios/${scenarioId}/run`, { method: "POST" }),
+    deleteScenario: (projectId: string, scenarioId: string) =>
+      request<void>(`/projects/${projectId}/scenarios/${scenarioId}`, { method: "DELETE" }),
   },
   network: {
     get: (simId: string) => request<CytoscapeGraph>(`/simulations/${simId}/network?format=cytoscape`),

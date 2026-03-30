@@ -574,6 +574,121 @@ Test Ollama connection.
 
 ---
 
+## 9. Project & Scenario Endpoints
+
+Projects group related simulation scenarios. Each scenario maps to a simulation run.
+
+### POST /projects
+Create a new project.
+
+**Request:**
+```json
+{
+  "name": "Q2 Smartphone Launch",
+  "description": "Multi-scenario campaign analysis"
+}
+```
+
+**Response 201:**
+```json
+{
+  "project_id": "uuid",
+  "name": "Q2 Smartphone Launch",
+  "description": "...",
+  "status": "active",
+  "created_at": "2026-03-30T..."
+}
+```
+
+### GET /projects
+List all projects.
+
+**Response 200:**
+```json
+{
+  "items": [
+    {
+      "project_id": "uuid",
+      "name": "Q2 Smartphone Launch",
+      "description": "...",
+      "scenario_count": 3,
+      "status": "active",
+      "created_at": "..."
+    }
+  ],
+  "total": 1
+}
+```
+
+### GET /projects/{project_id}
+Get project detail with scenario list.
+
+**Response 200:**
+```json
+{
+  "project_id": "uuid",
+  "name": "...",
+  "description": "...",
+  "status": "active",
+  "scenarios": [
+    {
+      "scenario_id": "uuid",
+      "name": "Default Scenario",
+      "description": "...",
+      "status": "draft",
+      "simulation_id": "uuid | null",
+      "config": { ... },
+      "created_at": "..."
+    }
+  ],
+  "created_at": "..."
+}
+```
+
+### POST /projects/{project_id}/scenarios
+Create a new scenario under a project.
+
+**Request:**
+```json
+{
+  "name": "Viral Campaign",
+  "description": "High-controversy test",
+  "config": {
+    "campaign": { ... },
+    "max_steps": 50,
+    "slm_llm_ratio": 0.5
+  }
+}
+```
+
+**Response 201:**
+```json
+{
+  "scenario_id": "uuid",
+  "name": "Viral Campaign",
+  "status": "draft",
+  "created_at": "..."
+}
+```
+
+### POST /projects/{project_id}/scenarios/{scenario_id}/run
+Run a scenario (creates a simulation and starts it).
+
+**Response 200:**
+```json
+{
+  "simulation_id": "uuid",
+  "status": "running"
+}
+```
+
+### DELETE /projects/{project_id}/scenarios/{scenario_id}
+Delete a scenario.
+
+**Response 204:** No content.
+
+---
+
 ## 10. Acceptance Criteria (Harness Tests)
 
 | ID | Test | Expected |

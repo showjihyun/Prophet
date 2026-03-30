@@ -25,6 +25,9 @@ describe('simulationStore', () => {
       speed: 2,
       wsConnected: false,
       lastStepReceived: 0,
+      currentProjectId: null,
+      projects: [],
+      scenarios: [],
     });
   });
 
@@ -97,5 +100,42 @@ describe('simulationStore', () => {
   it('setSpeed updates speed', () => {
     useSimulationStore.getState().setSpeed(10);
     expect(useSimulationStore.getState().speed).toBe(10);
+  });
+
+  /** @spec 07_FRONTEND_SPEC.md#project-state */
+  it('initializes with empty project state', () => {
+    const state = useSimulationStore.getState();
+    expect(state.currentProjectId).toBeNull();
+    expect(state.projects).toHaveLength(0);
+    expect(state.scenarios).toHaveLength(0);
+  });
+
+  it('setCurrentProject updates currentProjectId', () => {
+    useSimulationStore.getState().setCurrentProject('proj-1');
+    expect(useSimulationStore.getState().currentProjectId).toBe('proj-1');
+  });
+
+  it('setCurrentProject(null) clears currentProjectId', () => {
+    useSimulationStore.getState().setCurrentProject('proj-1');
+    useSimulationStore.getState().setCurrentProject(null);
+    expect(useSimulationStore.getState().currentProjectId).toBeNull();
+  });
+
+  it('setProjects replaces projects list', () => {
+    const mockProjects = [
+      { project_id: 'p1', name: 'Test Project', description: '', status: 'active', scenario_count: 2, created_at: null },
+    ];
+    useSimulationStore.getState().setProjects(mockProjects);
+    expect(useSimulationStore.getState().projects).toHaveLength(1);
+    expect(useSimulationStore.getState().projects[0].project_id).toBe('p1');
+  });
+
+  it('setScenarios replaces scenarios list', () => {
+    const mockScenarios = [
+      { scenario_id: 's1', name: 'Test Scenario', description: '', status: 'draft', simulation_id: null, config: {}, created_at: null },
+    ];
+    useSimulationStore.getState().setScenarios(mockScenarios);
+    expect(useSimulationStore.getState().scenarios).toHaveLength(1);
+    expect(useSimulationStore.getState().scenarios[0].scenario_id).toBe('s1');
   });
 });

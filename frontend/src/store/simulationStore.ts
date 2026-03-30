@@ -11,6 +11,7 @@ import type {
   TierDistribution,
   EngineImpactReport,
 } from "../types/simulation";
+import type { ProjectSummary, ScenarioInfo } from "../api/client";
 
 interface SimulationStore {
   simulation: SimulationRun | null;
@@ -41,6 +42,14 @@ interface SimulationStore {
   theme: 'dark' | 'light';
   toggleTheme: () => void;
 
+  // Project state
+  currentProjectId: string | null;
+  projects: ProjectSummary[];
+  scenarios: ScenarioInfo[];
+  setCurrentProject: (projectId: string | null) => void;
+  setProjects: (projects: ProjectSummary[]) => void;
+  setScenarios: (scenarios: ScenarioInfo[]) => void;
+
   // Actions
   setSimulation: (sim: SimulationRun) => void;
   appendStep: (step: StepResult) => void;
@@ -68,6 +77,9 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   impactAssessment: null,
   speed: 2,
   theme: 'dark',
+  currentProjectId: null,
+  projects: [],
+  scenarios: [],
   toggleTheme: () => set((state) => {
     const next = state.theme === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
@@ -79,6 +91,10 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
     localStorage.setItem('prophet-theme', next);
     return { theme: next };
   }),
+
+  setCurrentProject: (projectId) => set({ currentProjectId: projectId }),
+  setProjects: (projects) => set({ projects }),
+  setScenarios: (scenarios) => set({ scenarios }),
 
   setSimulation: (sim) => set({ simulation: sim, status: sim.status }),
   appendStep: (step) =>

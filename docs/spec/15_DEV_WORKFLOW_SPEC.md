@@ -231,6 +231,24 @@ Prophet Phase B 기준 (5개 기능 UI 구현):
 
 ---
 
+## 4.4 Mandatory Enforcement Rules (⛔ 절대 위반 금지)
+
+> **이 규칙은 SPEC-GATE와 동일한 강제력을 가진다.**
+
+1. **Plan Mode, SPEC 작성, 아키텍처 설계는 반드시 Opus 4.6으로 실행한다.**
+   - Agent tool 호출 시 `model="opus"` 필수
+   - Plan agent, Explore agent (thorough), SPEC 리뷰는 Opus만 허용
+
+2. **코드 구현, 테스트 작성, 리팩토링은 반드시 Sonnet 4.6으로 실행한다.**
+   - Agent tool 호출 시 `model="sonnet"` 필수
+   - backend-agent, frontend-agent, harness-agent, code-reviewer는 Sonnet만 허용
+
+3. **위반 시 작업을 중단하고 올바른 모델로 재실행한다.**
+
+4. **사용자가 명시적으로 모델을 지정한 경우에만 이 규칙을 오버라이드할 수 있다.**
+
+---
+
 ## 5. Implementation Guide
 
 ### 5.1 Claude Code 설정

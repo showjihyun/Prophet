@@ -8,6 +8,7 @@ from app.models.campaign import Campaign
 from app.models.memory import AgentMemory
 from app.models.network import NetworkEdge
 from app.models.propagation import PropagationEvent, ExpertOpinion, EmergentEvent, MonteCarloRun, LLMCall
+from app.models.project import Project, Scenario
 
 __all__ = [
     "Simulation", "SimStep", "SimulationEvent",
@@ -17,4 +18,5 @@ __all__ = [
     "AgentMemory",
     "NetworkEdge",
     "PropagationEvent", "ExpertOpinion", "EmergentEvent", "MonteCarloRun", "LLMCall",
+    "Project", "Scenario",
 ]
