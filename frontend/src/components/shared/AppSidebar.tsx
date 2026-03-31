@@ -25,8 +25,8 @@ interface AppSidebarProps {
 }
 
 const NAV_ITEMS = [
-  { icon: Play, label: "Simulation", href: "/" },
   { icon: FolderOpen, label: "Projects", href: "/projects" },
+  { icon: Play, label: "Simulation", href: "/simulation" },
   { icon: Users, label: "Communities", href: "/communities" },
   { icon: Crown, label: "Influencers", href: "/influencers" },
   { icon: BarChart3, label: "Global Insights", href: "/metrics" },
@@ -69,6 +69,9 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
   function isActive(href: string): boolean {
     if (href === "/projects") {
       return currentPath === "/projects" || currentPath.startsWith("/projects/");
+    }
+    if (href === "/simulation") {
+      return currentPath === "/simulation";
     }
     return currentPath === href;
   }

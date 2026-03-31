@@ -3,7 +3,7 @@
  * @spec docs/spec/07_FRONTEND_SPEC.md#campaign-setup
  */
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
 import type { CreateSimulationConfig, ProjectSummary } from "../api/client";
 import PageNav from "../components/shared/PageNav";
@@ -20,11 +20,12 @@ const COMMUNITIES = [
 
 export default function CampaignSetupPage() {
   const navigate = useNavigate();
+  const { projectId: urlProjectId } = useParams<{ projectId: string }>();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(urlProjectId ?? "");
 
   useEffect(() => {
     apiClient.projects.list().then((res) => setProjects(Array.isArray(res) ? res : [])).catch(() => {});
@@ -80,6 +81,11 @@ export default function CampaignSetupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Block submit if no project selected
+    if (!selectedProjectId) {
+      setError("Please select a project before creating a simulation.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -109,13 +115,11 @@ export default function CampaignSetupPage() {
       });
       setStatus(sim.status as any);
       // Link simulation to selected project as a scenario
-      if (selectedProjectId) {
-        await apiClient.projects.createScenario(selectedProjectId, {
-          name: config.name,
-          config: { simulation_id: sim.simulation_id },
-        }).catch(() => {});
-      }
-      navigate("/");
+      await apiClient.projects.createScenario(selectedProjectId, {
+        name: config.name,
+        config: { simulation_id: sim.simulation_id },
+      }).catch(() => {});
+      navigate("/simulation");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create simulation");
       setSubmitting(false);
@@ -129,7 +133,8 @@ export default function CampaignSetupPage() {
     >
       <PageNav
         breadcrumbs={[
-          { label: "Home", href: "/" },
+          { label: "Projects", href: "/projects" },
+          ...(urlProjectId ? [{ label: "Project", href: `/projects/${urlProjectId}` }] : []),
           { label: "Campaign Setup" },
         ]}
       />
@@ -146,20 +151,29 @@ export default function CampaignSetupPage() {
           {/* Project Selector */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-[var(--foreground)]">
-              Project (optional)
+              Project
             </label>
-            <select
-              value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-            >
-              <option value="">No Project</option>
-              {projects.map((p) => (
-                <option key={p.project_id} value={p.project_id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            {urlProjectId ? (
+              <input
+                type="text"
+                readOnly
+                value={projects.find((p) => p.project_id === urlProjectId)?.name ?? urlProjectId}
+                className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed"
+              />
+            ) : (
+              <select
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              >
+                <option value="">Select a project...</option>
+                {projects.map((p) => (
+                  <option key={p.project_id} value={p.project_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Campaign Name */}
@@ -328,7 +342,7 @@ export default function CampaignSetupPage() {
           {/* Submit */}
           <button
             type="submit"
-            disabled={submitting || !name}
+            disabled={submitting || !name || !selectedProjectId}
             className="h-11 px-6 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {submitting ? "Creating..." : "Create Simulation"}

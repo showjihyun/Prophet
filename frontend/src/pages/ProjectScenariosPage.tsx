@@ -76,21 +76,22 @@ export default function ProjectScenariosPage() {
       .finally(() => setLoading(false));
   }, [projectId, setCurrentProject]);
 
-  const handleNewScenario = async () => {
+  const handleNewScenario = () => {
     if (!projectId) return;
-    const name = window.prompt("New scenario name:");
-    if (!name?.trim()) return;
-    try {
-      const scenario = await apiClient.projects.createScenario(projectId, { name: name.trim() });
-      setScenarios((prev) => [...prev, scenario]);
-    } catch { /* ignore */ }
+    navigate(`/projects/${projectId}/new-scenario`);
   };
 
   const handleRun = async (scenario: ScenarioInfo) => {
     if (!projectId) return;
     try {
-      await apiClient.projects.runScenario(projectId, scenario.scenario_id);
-      navigate("/");
+      const res = await apiClient.projects.runScenario(projectId, scenario.scenario_id);
+      if (res && (res as any).simulation_id) {
+        try {
+          const sim = await apiClient.simulations.get((res as any).simulation_id);
+          useSimulationStore.getState().setSimulation(sim);
+        } catch { /* ignore */ }
+      }
+      navigate("/simulation");
     } catch { /* ignore */ }
   };
 
@@ -101,7 +102,7 @@ export default function ProjectScenariosPage() {
         setSimulation(sim);
       } catch { /* ignore */ }
     }
-    navigate("/");
+    navigate("/simulation");
   };
 
   const handleDelete = async (scenario: ScenarioInfo) => {

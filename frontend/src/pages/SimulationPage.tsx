@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Brain } from "lucide-react";
+import { FolderOpen, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
 import CommunityPanel from "../components/graph/CommunityPanel";
 import GraphPanel from "../components/graph/GraphPanel";
@@ -77,14 +77,14 @@ export default function SimulationPage() {
             <Brain className="w-16 h-16 text-[var(--muted-foreground)]" />
             <h2 className="text-xl font-semibold text-[var(--foreground)]">No Active Simulation</h2>
             <p className="text-sm text-[var(--muted-foreground)] max-w-md">
-              Create a new simulation to start analyzing campaign diffusion across your virtual social network.
+              Select a project and run a scenario to start simulation.
             </p>
             <button
-              onClick={() => navigate("/setup")}
+              onClick={() => navigate("/projects")}
               className="h-10 px-6 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity flex items-center gap-2"
             >
-              <Plus className="w-4 h-4" />
-              Create New Simulation
+              <FolderOpen className="w-4 h-4" />
+              Go to Projects
             </button>
           </div>
         </div>

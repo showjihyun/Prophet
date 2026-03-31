@@ -4,7 +4,7 @@
  * @spec docs/spec/ui/UI_01_SIMULATION_MAIN.md
  */
 import { Component, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import AppSidebar from "./components/shared/AppSidebar";
 import SimulationPage from "./pages/SimulationPage";
 import CommunitiesDetailPage from "./pages/CommunitiesDetailPage";
@@ -70,23 +70,27 @@ function App() {
     <BrowserRouter>
       <ErrorBoundary>
         <Routes>
-          {/* SimulationPage has its own full-screen layout with ControlPanel */}
-          <Route path="/" element={<SimulationPage />} />
+          {/* Default: redirect to Projects */}
+          <Route path="/" element={<Navigate to="/projects" replace />} />
 
-          {/* Login page — no sidebar */}
+          {/* Simulation workspace — full screen, no sidebar */}
+          <Route path="/simulation" element={<SimulationPage />} />
+
+          {/* Login — no sidebar */}
           <Route path="/login" element={<LoginPage />} />
 
-          {/* All other pages get the sidebar layout */}
+          {/* All other pages get sidebar */}
           <Route element={<SidebarLayout />}>
             <Route path="/projects" element={<ProjectsListPage />} />
             <Route path="/projects/:projectId" element={<ProjectScenariosPage />} />
+            <Route path="/projects/:projectId/new-scenario" element={<CampaignSetupPage />} />
+            <Route path="/setup" element={<CampaignSetupPage />} />
             <Route path="/communities" element={<CommunitiesDetailPage />} />
             <Route path="/communities/:communityId" element={<CommunitiesDetailPage />} />
             <Route path="/communities/manage" element={<CommunityManagePage />} />
             <Route path="/influencers" element={<TopInfluencersPage />} />
             <Route path="/agents/:agentId" element={<AgentDetailPage />} />
             <Route path="/metrics" element={<GlobalMetricsPage />} />
-            <Route path="/setup" element={<CampaignSetupPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/opinions" element={<ScenarioOpinionsPage />} />
             <Route path="/opinions/:communityId" element={<CommunityOpinionPage />} />

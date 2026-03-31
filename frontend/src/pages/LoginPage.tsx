@@ -21,7 +21,7 @@ export default function LoginPage() {
       const res = await apiClient.auth.login(username, password);
       localStorage.setItem("prophet-token", res.token);
       localStorage.setItem("prophet-username", res.username);
-      navigate("/");
+      navigate("/projects");
     } catch {
       setError("Invalid username or password.");
     } finally {
@@ -38,7 +38,7 @@ export default function LoginPage() {
       const res = await apiClient.auth.login(username, password);
       localStorage.setItem("prophet-token", res.token);
       localStorage.setItem("prophet-username", res.username);
-      navigate("/");
+      navigate("/projects");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg.includes("409") ? "Username already taken." : "Registration failed.");

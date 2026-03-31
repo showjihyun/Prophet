@@ -96,7 +96,24 @@ export default function ProjectsListPage() {
 
         {/* Empty state */}
         {!loading && projects.length === 0 && (
-          <p className="text-sm text-[var(--muted-foreground)]">No projects yet. Create one to get started.</p>
+          <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-[var(--secondary)] flex items-center justify-center">
+              <Plus className="w-8 h-8 text-[var(--muted-foreground)]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--foreground)]">Welcome to Prophet MCASP</h2>
+              <p className="text-sm text-[var(--muted-foreground)] mt-1 max-w-sm">
+                Create your first project to start simulating campaign diffusion.
+              </p>
+            </div>
+            <button
+              onClick={handleNewProject}
+              className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Create Project
+            </button>
+          </div>
         )}
 
         {/* Project Cards */}
