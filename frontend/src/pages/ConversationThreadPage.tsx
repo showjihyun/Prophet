@@ -2,10 +2,11 @@
  * ConversationThreadPage — Agent conversation thread with reactions (UI-15).
  * @spec docs/spec/ui/UI_15_CONVERSATION_THREAD.md
  */
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import { useSimulationStore } from "../store/simulationStore";
+import { apiClient, type ThreadDetail } from "../api/client";
 
 /* ------------------------------------------------------------------ */
 /* Mock Data                                                           */
@@ -133,10 +134,25 @@ const COMMUNITY_COLORS_ARRAY = [
 export default function ConversationThreadPage() {
   const { communityId, threadId: _threadId } = useParams<{ communityId: string; threadId: string }>();
   const navigate = useNavigate();
+  const simulation = useSimulationStore((st) => st.simulation);
   const steps = useSimulationStore((st) => st.steps);
   const emergentEvents = useSimulationStore((st) => st.emergentEvents);
 
-  // Derive thread header from store data
+  // API-fetched thread detail
+  const [apiThread, setApiThread] = useState<ThreadDetail | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
+
+  useEffect(() => {
+    if (!simulation?.simulation_id || !communityId || !_threadId) return;
+    setApiLoading(true);
+    apiClient.communityThreads
+      .get(simulation.simulation_id, communityId, _threadId)
+      .then((data) => setApiThread(data))
+      .catch(() => setApiThread(null))
+      .finally(() => setApiLoading(false));
+  }, [simulation?.simulation_id, communityId, _threadId]);
+
+  // Derive thread header from store data (fallback when no API data)
   const derivedThread = useMemo(() => {
     if (steps.length === 0) return null;
     const latest = steps[steps.length - 1];
@@ -155,7 +171,7 @@ export default function ConversationThreadPage() {
     };
   }, [steps, communityId, _threadId]);
 
-  // Derive messages from step history — each step with change becomes a message
+  // Derive messages from step history — used as fallback
   const derivedMessages = useMemo<ThreadMsg[]>(() => {
     if (steps.length === 0) return [];
     const communityKeys = steps.length > 0 ? Object.keys(steps[0].community_metrics ?? {}) : [];
@@ -192,8 +208,37 @@ export default function ConversationThreadPage() {
     });
   }, [steps, emergentEvents]);
 
-  const t = derivedThread ?? MOCK_THREAD;
-  const messages = derivedMessages.length > 0 ? derivedMessages : MOCK_MESSAGES;
+  // Resolve display data: API → derived from store → mock
+  const t = apiThread
+    ? {
+        thread_id: apiThread.thread_id,
+        topic: apiThread.topic,
+        category_tag: communityId ?? "community",
+        participant_count: apiThread.participant_count,
+        timespan: `${apiThread.message_count} messages`,
+        avg_sentiment: apiThread.avg_sentiment,
+        message_count: apiThread.message_count,
+      }
+    : derivedThread ?? MOCK_THREAD;
+
+  const messages: ThreadMsg[] = apiThread
+    ? apiThread.messages.map((m) => {
+        const colorIdx = m.agent_id.charCodeAt(m.agent_id.length - 1) % COMMUNITY_COLORS_ARRAY.length;
+        return {
+          message_id: m.message_id,
+          agent_id: m.agent_id,
+          community_color: COMMUNITY_COLORS_ARRAY[colorIdx] ?? "var(--community-alpha)",
+          stance: m.stance as ThreadMsg["stance"],
+          relative_time: "",
+          content: m.content,
+          reactions: m.reactions,
+          is_reply: m.is_reply,
+          reply_to_id: m.reply_to_id,
+        };
+      })
+    : derivedMessages.length > 0
+    ? derivedMessages
+    : MOCK_MESSAGES;
 
   const sentColor = t.avg_sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : t.avg_sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";
 
@@ -259,8 +304,13 @@ export default function ConversationThreadPage() {
 
       {/* Thread body */}
       <div className="flex-1 overflow-y-auto">
+        {apiLoading && (
+          <div className="flex items-center justify-center py-12 text-sm text-[var(--muted-foreground)]">
+            Loading thread…
+          </div>
+        )}
         <div className="max-w-4xl mx-auto">
-          {messages.map((msg, idx) => (
+          {!apiLoading && messages.map((msg, idx) => (
             <div
               key={msg.message_id}
               data-testid={msg.is_reply ? "thread-reply" : "thread-message"}

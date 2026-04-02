@@ -34,7 +34,21 @@ Create a new simulation run.
     "novelty": 0.8,
     "utility": 0.7
   },
-  "communities": null,      // null = use defaults (5 communities, 1000 agents)
+  "communities": [           // null = use defaults (5 communities, 1000 agents)
+    {
+      "id": "A",
+      "name": "Early Adopters",
+      "size": 100,
+      "agent_type": "early_adopter",
+      "personality_profile": {
+        "openness": 0.8,
+        "skepticism": 0.3,
+        "trend_following": 0.7,
+        "brand_loyalty": 0.4,
+        "social_influence": 0.6
+      }
+    }
+  ],
   "max_steps": 50,
   "default_llm_provider": "ollama",
   "random_seed": 42
@@ -438,6 +452,56 @@ Update a community template.
 
 ### DELETE /communities/templates/{template_id}
 Delete a community template.
+
+---
+
+### 5.3 Conversation Thread Endpoints
+
+Threads are derived from simulation agent state — not stored entities.
+
+### GET /simulations/{simulation_id}/communities/{community_id}/threads
+List synthetic conversation threads for a community.
+
+**Response 200:**
+```json
+{
+  "threads": [
+    {
+      "thread_id": "A-thread-0",
+      "topic": "Viral spread of the campaign message in community A",
+      "participant_count": 4,
+      "message_count": 6,
+      "avg_sentiment": 0.31
+    }
+  ]
+}
+```
+
+### GET /simulations/{simulation_id}/communities/{community_id}/threads/{thread_id}
+Return messages for a specific thread.
+
+**Response 200:**
+```json
+{
+  "thread_id": "A-thread-0",
+  "topic": "...",
+  "participant_count": 4,
+  "message_count": 6,
+  "avg_sentiment": 0.31,
+  "messages": [
+    {
+      "message_id": "t0-m0",
+      "agent_id": "Agent-A1A2B",
+      "community_id": "A",
+      "stance": "Progressive",
+      "content": "The campaign message resonates strongly...",
+      "reactions": { "agree": 12, "disagree": 3, "nuanced": 5 },
+      "is_reply": false,
+      "reply_to_id": null
+    }
+  ]
+}
+```
 
 ---
 

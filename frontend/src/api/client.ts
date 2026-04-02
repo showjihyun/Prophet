@@ -144,6 +144,32 @@ export interface CommunityInfo {
   dominant_action: string;
 }
 
+/** Thread summary. @spec docs/spec/06_API_SPEC.md#5-community-endpoints */
+export interface ThreadSummary {
+  thread_id: string;
+  topic: string;
+  participant_count: number;
+  message_count: number;
+  avg_sentiment: number;
+}
+
+/** Thread message. @spec docs/spec/06_API_SPEC.md#5-community-endpoints */
+export interface ThreadMessage {
+  message_id: string;
+  agent_id: string;
+  community_id: string;
+  stance: 'Progressive' | 'Conservative' | 'Neutral';
+  content: string;
+  reactions: { agree: number; disagree: number; nuanced: number };
+  is_reply: boolean;
+  reply_to_id: string | null;
+}
+
+/** Thread detail with messages. @spec docs/spec/06_API_SPEC.md#5-community-endpoints */
+export interface ThreadDetail extends ThreadSummary {
+  messages: ThreadMessage[];
+}
+
 /** Community template. @spec docs/spec/06_API_SPEC.md#community-template-endpoints */
 export interface CommunityTemplate {
   template_id: string;
@@ -247,6 +273,12 @@ export const apiClient = {
   communities: {
     list: (simId: string) =>
       request<{ communities: CommunityInfo[] }>(`/simulations/${simId}/communities/`),
+  },
+  communityThreads: {
+    list: (simId: string, communityId: string) =>
+      request<{ threads: ThreadSummary[] }>(`/simulations/${simId}/communities/${communityId}/threads`),
+    get: (simId: string, communityId: string, threadId: string) =>
+      request<ThreadDetail>(`/simulations/${simId}/communities/${communityId}/threads/${threadId}`),
   },
   communityTemplates: {
     list: () => request<{ templates: CommunityTemplate[] }>("/communities/templates/"),

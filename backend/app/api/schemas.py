@@ -466,6 +466,52 @@ class CreateScenarioRequest(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+# --- Conversation Threads ---
+
+class ThreadSummary(BaseModel):
+    """Thread summary in listing.
+    SPEC: docs/spec/06_API_SPEC.md#5-community-endpoints
+    """
+    thread_id: str
+    topic: str
+    participant_count: int
+    message_count: int
+    avg_sentiment: float
+
+
+class ThreadMessage(BaseModel):
+    """Single message in a conversation thread.
+    SPEC: docs/spec/06_API_SPEC.md#5-community-endpoints
+    """
+    message_id: str
+    agent_id: str
+    community_id: str
+    stance: str  # "Progressive", "Conservative", "Neutral"
+    content: str
+    reactions: dict[str, int]  # agree, disagree, nuanced
+    is_reply: bool
+    reply_to_id: str | None = None
+
+
+class ThreadsListResponse(BaseModel):
+    """Response for listing threads.
+    SPEC: docs/spec/06_API_SPEC.md#5-community-endpoints
+    """
+    threads: list[ThreadSummary] = Field(default_factory=list)
+
+
+class ThreadDetailResponse(BaseModel):
+    """Full thread detail with messages.
+    SPEC: docs/spec/06_API_SPEC.md#5-community-endpoints
+    """
+    thread_id: str
+    topic: str
+    participant_count: int
+    message_count: int
+    avg_sentiment: float
+    messages: list[ThreadMessage] = Field(default_factory=list)
+
+
 # --- Error ---
 
 class ErrorResponse(BaseModel):
