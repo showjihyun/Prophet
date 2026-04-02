@@ -6,11 +6,22 @@
  * @spec docs/spec/ui/UI_04_AGENT_DETAIL.md
  */
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { useSimulationStore } from '@/store/simulationStore';
 
 vi.mock('@/hooks/useSimulationSocket', () => ({
   useSimulationSocket: () => ({ lastMessage: null }),
+}));
+
+vi.mock('@/api/client', () => ({
+  apiClient: {
+    agents: {
+      get: vi.fn().mockRejectedValue(new Error('no agent')),
+      modify: vi.fn().mockResolvedValue({}),
+    },
+    network: { get: vi.fn().mockRejectedValue(new Error('no network')) },
+  },
 }));
 
 vi.mock('recharts', () => ({
@@ -29,6 +40,10 @@ vi.mock('recharts', () => ({
   Legend: () => null,
   PieChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Pie: () => null,
+}));
+
+vi.mock('@/components/graph/EgoGraph', () => ({
+  default: () => <div data-testid="ego-graph" />,
 }));
 
 import AgentDetailPage from '@/pages/AgentDetailPage';
@@ -145,6 +160,11 @@ describe('AgentDetail (UI-04)', () => {
 
   /** @spec UI_04_AGENT_DETAIL.md#intervention-modal */
   describe('Intervention Modal', () => {
+    beforeEach(() => {
+      // The Intervene button is only enabled when simulation status is 'paused'
+      useSimulationStore.setState({ status: 'paused' });
+    });
+
     it('opens intervention modal when Intervene button is clicked', () => {
       renderPage();
       fireEvent.click(screen.getByRole('button', { name: /intervene/i }));

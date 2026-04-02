@@ -5,9 +5,11 @@
  *
  * @spec docs/spec/ui/UI_01_SIMULATION_MAIN.md
  */
+import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { useSimulationStore } from '../store/simulationStore';
 
 vi.mock('@/hooks/useSimulationSocket', () => ({
   useSimulationSocket: () => ({ lastMessage: null }),
@@ -16,13 +18,14 @@ vi.mock('@/hooks/useSimulationSocket', () => ({
 vi.mock('cytoscape', () => ({
   default: vi.fn(() => ({
     on: vi.fn(),
-    nodes: () => ({ length: 0, forEach: vi.fn() }),
-    edges: () => ({ length: 0, forEach: vi.fn() }),
+    nodes: () => ({ length: 0, forEach: vi.fn(), toArray: () => [], removeClass: vi.fn() }),
+    edges: () => ({ length: 0, forEach: vi.fn(), removeStyle: vi.fn(), style: vi.fn() }),
     zoom: vi.fn(() => 1),
     width: vi.fn(() => 800),
     height: vi.fn(() => 600),
     fit: vi.fn(),
     destroy: vi.fn(),
+    style: vi.fn(),
   })),
 }));
 
@@ -44,7 +47,28 @@ vi.mock('recharts', () => ({
   Pie: () => null,
 }));
 
+vi.mock('@/api/client', () => ({
+  apiClient: {
+    network: { get: vi.fn().mockRejectedValue(new Error('no network')) },
+    agents: { list: vi.fn().mockResolvedValue({ items: [] }) },
+    simulations: { getSteps: vi.fn().mockResolvedValue([]) },
+    projects: { list: vi.fn().mockResolvedValue([]) },
+    scenarios: { list: vi.fn().mockResolvedValue([]) },
+  },
+}));
+
 import SimulationPage from '@/pages/SimulationPage';
+
+const MOCK_SIMULATION = {
+  simulation_id: 'sim-test-001',
+  project_id: 'proj-001',
+  scenario_id: 'scen-001',
+  status: 'running' as const,
+  current_step: 5,
+  max_steps: 365,
+  created_at: new Date().toISOString(),
+  config: {} as never,
+};
 
 const renderPage = () =>
   render(
@@ -54,6 +78,19 @@ const renderPage = () =>
   );
 
 describe('SimulationMain (UI-01)', () => {
+  beforeEach(() => {
+    // Inject a mock simulation so the full layout renders (not the empty state)
+    useSimulationStore.setState({
+      simulation: MOCK_SIMULATION,
+      status: 'running',
+      currentStep: 5,
+      steps: [],
+      emergentEvents: [],
+      isLLMDashboardOpen: false,
+      speed: 2,
+    });
+  });
+
   /** @spec UI_01_SIMULATION_MAIN.md#zone-1-simulation-control-bar */
   describe('Zone 1: Simulation Control Bar', () => {
     it('renders logo with "MCASP Prophet Engine" text', () => {

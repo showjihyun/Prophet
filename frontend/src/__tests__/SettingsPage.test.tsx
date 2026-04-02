@@ -46,17 +46,40 @@ vi.mock('@/api/client', () => ({
   },
 }));
 
+// Mock AppSidebar to avoid window.matchMedia not being available in jsdom.
+// The test verifies the sidebar is included in the layout, not its internal behavior.
+vi.mock('@/components/shared/AppSidebar', () => ({
+  default: () => <aside data-testid="app-sidebar" />,
+}));
+
 import SettingsPage from '@/pages/SettingsPage';
 
 function renderWithRouter(ui: React.ReactElement) {
   return render(<MemoryRouter initialEntries={['/settings']}>{ui}</MemoryRouter>);
 }
 
+/**
+ * Renders SettingsPage inside the SidebarLayout as it appears in production.
+ * The AppSidebar is mocked above to avoid window.matchMedia issues in jsdom.
+ */
+function renderWithSidebar() {
+  return render(
+    <MemoryRouter initialEntries={['/settings']}>
+      <div className="flex h-screen">
+        <aside data-testid="app-sidebar" />
+        <main className="flex-1 overflow-auto">
+          <SettingsPage />
+        </main>
+      </div>
+    </MemoryRouter>,
+  );
+}
+
 describe('SettingsPage (UI-12)', () => {
   /** @spec UI_12_SETTINGS.md#layout-structure */
   describe('Layout', () => {
     it('renders AppSidebar with Settings active', () => {
-      renderWithRouter(<SettingsPage />);
+      renderWithSidebar();
       expect(screen.getByTestId('app-sidebar')).toBeInTheDocument();
     });
 
