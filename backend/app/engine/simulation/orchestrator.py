@@ -867,6 +867,191 @@ class SimulationOrchestrator:
             "total_edges": total_edges,
         }
 
+    # ------------------------------------------------------------------ #
+    # LLM Dashboard query methods (called from API endpoints)
+    # SPEC: docs/spec/06_API_SPEC.md#6-llm-dashboard-endpoints
+    # ------------------------------------------------------------------ #
+
+    def get_llm_stats(self, simulation_id: str | UUID) -> dict:
+        """Aggregate LLM usage statistics across all steps.
+
+        SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idllmstats
+
+        Computes totals from step_history and agent llm_tier_used fields.
+
+        Args:
+            simulation_id: Simulation UUID.
+
+        Returns:
+            Dict with total_calls, cached_calls, provider_breakdown,
+            avg_latency_ms, total_tokens, tier_breakdown.
+
+        Raises:
+            ValueError: If simulation not found.
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+
+        total_calls = 0
+        tier_breakdown: dict[str, int] = {"1": 0, "2": 0, "3": 0}
+
+        # Aggregate from step history
+        for step_result in state.step_history:
+            total_calls += step_result.llm_calls_this_step
+            for tier, count in step_result.llm_tier_distribution.items():
+                tier_key = str(tier)
+                tier_breakdown[tier_key] = tier_breakdown.get(tier_key, 0) + count
+
+        # Count current agent tier distribution
+        for agent in state.agents:
+            if agent.llm_tier_used is not None:
+                tier_key = str(agent.llm_tier_used)
+                tier_breakdown[tier_key] = tier_breakdown.get(tier_key, 0) + 1
+
+        # Estimate provider breakdown from config
+        provider = state.config.default_llm_provider or "ollama"
+        slm_calls = tier_breakdown.get("1", 0)
+        llm_calls = tier_breakdown.get("2", 0) + tier_breakdown.get("3", 0)
+        provider_breakdown: dict[str, int] = {}
+        if slm_calls > 0:
+            provider_breakdown["ollama-slm"] = slm_calls
+        if llm_calls > 0:
+            provider_breakdown[provider] = llm_calls
+
+        # Estimate avg latency from step durations
+        avg_latency = 0.0
+        if state.step_history and total_calls > 0:
+            total_duration = sum(s.step_duration_ms for s in state.step_history)
+            avg_latency = total_duration / max(total_calls, 1)
+
+        return {
+            "total_calls": total_calls,
+            "cached_calls": 0,
+            "provider_breakdown": provider_breakdown,
+            "avg_latency_ms": round(avg_latency, 1),
+            "total_tokens": 0,
+            "tier_breakdown": tier_breakdown,
+        }
+
+    def get_llm_calls(
+        self,
+        simulation_id: str | UUID,
+        step: int | None = None,
+        agent_id: str | None = None,
+        provider: str | None = None,
+        limit: int = 20,
+    ) -> dict:
+        """Return recent LLM call log entries.
+
+        SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idllmcalls
+
+        Reconstructs call log from agent state and step history since
+        individual call records are not persisted in-memory.
+
+        Args:
+            simulation_id: Simulation UUID.
+            step: Optional filter by step number.
+            agent_id: Optional filter by agent ID.
+            provider: Optional filter by provider name.
+            limit: Max entries to return.
+
+        Returns:
+            Dict with 'calls' list of LLMCallLogEntry-compatible dicts.
+
+        Raises:
+            ValueError: If simulation not found.
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+
+        calls: list[dict] = []
+        default_provider = state.config.default_llm_provider or "ollama"
+
+        # Build call log from agents with LLM tier usage
+        for agent in state.agents:
+            if agent.llm_tier_used is None:
+                continue
+            if agent_id and str(agent.agent_id) != agent_id:
+                continue
+            agent_provider = "ollama-slm" if agent.llm_tier_used == 1 else default_provider
+            if provider and agent_provider != provider:
+                continue
+            if step is not None and agent.step != step:
+                continue
+
+            calls.append({
+                "call_id": f"call-{agent.agent_id}-s{agent.step}",
+                "step": agent.step,
+                "agent_id": str(agent.agent_id),
+                "provider": agent_provider,
+                "latency_ms": 0.0,
+                "tokens": 0,
+                "cached": False,
+            })
+
+        # Sort by step descending, limit
+        calls.sort(key=lambda c: c["step"], reverse=True)
+        return {"calls": calls[:limit]}
+
+    def get_llm_impact(self, simulation_id: str | UUID) -> dict:
+        """Return current engine impact assessment.
+
+        SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idllmimpact
+
+        Provides SLM/LLM ratio, tier distribution, and qualitative
+        impact assessment based on current simulation config.
+
+        Args:
+            simulation_id: Simulation UUID.
+
+        Returns:
+            Dict with slm_llm_ratio, tier_distribution, impact, slm_model.
+
+        Raises:
+            ValueError: If simulation not found.
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+
+        ratio = state.config.slm_llm_ratio
+        total_agents = len(state.agents)
+
+        # Compute actual tier distribution from agents
+        tier_dist: dict[str, int] = {"1": 0, "2": 0, "3": 0}
+        for agent in state.agents:
+            if agent.llm_tier_used is not None:
+                tier_dist[str(agent.llm_tier_used)] = tier_dist.get(str(agent.llm_tier_used), 0) + 1
+            else:
+                # Agents not yet ticked → estimate from ratio
+                tier_dist["1"] = tier_dist.get("1", 0) + 1
+
+        # Qualitative impact assessment
+        if ratio >= 0.8:
+            reasoning_depth = "quantitative"
+            prediction_type = "Quantitative"
+        elif ratio >= 0.4:
+            reasoning_depth = "balanced"
+            prediction_type = "Hybrid"
+        else:
+            reasoning_depth = "qualitative"
+            prediction_type = "Qualitative"
+
+        cost_per_step = (1 - ratio) * 0.01 * total_agents  # rough estimate
+        est_velocity = f"{round(0.3 + (1 - ratio) * 2.0, 1)}s/step"
+
+        return {
+            "slm_llm_ratio": ratio,
+            "tier_distribution": tier_dist,
+            "impact": {
+                "cost_efficiency": f"${round(cost_per_step, 4)}/step",
+                "reasoning_depth": reasoning_depth,
+                "simulation_velocity": est_velocity,
+                "prediction_type": prediction_type,
+            },
+            "slm_model": state.config.slm_model or "phi4",
+            "slm_batch_throughput": f"{int(total_agents * ratio)}/step",
+        }
+
     async def delete_simulation(self, simulation_id: UUID) -> None:
         """Remove simulation state from memory.
         SPEC: docs/spec/09_HARNESS_SPEC.md#memory-eviction-policy

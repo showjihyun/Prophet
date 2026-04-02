@@ -3,6 +3,7 @@ SPEC: docs/spec/06_API_SPEC.md#6-llm-dashboard-endpoints
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -10,6 +11,8 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import get_orchestrator
 from app.api.schemas import LLMCallsResponse, LLMImpactResponse, LLMStatsResponse
 from app.api.simulations import _get_state_or_404
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/simulations/{simulation_id}/llm",
@@ -29,12 +32,10 @@ async def get_llm_stats(
 
     try:
         result = orchestrator.get_llm_stats(simulation_id)
-        if isinstance(result, dict):
-            return LLMStatsResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
-
-    return LLMStatsResponse()
+        return LLMStatsResponse(**result)
+    except ValueError as e:
+        logger.warning("LLM stats unavailable for %s: %s", simulation_id, e)
+        return LLMStatsResponse()
 
 
 @router.get("/calls", response_model=LLMCallsResponse)
@@ -53,14 +54,12 @@ async def get_llm_calls(
 
     try:
         result = orchestrator.get_llm_calls(
-            simulation_id, step=step, agent_id=agent_id, provider=provider, limit=limit
+            simulation_id, step=step, agent_id=agent_id, provider=provider, limit=limit,
         )
-        if isinstance(result, dict):
-            return LLMCallsResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
-
-    return LLMCallsResponse(calls=[])
+        return LLMCallsResponse(**result)
+    except ValueError as e:
+        logger.warning("LLM calls unavailable for %s: %s", simulation_id, e)
+        return LLMCallsResponse(calls=[])
 
 
 @router.get("/impact", response_model=LLMImpactResponse)
@@ -75,9 +74,7 @@ async def get_llm_impact(
 
     try:
         result = orchestrator.get_llm_impact(simulation_id)
-        if isinstance(result, dict):
-            return LLMImpactResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
-
-    return LLMImpactResponse()
+        return LLMImpactResponse(**result)
+    except ValueError as e:
+        logger.warning("LLM impact unavailable for %s: %s", simulation_id, e)
+        return LLMImpactResponse()
