@@ -192,14 +192,22 @@ async def create_simulation(
     edges = list(state.network.graph.edges(data=True)) if state.network else []
     await persist.persist_creation(session, state.simulation_id, config, state.agents, edges)
 
+    # Compute real network metrics from generated graph
+    net_metrics = {"clustering_coefficient": 0.0, "avg_path_length": 0.0}
+    try:
+        metrics = orchestrator.get_network_metrics(str(state.simulation_id))
+        net_metrics = {
+            "clustering_coefficient": metrics.get("clustering_coefficient", 0.0),
+            "avg_path_length": metrics.get("avg_path_length", 0.0),
+        }
+    except (ValueError, KeyError):
+        pass
+
     return SimulationResponse(
         simulation_id=str(state.simulation_id),
         status=SimulationStatus(state.status),
         total_agents=len(state.agents),
-        network_metrics={
-            "clustering_coefficient": 0.0,
-            "avg_path_length": 0.0,
-        },
+        network_metrics=net_metrics,
         created_at=datetime.now(timezone.utc),
     )
 

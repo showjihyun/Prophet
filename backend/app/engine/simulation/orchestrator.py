@@ -702,6 +702,171 @@ class SimulationOrchestrator:
         self.get_agent(sim_uuid, agent_id_str)
         return {"memories": []}
 
+    # ------------------------------------------------------------------ #
+    # Network query methods (called from API endpoints)
+    # SPEC: docs/spec/06_API_SPEC.md#4-network-endpoints
+    # ------------------------------------------------------------------ #
+
+    def get_network(
+        self,
+        simulation_id: str | UUID,
+        format: str = "cytoscape",
+    ) -> dict:
+        """Return network graph data for visualization.
+
+        SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idnetwork
+
+        Converts NetworkX graph to Cytoscape.js format with agent metadata
+        (community, action, adopted, influence_score, belief, emotion).
+
+        Args:
+            simulation_id: Simulation UUID.
+            format: Output format — only 'cytoscape' supported.
+
+        Returns:
+            Dict with 'nodes' and 'edges' lists in Cytoscape format.
+
+        Raises:
+            ValueError: If simulation not found or network not generated.
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+
+        if state.network is None or state.network.graph is None:
+            raise ValueError(
+                f"Network not available for simulation {simulation_id}. "
+                "Simulation may not have been created properly."
+            )
+
+        graph = state.network.graph
+        agents_by_node: dict[int, AgentState] = {}
+        for agent in state.agents:
+            for nid, ndata in graph.nodes(data=True):
+                if ndata.get("agent_id") == agent.agent_id:
+                    agents_by_node[nid] = agent
+                    break
+
+        # Build community ID → name mapping from config
+        community_names: dict[str, str] = {}
+        for cc in state.config.communities:
+            for nid, ndata in graph.nodes(data=True):
+                cuuid = ndata.get("community_uuid")
+                if cuuid is not None:
+                    community_names[str(cuuid)] = cc.name
+                    break
+
+        nodes = []
+        for node_id, node_data in graph.nodes(data=True):
+            agent = agents_by_node.get(node_id)
+            community_uuid = str(node_data.get("community_uuid", ""))
+            node_dict: dict = {
+                "id": str(node_id),
+                "community_id": community_uuid,
+                "community_name": community_names.get(community_uuid, community_uuid[:8]),
+            }
+            if agent:
+                node_dict.update({
+                    "agent_id": str(agent.agent_id),
+                    "agent_type": agent.agent_type.value if hasattr(agent.agent_type, "value") else str(agent.agent_type),
+                    "action": agent.action.value if hasattr(agent.action, "value") else str(agent.action),
+                    "adopted": agent.adopted,
+                    "belief": round(agent.belief, 3),
+                    "influence_score": round(agent.influence_score, 3),
+                })
+            nodes.append({"data": node_dict})
+
+        edges = []
+        for u, v, edge_data in graph.edges(data=True):
+            edge_dict: dict = {
+                "id": f"e{u}-{v}",
+                "source": str(u),
+                "target": str(v),
+                "weight": round(edge_data.get("weight", 0.5), 3),
+            }
+            edges.append({"data": edge_dict})
+
+        return {"nodes": nodes, "edges": edges}
+
+    def get_network_metrics(self, simulation_id: str | UUID) -> dict:
+        """Return computed network metrics.
+
+        SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idnetworkmetrics
+
+        Computes real-time metrics from the NetworkX graph using standard
+        graph theory measures.
+
+        Args:
+            simulation_id: Simulation UUID.
+
+        Returns:
+            Dict with clustering_coefficient, avg_path_length, modularity,
+            density, total_nodes, total_edges.
+
+        Raises:
+            ValueError: If simulation not found or network not generated.
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+
+        if state.network is None or state.network.graph is None:
+            raise ValueError(
+                f"Network not available for simulation {simulation_id}."
+            )
+
+        graph = state.network.graph
+        total_nodes = graph.number_of_nodes()
+        total_edges = graph.number_of_edges()
+
+        # Clustering coefficient (async-safe: pure computation, no I/O)
+        clustering = nx.average_clustering(graph) if total_nodes > 0 else 0.0
+
+        # Average path length (sample for large graphs to avoid O(n^2))
+        avg_path = 0.0
+        if total_nodes > 1:
+            try:
+                if total_nodes <= 500:
+                    avg_path = nx.average_shortest_path_length(graph)
+                else:
+                    # Sample-based approximation for large graphs
+                    import random as _rand
+                    sample_nodes = _rand.sample(list(graph.nodes()), min(100, total_nodes))
+                    path_lengths = []
+                    for src in sample_nodes:
+                        lengths = nx.single_source_shortest_path_length(graph, src)
+                        path_lengths.extend(lengths.values())
+                    avg_path = sum(path_lengths) / max(len(path_lengths), 1)
+            except nx.NetworkXError:
+                # Disconnected graph — compute on largest component
+                largest_cc = max(nx.connected_components(graph), key=len)
+                subgraph = graph.subgraph(largest_cc)
+                if subgraph.number_of_nodes() > 1:
+                    avg_path = nx.average_shortest_path_length(subgraph)
+
+        # Density
+        density = nx.density(graph) if total_nodes > 1 else 0.0
+
+        # Modularity (use community structure from node data)
+        modularity = 0.0
+        try:
+            communities_map: dict[str, set[int]] = {}
+            for nid, ndata in graph.nodes(data=True):
+                cid = str(ndata.get("community_id", "default"))
+                communities_map.setdefault(cid, set()).add(nid)
+            if len(communities_map) > 1:
+                community_sets = list(communities_map.values())
+                modularity = nx.community.modularity(graph, community_sets)
+        except Exception:
+            pass
+
+        return {
+            "clustering_coefficient": round(clustering, 4),
+            "avg_path_length": round(avg_path, 4),
+            "modularity": round(modularity, 4),
+            "density": round(density, 6),
+            "total_nodes": total_nodes,
+            "total_edges": total_edges,
+        }
+
     async def delete_simulation(self, simulation_id: UUID) -> None:
         """Remove simulation state from memory.
         SPEC: docs/spec/09_HARNESS_SPEC.md#memory-eviction-policy

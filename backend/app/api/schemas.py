@@ -54,7 +54,7 @@ class CreateSimulationRequest(BaseModel):
     name: str
     description: str = ""
     campaign: CampaignInput
-    communities: dict[str, Any] | None = None
+    communities: list[dict[str, Any]] | None = None
     max_steps: int = Field(default=50, ge=1, le=1000)
     default_llm_provider: str = "ollama"
     random_seed: int | None = None
