@@ -61,9 +61,12 @@ _VALID_TRANSITIONS: dict[str, set[str]] = {
 _MAX_CONCURRENT = 3
 
 # Allowed event types for inject_event
+# SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idinject-event
 _ALLOWED_EVENT_TYPES = {
     "campaign_ad", "influencer_post", "expert_review",
     "community_discussion", "negative_pr", "competitor_attack",
+    "controversy", "celebrity_endorsement", "news_article",
+    "regulatory_change", "product_update",
 }
 
 
@@ -406,13 +409,20 @@ class SimulationOrchestrator:
 
         # String-based injection (for error test compatibility)
         if event_type is not None:
-            NEGATIVE_EVENT_TYPES = {"negative_pr", "competitor_attack", "bad_review"}
+            NEGATIVE_EVENT_TYPES = {"negative_pr", "competitor_attack", "bad_review", "controversy", "regulatory_change"}
+            POSITIVE_EVENT_TYPES = {"celebrity_endorsement", "product_update", "news_article"}
+            DIRECT_TYPES = {"campaign_ad", "influencer_post", "expert_review", "community_discussion"}
             if event_type in NEGATIVE_EVENT_TYPES:
-                mapped_type = "community_discussion"  # negative events are discussions
-            elif event_type in {"campaign_ad", "influencer_post", "expert_review", "community_discussion"}:
+                mapped_type = "community_discussion"
+            elif event_type in POSITIVE_EVENT_TYPES:
+                mapped_type = "influencer_post"
+            elif event_type in DIRECT_TYPES:
                 mapped_type = event_type
             else:
-                raise ValueError(f"Unknown event type: {event_type}")
+                raise ValueError(
+                    f"Unknown event type: '{event_type}'. "
+                    f"Valid types: {sorted(_ALLOWED_EVENT_TYPES)}"
+                )
             env_event = EnvironmentEvent(
                 event_type=mapped_type,
                 content_id=uuid4(),
@@ -693,14 +703,54 @@ class SimulationOrchestrator:
         memory_type: str | None = None,
         limit: int = 10,
     ) -> dict:
-        """Return agent memory records (stub — memory records are in-memory only).
+        """Return agent memory records from the in-memory MemoryLayer.
 
         SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagentsagent_idmemory
+
+        Retrieves stored memories from the AgentTick's MemoryLayer,
+        sorted by timestamp descending. Returns empty list if agent has
+        no memories yet (e.g., simulation not started).
+
+        Args:
+            simulation_id: Simulation UUID.
+            agent_id_str: Agent UUID string.
+            memory_type: Optional filter ('episodic', 'semantic', 'social').
+            limit: Max records to return.
+
+        Returns:
+            Dict with 'memories' list of serialized MemoryRecord dicts.
+
+        Raises:
+            ValueError: If simulation or agent not found.
         """
         sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
-        # Validate agent exists (raises ValueError if not found)
-        self.get_agent(sim_uuid, agent_id_str)
-        return {"memories": []}
+        agent_detail = self.get_agent(sim_uuid, agent_id_str)
+        agent_uuid = UUID(agent_detail["agent_id"])
+
+        # Access MemoryLayer from StepRunner → AgentTick
+        memory_layer = self._step_runner._agent_tick._memory
+        all_memories = memory_layer._store.get(agent_uuid, [])
+
+        # Filter by type if specified
+        if memory_type:
+            all_memories = [m for m in all_memories if m.memory_type == memory_type]
+
+        # Sort by timestamp descending (most recent first)
+        all_memories = sorted(all_memories, key=lambda m: m.timestamp, reverse=True)
+        all_memories = all_memories[:limit]
+
+        return {
+            "memories": [
+                {
+                    "memory_type": m.memory_type,
+                    "content": m.content,
+                    "timestamp": m.timestamp,
+                    "importance": round(m.emotion_weight, 3),
+                    "source_agent_id": None,
+                }
+                for m in all_memories
+            ]
+        }
 
     # ------------------------------------------------------------------ #
     # Network query methods (called from API endpoints)
