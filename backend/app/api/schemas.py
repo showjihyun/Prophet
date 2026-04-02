@@ -157,7 +157,13 @@ class StepResultResponse(BaseModel):
     step: int = 0
     adoption_rate: float = 0.0
     mean_sentiment: float = 0.0
+    sentiment_variance: float = 0.0
     diffusion_rate: int = 0
+    total_adoption: int = 0
+    community_metrics: dict[str, Any] = Field(default_factory=dict)
+    action_distribution: dict[str, int] = Field(default_factory=dict)
+    llm_calls_this_step: int = 0
+    step_duration_ms: float = 0.0
     emergent_events: list[dict[str, Any]] = Field(default_factory=list)
 
 

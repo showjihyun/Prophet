@@ -379,12 +379,25 @@ async def step_simulation(
             "data": {"status": "completed"},
         }))
 
+    cm_resp: dict[str, Any] = {}
+    for cid, metric in result.community_metrics.items():
+        cm_resp[str(cid)] = _community_metric_dict(metric)
+
     return StepResultResponse(
         step=result.step,
         adoption_rate=result.adoption_rate,
         mean_sentiment=result.mean_sentiment,
+        sentiment_variance=result.sentiment_variance,
         diffusion_rate=result.diffusion_rate,
-        emergent_events=[],
+        total_adoption=result.total_adoption,
+        community_metrics=cm_resp,
+        action_distribution=result.action_distribution,
+        llm_calls_this_step=result.llm_calls_this_step,
+        step_duration_ms=result.step_duration_ms,
+        emergent_events=[
+            {"type": e.event_type, "step": e.step, "community_id": str(e.community_id) if e.community_id else None}
+            for e in result.emergent_events
+        ] if result.emergent_events else [],
     )
 
 
@@ -476,12 +489,25 @@ async def get_steps(
             continue
         if to_step is not None and sr.step > to_step:
             continue
+        # Serialize community_metrics to plain dicts
+        cm: dict[str, Any] = {}
+        for cid, metric in sr.community_metrics.items():
+            cm[str(cid)] = _community_metric_dict(metric)
         steps.append(StepResultResponse(
             step=sr.step,
             adoption_rate=sr.adoption_rate,
             mean_sentiment=sr.mean_sentiment,
+            sentiment_variance=sr.sentiment_variance,
             diffusion_rate=sr.diffusion_rate,
-            emergent_events=[],
+            total_adoption=sr.total_adoption,
+            community_metrics=cm,
+            action_distribution=sr.action_distribution,
+            llm_calls_this_step=sr.llm_calls_this_step,
+            step_duration_ms=sr.step_duration_ms,
+            emergent_events=[
+                {"type": e.event_type, "step": e.step, "community_id": str(e.community_id) if e.community_id else None}
+                for e in sr.emergent_events
+            ] if sr.emergent_events else [],
         ))
     return StepHistoryResponse(steps=steps)
 
