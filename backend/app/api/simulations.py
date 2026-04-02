@@ -156,6 +156,7 @@ async def create_simulation(
                 name=c.get("name", f"community_{i}"),
                 size=c.get("size", 100),
                 agent_type=c.get("agent_type", "consumer"),
+                personality_profile=c.get("personality_profile", {}),
             )
             for i, c in enumerate(body.communities)
         ]

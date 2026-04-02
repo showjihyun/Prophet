@@ -15,6 +15,7 @@ class CommunityConfig:
     name: str
     size: int
     agent_type: str
+    personality_profile: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

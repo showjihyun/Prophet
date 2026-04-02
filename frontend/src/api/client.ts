@@ -5,6 +5,20 @@
 
 import type { SimulationRun, StepResult } from '../types/simulation';
 
+export interface CommunityConfigInput {
+  id: string;
+  name: string;
+  size: number;
+  agent_type: string;
+  personality_profile: {
+    openness: number;
+    skepticism: number;
+    trend_following: number;
+    brand_loyalty: number;
+    social_influence: number;
+  };
+}
+
 export interface CreateSimulationConfig {
   name: string;
   description?: string;
@@ -18,6 +32,7 @@ export interface CreateSimulationConfig {
     novelty?: number;
     utility?: number;
   };
+  communities?: CommunityConfigInput[];
   max_steps?: number;
   default_llm_provider?: string;
   random_seed?: number;

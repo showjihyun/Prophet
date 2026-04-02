@@ -13,6 +13,7 @@ Version: 0.1.2 | Status: DRAFT
 | **UI_03_TOP_INFLUENCERS.md** | 인플루언서 목록 화면 (Pencil Frame: `V99cE`) |
 | **UI_04_AGENT_DETAIL.md** | 에이전트 상세 화면 (Pencil Frame: `pkFYA`) |
 | **UI_05_GLOBAL_METRICS.md** | 글로벌 메트릭 화면 (Pencil Frame: `fjP3Z`) |
+| **UI_16_CAMPAIGN_SETUP.md** | Campaign Setup 폼 화면 (Route: `/setup`, `/projects/:projectId/new-scenario`) |
 
 구현 시 **이 SPEC의 컴포넌트 인터페이스** + **UI_XX SPEC의 레이아웃/디자인**을 모두 참조한다.
 
@@ -53,12 +54,21 @@ Version: 0.1.2 | Status: DRAFT
 - Button: "New Simulation"
 - Quick stats: total runs, active simulations
 
-### `/simulations/new` — Campaign Setup Page
-- Form: simulation name, campaign config (message, budget, channels)
-- Community config (use defaults or customize agent counts)
+### `/setup` or `/projects/:projectId/new-scenario` — Campaign Setup Page
+- **Project selector** (required — simulation must belong to a project)
+- Form: simulation name, campaign config (message, budget, channels, target communities)
+- **Community Configuration Section:**
+  - "Load from Templates" button — fetches templates from `/communities/templates/`
+  - Editable community cards (one per community):
+    - Name, Agent Type (dropdown), Agent Count (number input)
+    - Personality Profile: 5 sliders (openness, skepticism, trend_following, brand_loyalty, social_influence)
+  - "Add Community" button — adds a new community card
+  - "Remove" button per community card (minimum 1 community required)
+  - Default: 5 communities loaded from templates
 - LLM provider selection (Ollama / Claude / OpenAI)
-- Advanced settings: max_steps, personality_drift, random_seed
-- Button: "Create & Configure"
+- Advanced settings: max_steps, random_seed, SLM/LLM ratio
+- Button: "Create Simulation"
+- On submit: sends `communities` array with full config to backend
 
 ### `/simulations/:id` — Main Simulation Page
 - **Full-screen layout** with 4 panels (see §3)

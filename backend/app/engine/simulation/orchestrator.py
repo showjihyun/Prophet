@@ -206,13 +206,22 @@ class SimulationOrchestrator:
             except ValueError:
                 agent_type = AgentType.CONSUMER
 
-            # Random personality
+            # Personality from community profile (with +-0.15 jitter) or random
+            community_cfg = next(
+                (cc for cc in config.communities if cc.id == community_id_str),
+                None,
+            )
+            pp = community_cfg.personality_profile if community_cfg else {}
+            def _trait(key: str) -> float:
+                if key in pp:
+                    return max(0.0, min(1.0, pp[key] + rng.uniform(-0.15, 0.15)))
+                return rng.uniform(0.2, 0.8)
             personality = AgentPersonality(
-                openness=rng.uniform(0.2, 0.8),
-                skepticism=rng.uniform(0.2, 0.8),
-                trend_following=rng.uniform(0.2, 0.8),
-                brand_loyalty=rng.uniform(0.2, 0.8),
-                social_influence=rng.uniform(0.2, 0.8),
+                openness=_trait("openness"),
+                skepticism=_trait("skepticism"),
+                trend_following=_trait("trend_following"),
+                brand_loyalty=_trait("brand_loyalty"),
+                social_influence=_trait("social_influence"),
             )
 
             emotion = AgentEmotion(
