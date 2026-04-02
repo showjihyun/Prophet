@@ -19,6 +19,7 @@ from app.api.schemas import (
     ProjectDetailResponse,
     ProjectResponse,
     ScenarioResponse,
+    UpdateProjectRequest,
 )
 from app.engine.network.schema import CommunityConfig
 from app.engine.simulation.schema import CampaignConfig, SimulationConfig
@@ -170,6 +171,78 @@ async def get_project(
         scenarios=[_scenario_to_response(s) for s in scenarios],
         created_at=project.created_at,
     )
+
+
+@router.patch("/{project_id}", response_model=ProjectResponse)
+async def update_project(
+    project_id: str,
+    body: UpdateProjectRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ProjectResponse:
+    """Update project name and/or description.
+    SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
+    """
+    try:
+        pid = uuid.UUID(project_id)
+    except (ValueError, AttributeError):
+        raise _project_not_found(project_id)
+
+    result = await session.execute(select(Project).where(Project.project_id == pid))
+    project = result.scalar_one_or_none()
+    if project is None:
+        raise _project_not_found(project_id)
+
+    if body.name is not None:
+        project.name = body.name
+    if body.description is not None:
+        project.description = body.description or None
+
+    await session.commit()
+    await session.refresh(project)
+
+    # Count scenarios for the response
+    count_result = await session.execute(
+        select(func.count(Scenario.scenario_id)).where(Scenario.project_id == pid)
+    )
+    scenario_count: int = count_result.scalar_one() or 0
+
+    return ProjectResponse(
+        project_id=str(project.project_id),
+        name=project.name,
+        description=project.description or "",
+        status=project.status,
+        scenario_count=scenario_count,
+        created_at=project.created_at,
+    )
+
+
+@router.delete("/{project_id}", status_code=204)
+async def delete_project(
+    project_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Delete a project and all its scenarios.
+    SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
+    """
+    try:
+        pid = uuid.UUID(project_id)
+    except (ValueError, AttributeError):
+        raise _project_not_found(project_id)
+
+    result = await session.execute(select(Project).where(Project.project_id == pid))
+    project = result.scalar_one_or_none()
+    if project is None:
+        raise _project_not_found(project_id)
+
+    # Delete all child scenarios first
+    sc_result = await session.execute(
+        select(Scenario).where(Scenario.project_id == pid)
+    )
+    for scenario in sc_result.scalars().all():
+        await session.delete(scenario)
+
+    await session.delete(project)
+    await session.commit()
 
 
 @router.post("/{project_id}/scenarios", status_code=201, response_model=ScenarioResponse)

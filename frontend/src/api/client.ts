@@ -268,6 +268,10 @@ export const apiClient = {
       request<{ simulation_id: string; status: string }>(`/projects/${projectId}/scenarios/${scenarioId}/run`, { method: "POST" }),
     deleteScenario: (projectId: string, scenarioId: string) =>
       request<void>(`/projects/${projectId}/scenarios/${scenarioId}`, { method: "DELETE" }),
+    update: (id: string, data: { name?: string; description?: string }) =>
+      request<ProjectSummary>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<void>(`/projects/${id}`, { method: "DELETE" }),
   },
   network: {
     get: (simId: string) => request<CytoscapeGraph>(`/simulations/${simId}/network?format=cytoscape`),

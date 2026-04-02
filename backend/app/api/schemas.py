@@ -449,6 +449,14 @@ class ProjectDetailResponse(BaseModel):
     created_at: datetime | None = None
 
 
+class UpdateProjectRequest(BaseModel):
+    """Update project request (PATCH).
+    SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
+    """
+    name: str | None = None
+    description: str | None = None
+
+
 class CreateScenarioRequest(BaseModel):
     """Create scenario request.
     SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints

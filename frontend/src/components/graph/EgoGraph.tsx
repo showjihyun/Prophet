@@ -5,10 +5,10 @@
  * Uses Cytoscape.js with concentric layout: center node (the agent)
  * surrounded by connected nodes colored by community.
  */
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import cytoscape, { type Core, type EventObject } from "cytoscape";
-import { ZoomIn, ZoomOut, Maximize2, Filter } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Filter, X } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Community palette (must match GraphPanel & DESIGN.md)
@@ -182,6 +182,9 @@ interface EgoGraphProps {
   agentId: string;
 }
 
+// All community names derived from the palette
+const ALL_COMMUNITIES = Object.keys(COMMUNITY_COLOR);
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -191,6 +194,13 @@ export default function EgoGraph({ agentId }: EgoGraphProps) {
   navigateRef.current = navigate;
   const cyRef = useRef<Core | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Community filter state: set of visible communities (all visible by default)
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [visibleCommunities, setVisibleCommunities] = useState<Set<string>>(
+    () => new Set(ALL_COMMUNITIES)
+  );
+  const filterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -259,6 +269,66 @@ export default function EgoGraph({ agentId }: EgoGraphProps) {
     };
   }, [agentId]);
 
+  // Apply community visibility to the Cytoscape graph whenever filter changes
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.nodes().forEach((node) => {
+      const community = node.data("community") as string;
+      const visible = visibleCommunities.has(community);
+      if (visible) {
+        node.style({ opacity: 1, "z-index": 1 });
+        // Show connected edges only if both endpoints are visible
+        node.connectedEdges().forEach((edge) => {
+          const sourceVisible = visibleCommunities.has(
+            edge.source().data("community") as string
+          );
+          const targetVisible = visibleCommunities.has(
+            edge.target().data("community") as string
+          );
+          const trust = edge.data("trust") as number;
+          edge.style({
+            opacity: sourceVisible && targetVisible ? Math.max(0.06, trust * 0.4) : 0,
+          });
+        });
+      } else {
+        node.style({ opacity: 0.1, "z-index": 0 });
+      }
+    });
+  }, [visibleCommunities]);
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterOpen]);
+
+  // --- Community filter helpers ---
+  const toggleCommunity = useCallback((community: string) => {
+    setVisibleCommunities((prev) => {
+      const next = new Set(prev);
+      if (next.has(community)) {
+        // Keep at least one community visible
+        if (next.size > 1) next.delete(community);
+      } else {
+        next.add(community);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setVisibleCommunities(new Set(ALL_COMMUNITIES));
+  }, []);
+
+  const isAllSelected = visibleCommunities.size === ALL_COMMUNITIES.length;
+
   // --- Zoom controls ---
   const handleZoomIn = useCallback(() => {
     const cy = cyRef.current;
@@ -304,13 +374,109 @@ export default function EgoGraph({ agentId }: EgoGraphProps) {
           label="Fit to view"
           onClick={handleFit}
         />
-        <ToolbarButton
-          icon={<Filter className="w-4 h-4" />}
-          label="Filter by community"
-          onClick={() => {
-            /* TODO: community filter popover */
-          }}
-        />
+        {/* Filter button with active indicator */}
+        <div ref={filterRef} className="relative">
+          <button
+            title="Filter by community"
+            aria-label="Filter by community"
+            onClick={() => setFilterOpen((o) => !o)}
+            className={[
+              "w-8 h-8 flex items-center justify-center rounded-md transition-colors",
+              filterOpen || !isAllSelected
+                ? "bg-[var(--accent)]/30 text-[var(--accent)] hover:bg-[var(--accent)]/40"
+                : "bg-[var(--card)]/10 text-white/70 hover:bg-[var(--card)]/20 hover:text-white",
+            ].join(" ")}
+          >
+            <Filter className="w-4 h-4" />
+            {!isAllSelected && (
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[var(--accent)]" />
+            )}
+          </button>
+
+          {/* Dropdown popover */}
+          {filterOpen && (
+            <div
+              className="absolute top-10 right-0 z-20 w-48 rounded-lg border border-white/10 bg-[var(--card)] shadow-xl"
+              role="dialog"
+              aria-label="Community filter"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <span className="text-xs font-semibold text-white/80 uppercase tracking-wide">
+                  Communities
+                </span>
+                <button
+                  onClick={() => setFilterOpen(false)}
+                  className="text-white/40 hover:text-white/80 transition-colors"
+                  aria-label="Close filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+
+              {/* "All" option */}
+              <div className="px-3 py-2 border-b border-white/5">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={selectAll}
+                    className="w-3.5 h-3.5 rounded accent-[var(--accent)] cursor-pointer"
+                  />
+                  <span className="text-xs text-white/70 group-hover:text-white transition-colors">
+                    All communities
+                  </span>
+                </label>
+              </div>
+
+              {/* Per-community checkboxes */}
+              <ul className="py-1" role="list">
+                {ALL_COMMUNITIES.map((community) => {
+                  const color = COMMUNITY_COLOR[community];
+                  const checked = visibleCommunities.has(community);
+                  return (
+                    <li key={community}>
+                      <label className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-white/5 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleCommunity(community)}
+                          className="w-3.5 h-3.5 rounded cursor-pointer"
+                          style={{ accentColor: color }}
+                        />
+                        {/* Color swatch */}
+                        <span
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span
+                          className={[
+                            "text-xs transition-colors",
+                            checked ? "text-white/90" : "text-white/40",
+                          ].join(" ")}
+                        >
+                          {community}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {/* Reset link */}
+              {!isAllSelected && (
+                <div className="px-3 py-2 border-t border-white/5">
+                  <button
+                    onClick={selectAll}
+                    className="text-xs text-[var(--accent)] hover:underline transition-colors"
+                  >
+                    Reset to all
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
