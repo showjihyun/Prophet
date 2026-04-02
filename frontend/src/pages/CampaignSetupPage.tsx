@@ -110,6 +110,8 @@ export default function CampaignSetupPage() {
       }));
       setCommunities(loaded);
       setCommunityOpen(true);
+      // Sync target communities to loaded IDs
+      setTargetCommunities(new Set());
     } catch {
       setError("Failed to load community templates");
     }
@@ -145,7 +147,13 @@ export default function CampaignSetupPage() {
 
   function removeCommunity(index: number) {
     if (communities.length <= 1) return;
+    const removedId = communities[index].id;
     setCommunities((prev) => prev.filter((_, i) => i !== index));
+    setTargetCommunities((prev) => {
+      const next = new Set(prev);
+      next.delete(removedId);
+      return next;
+    });
   }
 
   function addCommunity() {
@@ -156,6 +164,22 @@ export default function CampaignSetupPage() {
     e.preventDefault();
     if (!selectedProjectId) {
       setError("Please select a project before creating a simulation.");
+      return;
+    }
+    if (communities.length > 0) {
+      const invalidComm = communities.find((c) => c.size < 10 || c.size > 5000);
+      if (invalidComm) {
+        setError(`Community "${invalidComm.name}": agent count must be between 10 and 5000.`);
+        return;
+      }
+      const emptyName = communities.find((c) => !c.name.trim());
+      if (emptyName) {
+        setError("All communities must have a name.");
+        return;
+      }
+    }
+    if (maxSteps < 1 || maxSteps > 1000) {
+      setError("Max steps must be between 1 and 1000.");
       return;
     }
     setSubmitting(true);
