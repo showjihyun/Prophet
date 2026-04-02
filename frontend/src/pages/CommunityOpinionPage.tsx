@@ -2,9 +2,10 @@
  * CommunityOpinionPage — Community-level opinion clusters + conversations (UI-14).
  * @spec docs/spec/ui/UI_14_COMMUNITY_OPINION.md
  */
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
+import { apiClient } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";
 
 /* ------------------------------------------------------------------ */
@@ -114,7 +115,19 @@ function StanceBar({ stances }: { stances: { support: number; neutral: number; o
 export default function CommunityOpinionPage() {
   const { communityId } = useParams<{ communityId: string }>();
   const navigate = useNavigate();
+  const simulation = useSimulationStore((st) => st.simulation);
   const steps = useSimulationStore((st) => st.steps);
+  const simId = simulation?.simulation_id ?? null;
+
+  // Fetch steps from API if store is empty
+  useEffect(() => {
+    if (simId && steps.length === 0) {
+      apiClient.simulations.getSteps(simId).then((fetched) => {
+        const { appendStep } = useSimulationStore.getState();
+        for (const s of fetched) appendStep(s);
+      }).catch(() => {});
+    }
+  }, [simId, steps.length]);
 
   // Derive community meta from store steps
   const derivedMeta = useMemo(() => {

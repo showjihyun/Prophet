@@ -2,10 +2,11 @@
  * ScenarioOpinionsPage — Scenario-wide opinion landscape (UI-13).
  * @spec docs/spec/ui/UI_13_SCENARIO_OPINIONS.md
  */
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
+import { apiClient } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";
 
 /* ------------------------------------------------------------------ */
@@ -192,6 +193,17 @@ export default function ScenarioOpinionsPage() {
   const navigate = useNavigate();
   const simulation = useSimulationStore((st) => st.simulation);
   const steps = useSimulationStore((st) => st.steps);
+  const simId = simulation?.simulation_id ?? null;
+
+  // Fetch steps from API if store is empty
+  useEffect(() => {
+    if (simId && steps.length === 0) {
+      apiClient.simulations.getSteps(simId).then((fetched) => {
+        const { appendStep } = useSimulationStore.getState();
+        for (const s of fetched) appendStep(s);
+      }).catch(() => {});
+    }
+  }, [simId, steps.length]);
 
   // Derive community opinions from the latest step's community_metrics
   const derivedCommunities = useMemo<CommunityOpinion[]>(() => {
