@@ -585,7 +585,7 @@ export default function CampaignSetupPage() {
           <button
             type="submit"
             disabled={submitting || !name || !selectedProjectId}
-            className="h-11 px-6 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="h-11 px-6 text-sm font-medium text-[var(--primary-foreground)] bg-[var(--primary)] rounded-md hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {submitting ? "Creating..." : "Create Simulation"}
           </button>

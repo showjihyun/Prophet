@@ -76,7 +76,7 @@ export default function ProjectsListPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleNewProject}
-              className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors"
+              className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-[var(--primary-foreground)] bg-[var(--primary)] rounded-md hover:bg-[var(--primary)]/90 transition-colors"
             >
               <Plus className="w-4 h-4" />
               New Project
@@ -107,7 +107,7 @@ export default function ProjectsListPage() {
             </div>
             <button
               onClick={handleNewProject}
-              className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors"
+              className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-[var(--primary-foreground)] bg-[var(--primary)] rounded-md hover:bg-[var(--primary)]/90 transition-colors"
             >
               <Plus className="w-4 h-4" />
               Create Project

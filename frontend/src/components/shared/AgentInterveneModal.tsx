@@ -339,7 +339,7 @@ export default function AgentInterveneModal({
           </button>
           <button
             onClick={handleApply}
-            className="h-10 px-4 text-sm font-medium rounded-md bg-[var(--foreground)] text-white hover:bg-[var(--foreground)]/90 transition-colors flex items-center gap-2"
+            className="h-10 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)]/90 transition-colors flex items-center gap-2"
           >
             <Zap className="w-4 h-4" />
             Apply Intervention

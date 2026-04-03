@@ -449,7 +449,7 @@ export default function SettingsPage() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-2 h-10 px-6 rounded-md bg-[var(--foreground)] text-white text-sm font-medium hover:bg-[var(--foreground)]/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 h-10 px-6 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium hover:bg-[var(--primary)]/90 disabled:opacity-50"
           >
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />

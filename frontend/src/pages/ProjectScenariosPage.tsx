@@ -157,7 +157,7 @@ export default function ProjectScenariosPage() {
                 </button>
                 <button
                   onClick={handleNewScenario}
-                  className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors"
+                  className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-[var(--primary-foreground)] bg-[var(--primary)] rounded-md hover:bg-[var(--primary)]/90 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   New Scenario
@@ -237,7 +237,7 @@ export default function ProjectScenariosPage() {
                       {(scenario.status === "draft" || scenario.status === "created") && (
                         <button
                           onClick={() => handleRun(scenario)}
-                          className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-white bg-[var(--foreground)] rounded-md hover:bg-[var(--foreground)]/90 transition-colors"
+                          className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-[var(--primary-foreground)] bg-[var(--primary)] rounded-md hover:bg-[var(--primary)]/90 transition-colors"
                         >
                           <Play className="w-3.5 h-3.5" />
                           Run
