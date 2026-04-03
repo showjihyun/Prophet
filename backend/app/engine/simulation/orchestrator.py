@@ -606,6 +606,17 @@ class SimulationOrchestrator:
         sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
         state = self._get_state(sim_uuid)
 
+        # Build community UUID → human name mapping from config
+        community_names: dict[str, str] = {}
+        if state.network and state.network.graph:
+            for cc in state.config.communities:
+                for nid, ndata in state.network.graph.nodes(data=True):
+                    if ndata.get("community_id") == cc.id:
+                        cuuid = str(ndata.get("community_uuid", ""))
+                        if cuuid:
+                            community_names[cuuid] = cc.name
+                        break
+
         # Group agents by community_id
         from collections import defaultdict
         groups: dict = defaultdict(list)
@@ -618,6 +629,8 @@ class SimulationOrchestrator:
             adopted_count = sum(1 for a in members if a.adopted)
             adoption_rate = adopted_count / count if count > 0 else 0.0
             mean_belief = sum(a.belief for a in members) / count if count > 0 else 0.0
+            belief_values = [a.belief for a in members]
+            variance = (sum((b - mean_belief) ** 2 for b in belief_values) / count) if count > 0 else 0.0
 
             # Dominant action
             action_counts: Counter = Counter(a.action.value for a in members)
@@ -625,11 +638,11 @@ class SimulationOrchestrator:
 
             communities.append({
                 "community_id": str(cid),
-                "name": str(cid)[:8],
+                "name": community_names.get(str(cid), str(cid)[:8]),
                 "size": count,
-                "adoption_rate": adoption_rate,
-                "mean_belief": mean_belief,
-                "sentiment_variance": 0.0,
+                "adoption_rate": round(adoption_rate, 4),
+                "mean_belief": round(mean_belief, 4),
+                "sentiment_variance": round(variance, 4),
                 "dominant_action": dominant_action,
             })
 
