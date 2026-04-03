@@ -180,7 +180,7 @@ class TestVal04AdoptionRateDiff:
         slm_steps = self._make_steps_with_rate(0.60)
         llm_steps = self._make_steps_with_rate(0.65)
         validator = SLMQualityValidator()
-        report = validator.compare_tiers(slm_steps, llm_steps)
+        report = validator.compare_tier_quality(slm_steps, llm_steps)
         assert report.pass_val04 is True
         assert abs(report.adoption_diff) < 0.15
 
@@ -189,7 +189,7 @@ class TestVal04AdoptionRateDiff:
         slm_steps = self._make_steps_with_rate(0.30)
         llm_steps = self._make_steps_with_rate(0.80)
         validator = SLMQualityValidator()
-        report = validator.compare_tiers(slm_steps, llm_steps)
+        report = validator.compare_tier_quality(slm_steps, llm_steps)
         assert report.pass_val04 is False
         assert report.adoption_diff >= 0.15
 
@@ -197,7 +197,7 @@ class TestVal04AdoptionRateDiff:
         """Identical adoption rates → diff = 0 → VAL-04 passes."""
         steps = self._make_steps_with_rate(0.50)
         validator = SLMQualityValidator()
-        report = validator.compare_tiers(steps, steps)
+        report = validator.compare_tier_quality(steps, steps)
         assert report.pass_val04 is True
         assert report.adoption_diff == 0.0
 
@@ -205,7 +205,7 @@ class TestVal04AdoptionRateDiff:
         """TierComparisonReport fields are all set correctly."""
         slm_steps = self._make_steps_with_rate(0.40)
         llm_steps = self._make_steps_with_rate(0.45)
-        report = SLMQualityValidator().compare_tiers(slm_steps, llm_steps)
+        report = SLMQualityValidator().compare_tier_quality(slm_steps, llm_steps)
         assert report.adoption_rate_slm == pytest.approx(0.40)
         assert report.adoption_rate_llm == pytest.approx(0.45)
         assert report.adoption_diff == pytest.approx(0.05)
@@ -227,7 +227,7 @@ class TestVal05EmergentF1:
         ]
         slm_steps = [make_step(0, 0.5, emergent_events=events)]
         llm_steps = [make_step(0, 0.5, emergent_events=events)]
-        report = SLMQualityValidator().compare_tiers(slm_steps, llm_steps)
+        report = SLMQualityValidator().compare_tier_quality(slm_steps, llm_steps)
         assert report.pass_val05 is True
         assert report.emergent_f1 > 0.7
 
@@ -237,7 +237,7 @@ class TestVal05EmergentF1:
         llm_events = [make_emergent("collapse"), make_emergent("echo_chamber")]
         slm_steps = [make_step(0, 0.5, emergent_events=slm_events)]
         llm_steps = [make_step(0, 0.5, emergent_events=llm_events)]
-        report = SLMQualityValidator().compare_tiers(slm_steps, llm_steps)
+        report = SLMQualityValidator().compare_tier_quality(slm_steps, llm_steps)
         assert report.pass_val05 is False
         assert report.emergent_f1 <= 0.7
 
@@ -245,7 +245,7 @@ class TestVal05EmergentF1:
         """No emergent events on both sides → perfect agreement (F1 = 1.0)."""
         slm_steps = [make_step(0, 0.5)]
         llm_steps = [make_step(0, 0.5)]
-        report = SLMQualityValidator().compare_tiers(slm_steps, llm_steps)
+        report = SLMQualityValidator().compare_tier_quality(slm_steps, llm_steps)
         assert report.emergent_f1 == pytest.approx(1.0)
         assert report.pass_val05 is True
 
@@ -267,7 +267,7 @@ class TestVal05EmergentF1:
         ]
         slm_steps = [make_step(0, 0.5, emergent_events=slm_events)]
         llm_steps = [make_step(0, 0.5, emergent_events=llm_events)]
-        report = SLMQualityValidator().compare_tiers(slm_steps, llm_steps)
+        report = SLMQualityValidator().compare_tier_quality(slm_steps, llm_steps)
         assert report.emergent_f1 == pytest.approx(2 / 3, abs=1e-6)
 
 

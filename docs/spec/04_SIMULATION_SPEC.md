@@ -1,5 +1,5 @@
 # 04 — Simulation Orchestrator SPEC
-Version: 0.1.1 | Status: DRAFT
+Version: 0.2.0 | Status: REVIEW
 
 ---
 
@@ -10,9 +10,10 @@ The SimulationOrchestrator is the top-level coordinator that manages simulation 
 ### Execution Model
 
 - **Step loop:** `asyncio.Task` (NOT Celery). Steps run as async coroutines within the FastAPI event loop.
-- **Monte Carlo:** Celery worker task. Each run is a Celery task dispatched to Valkey-backed queue, allowing parallel execution across worker processes.
-- **Rationale:** Step execution requires real-time WebSocket feedback (asyncio-native). Monte Carlo is fire-and-forget batch work (Celery-appropriate).
-- **Concurrency:** Max 3 simultaneous simulation step-loops per API server. Monte Carlo worker pool configurable via `CELERY_CONCURRENCY` env.
+- **Monte Carlo:** `asyncio.create_task` (in-process). Celery + Valkey integration planned for Scale Phase.
+- **Run-All:** `run_all()` runs all remaining steps in a loop and returns a summary report (synchronous completion).
+- **Rationale:** Step execution requires real-time WebSocket feedback (asyncio-native). Monte Carlo currently in-process for simplicity.
+- **Concurrency:** Max 3 simultaneous simulation step-loops per API server (`_MAX_CONCURRENT = 3`). Max 50 total in-memory simulations (`MAX_SIMULATIONS = 50`, TTL 86400s).
 - **Failure:** If step loop crashes, status → FAILED. Client can resume from last persisted step.
 
 ---
@@ -78,6 +79,9 @@ class SimulationConfig:
     slm_llm_ratio: float = 0.5          # 0.0=all SLM, 1.0=max LLM (user slider)
     slm_model: str = "phi4"             # "phi4" | "llama3.2:8b-q4" | "gemma2:2b"
     budget_usd: float | None = None     # if set, auto-adjusts slm_llm_ratio to fit budget
+
+    # Platform
+    platform: str | None = None          # Optional platform plugin identifier
 
     # Monte Carlo
     monte_carlo_runs: int = 0            # 0 = disabled
@@ -241,6 +245,8 @@ class CommunityOrchestrator:
         agents: list[AgentState],
         subgraph: nx.Graph,            # intra-community edges only
         agent_node_map: dict[UUID, int],
+        bridge_node_ids: set[int] | None = None,  # inter-community bridge nodes
+        gateway: "LLMGateway | None" = None,       # LLM gateway for tier-based calls
     ): ...
 
     async def tick(
@@ -248,6 +254,7 @@ class CommunityOrchestrator:
         step: int,
         campaign_events: list[CampaignEvent],
         recsys_config: RecSysConfig | None = None,
+        env_events: list[EnvironmentEvent] | None = None,  # injected events
     ) -> CommunityTickResult:
         """
         Execute one step for this community's agents.
@@ -312,6 +319,12 @@ class BridgePropagator:
 
     async def resume(self, simulation_id: UUID) -> None:
         """Status → RUNNING. Continues from current_step."""
+
+    async def run_all(self, simulation_id: UUID) -> RunAllReport:
+        """
+        Run all remaining steps to completion synchronously.
+        Returns summary report with final metrics.
+        """
 
     async def modify_agent(
         self,

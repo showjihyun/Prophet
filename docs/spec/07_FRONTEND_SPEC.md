@@ -1,5 +1,5 @@
 # 07 — Frontend SPEC (React 18)
-Version: 0.1.2 | Status: DRAFT
+Version: 0.2.0 | Status: REVIEW
 
 ---
 
@@ -13,7 +13,17 @@ Version: 0.1.2 | Status: DRAFT
 | **UI_03_TOP_INFLUENCERS.md** | 인플루언서 목록 화면 (Pencil Frame: `V99cE`) |
 | **UI_04_AGENT_DETAIL.md** | 에이전트 상세 화면 (Pencil Frame: `pkFYA`) |
 | **UI_05_GLOBAL_METRICS.md** | 글로벌 메트릭 화면 (Pencil Frame: `fjP3Z`) |
-| **UI_16_CAMPAIGN_SETUP.md** | Campaign Setup 폼 화면 (Route: `/setup`, `/projects/:projectId/new-scenario`) |
+| **UI_06_PROJECTS_LIST.md** | 프로젝트 목록 화면 |
+| **UI_07_PROJECT_SCENARIOS.md** | 프로젝트 시나리오 화면 |
+| **UI_08_INFLUENCERS_PAGINATION.md** | 인플루언서 페이지네이션 |
+| **UI_09_INFLUENCERS_FILTER.md** | 인플루언서 필터 |
+| **UI_10_AGENT_INTERVENE.md** | 에이전트 개입 모달 |
+| **UI_11_AGENT_CONNECTIONS.md** | 에이전트 연결 탭 |
+| **UI_12_SETTINGS.md** | 설정 화면 |
+| **UI_13_SCENARIO_OPINIONS.md** | 시나리오 의견 화면 |
+| **UI_14_COMMUNITY_OPINION.md** | 커뮤니티 의견 화면 |
+| **UI_15_CONVERSATION_THREAD.md** | 대화 스레드 화면 |
+| **UI_16_CAMPAIGN_SETUP.md** | Campaign Setup 폼 화면 |
 
 구현 시 **이 SPEC의 컴포넌트 인터페이스** + **UI_XX SPEC의 레이아웃/디자인**을 모두 참조한다.
 
@@ -36,212 +46,282 @@ Version: 0.1.2 | Status: DRAFT
 
 ---
 
-## 2. Pages
+## 2. App Layout & Routing
+
+### Layout Structure
+
+두 가지 레이아웃 패턴을 사용한다:
+
+1. **SidebarLayout** — `AppSidebar` + `<main>` (대부분의 페이지)
+2. **Full-screen** — 사이드바 없이 전체 화면 (`SimulationPage`, `LoginPage`)
+
+### Route Table
+
+| Route | Page | Layout | UI SPEC |
+|-------|------|--------|---------|
+| `/` | → Redirect to `/projects` | — | — |
+| `/simulation` | `SimulationPage` | Full-screen | UI_01 |
+| `/login` | `LoginPage` | Full-screen | — |
+| `/projects` | `ProjectsListPage` | Sidebar | UI_06 |
+| `/projects/:projectId` | `ProjectScenariosPage` | Sidebar | UI_07 |
+| `/projects/:projectId/new-scenario` | `CampaignSetupPage` | Sidebar | UI_16 |
+| `/setup` | `CampaignSetupPage` | Sidebar | UI_16 |
+| `/communities` | `CommunitiesDetailPage` | Sidebar | UI_02 |
+| `/communities/:communityId` | `CommunitiesDetailPage` | Sidebar | UI_02 |
+| `/communities/manage` | `CommunityManagePage` | Sidebar | — |
+| `/influencers` | `TopInfluencersPage` | Sidebar | UI_03, UI_08, UI_09 |
+| `/agents/:agentId` | `AgentDetailPage` | Sidebar | UI_04, UI_10, UI_11 |
+| `/metrics` | `GlobalMetricsPage` | Sidebar | UI_05 |
+| `/settings` | `SettingsPage` | Sidebar | UI_12 |
+| `/opinions` | `ScenarioOpinionsPage` | Sidebar | UI_13 |
+| `/opinions/:communityId` | `CommunityOpinionPage` | Sidebar | UI_14 |
+| `/opinions/:communityId/thread/:threadId` | `ConversationThreadPage` | Sidebar | UI_15 |
+| `/compare/:otherId` | `ComparisonPage` | Sidebar | — |
+| `/analytics` | `AnalyticsPage` | Sidebar | — |
+
+> **참고:** 시뮬레이션 ID는 URL 파라미터가 아닌 Zustand store (`simulationStore`)에서 관리한다.
+> `/simulation` 페이지는 store의 `simulation` 객체를 참조하여 렌더링한다.
 
 ### Error Boundary (Required)
 
-모든 페이지 라우트는 `React.ErrorBoundary`로 감싸야 한다.
+모든 페이지 라우트는 `App.tsx`의 `ErrorBoundary`로 감싸져 있다.
 특히 `GraphPanel` (Cytoscape.js)은 초기화 실패 시 전체 UI 크래시를 방지해야 한다.
 
-```tsx
-<ErrorBoundary fallback={<ErrorFallback />}>
-  <GraphPanel />
-</ErrorBoundary>
-```
+---
 
-### `/` — Home / Simulation List
-- List of simulation runs (status badges, creation date, campaign name)
-- Button: "New Simulation"
-- Quick stats: total runs, active simulations
+## 3. Pages
 
-### `/setup` or `/projects/:projectId/new-scenario` — Campaign Setup Page
+### ProjectsListPage (`/projects`)
+- 프로젝트 목록 (카드 형태, 상태 배지, 시나리오 수)
+- "New Project" 버튼 — 이름/설명 입력 후 생성
+- 프로젝트 삭제 기능
+- @spec UI_06_PROJECTS_LIST.md
+
+### ProjectScenariosPage (`/projects/:projectId`)
+- 프로젝트 상세 + 시나리오 목록
+- "Add Scenario" 버튼 → CampaignSetupPage로 이동
+- 시나리오별: Run/Delete 버튼, 상태 표시 (draft/created/running/completed)
+- @spec UI_07_PROJECT_SCENARIOS.md
+
+### CampaignSetupPage (`/setup`, `/projects/:projectId/new-scenario`)
 - **Project selector** (required — simulation must belong to a project)
 - Form: simulation name, campaign config (message, budget, channels, target communities)
 - **Community Configuration Section:**
-  - "Load from Templates" button — fetches templates from `/communities/templates/`
-  - Editable community cards (one per community):
-    - Name, Agent Type (dropdown), Agent Count (number input)
-    - Personality Profile: 5 sliders (openness, skepticism, trend_following, brand_loyalty, social_influence)
-  - "Add Community" button — adds a new community card
-  - "Remove" button per community card (minimum 1 community required)
-  - Default: 5 communities loaded from templates
-- LLM provider selection (Ollama / Claude / OpenAI)
-- Advanced settings: max_steps, random_seed, SLM/LLM ratio
-- Button: "Create Simulation"
-- On submit: sends `communities` array with full config to backend
+  - "Load from Templates" 버튼 — fetches templates from `/communities/templates/`
+  - 편집 가능한 community cards (이름, Agent Type, Agent Count, Personality Profile 5 sliders)
+  - "Add Community" / "Remove" 버튼
+- Campaign Attributes: controversy, novelty, utility 슬라이더
+- LLM provider selection, Advanced settings (max_steps, random_seed, SLM/LLM ratio)
+- Clone flow: `simulationStore.cloneConfig`가 존재하면 pre-fill
+- @spec UI_16_CAMPAIGN_SETUP.md
 
-### `/simulations/:id` — Main Simulation Page
-- **Full-screen layout** with 4 panels (see §3)
+### SimulationPage (`/simulation`) — Full-screen
+- **4-Zone Layout** (see §4)
+- Zone 1: ControlPanel (56px)
+- Zone 2: CommunityPanel (260px) | GraphPanel (fill) | MetricsPanel (280px)
+- Zone 3: TimelinePanel (120px) + ConversationPanel (fill)
 - WebSocket connection to real-time step updates
+- No active simulation → empty state with "Go to Projects" CTA
+- **Inline simulation creation:** "New Simulation" 버튼은 페이지 이동 없이 API 직접 호출로 시뮬레이션 생성
+- LLM Dashboard: collapsible overlay at bottom
+- Agent Inspector: right drawer when agent selected
+- SimulationReportModal: auto-shows on completion
+- @spec UI_01_SIMULATION_MAIN.md
 
-### `/simulations/:id/analytics` — Post-run Analytics
-- Full metric history charts
-- Emergent event timeline
-- Community adoption comparison
-- Monte Carlo results (if run)
+### CommunitiesDetailPage (`/communities`, `/communities/:communityId`)
+- KPI cards (2×2 mobile, 4-col desktop)
+- Community cards grid (1/2/3-col responsive)
+- Community detail with metrics
+- @spec UI_02_COMMUNITIES_DETAIL.md
 
-### `/simulations/:id/compare/:other_id` — Scenario Comparison
+### CommunityManagePage (`/communities/manage`)
+- CRUD for community templates
+- Template cards with personality profile display
+- Create/Edit/Delete actions via `/communities/templates/` API
+
+### TopInfluencersPage (`/influencers`)
+- Agent influence ranking 테이블
+- Pagination (page size selector, page navigation)
+- Multi-criteria filter popover (InfluencersFilter)
+- Search input
+- @spec UI_03, UI_08, UI_09
+
+### AgentDetailPage (`/agents/:agentId`)
+- Tabs: Overview, Connections, Memory
+- Overview: personality radar, emotion bars, belief gauge, action history
+- Connections: EgoGraph (ego-network subgraph)
+- Memory: memory record list
+- Intervene modal (AgentInterveneModal)
+- @spec UI_04, UI_10, UI_11
+
+### GlobalMetricsPage (`/metrics`)
+- System-wide KPI cards (2×2 mobile, 4-col desktop)
+- Adoption/Sentiment/Diffusion charts (Recharts)
+- Community comparison charts
+- @spec UI_05_GLOBAL_METRICS.md
+
+### SettingsPage (`/settings`)
+- LLM Provider config (Ollama/Claude/OpenAI)
+- Ollama connection settings (base URL, model, test connection)
+- API key management (Anthropic, OpenAI)
+- Simulation defaults (SLM/LLM ratio, Tier 3 ratio, cache TTL)
+- @spec UI_12_SETTINGS.md
+
+### ScenarioOpinionsPage (`/opinions`)
+- Community opinion breakdown
+- Stat cards (2×2 mobile, 4-col desktop)
+- Community cards grid (1/2/3-col responsive)
+- @spec UI_13_SCENARIO_OPINIONS.md
+
+### CommunityOpinionPage (`/opinions/:communityId`)
+- Single community opinion detail with thread list
+- @spec UI_14_COMMUNITY_OPINION.md
+
+### ConversationThreadPage (`/opinions/:communityId/thread/:threadId`)
+- Thread messages with stance badges, reactions, replies
+- @spec UI_15_CONVERSATION_THREAD.md
+
+### ComparisonPage (`/compare/:otherId`)
 - Side-by-side metric charts
-- Winner highlight
-- Emergent event diff
+- Winner highlight, emergent event diff
+
+### AnalyticsPage (`/analytics`)
+- Post-run analytics dashboard
+- Full metric history, community adoption comparison
+
+### LoginPage (`/login`)
+- Username/password form
+- Register/Login toggle
+- JWT token stored in localStorage
 
 ---
 
-## 3. Main Simulation Page — Panel Layout
+## 4. Main Simulation Page — Panel Layout
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Header: Simulation Name | Status Badge | Step Counter | LLM Status │
-├────────────────────────────────┬────────────────────────────────────┤
-│                                │                                    │
-│     GRAPH PANEL                │    TIMELINE / METRIC PANEL         │
-│     (Cytoscape.js)             │    (Recharts)                      │
-│                                │                                    │
-│     - Agent nodes              │    - Adoption rate line chart      │
-│     - Community clusters       │    - Sentiment chart               │
-│     - Influence edges          │    - Diffusion rate chart          │
-│     - Emergent cluster         │    - Emergent event markers        │
-│       highlights               │    - Per-community bars            │
-│                                │                                    │
-│     Hover → Agent Detail       │                                    │
-│     Click → Agent Inspector    │                                    │
-│                                │                                    │
-├────────────────────────────────┴────────────────────────────────────┤
-│                                                                      │
-│   CONTROL PANEL                                                      │
-│   [▶ Play] [⏸ Pause] [⏭ Step] [⏹ Stop]  Step: 14/50               │
-│   Speed: [●────────] | Campaign: Model X Launch | Budget: $5M        │
-│                                                                      │
-├──────────────────────────────────────────────────────────────────────┤
-│   LLM DASHBOARD (collapsible)                                        │
-│   Provider: Ollama llama3.2 | Calls: 234 | Cached: 45% | Avg: 212ms │
-│   [View Prompt Log]                                                  │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ Zone 1: ControlPanel (56px)                                       │
+│ [New Sim] [▶ Play] [⏸ Pause] [⏭ Step] [⏹ Stop]  Step: 14/50    │
+│ Speed: [1x▼]  Project: [▼]  Sim: [▼]                             │
+├──────────┬──────────────────────────────┬────────────────────────┤
+│ Zone 2L  │ Zone 2C                      │ Zone 2R               │
+│ Community│ GraphPanel                   │ MetricsPanel           │
+│ Panel    │ (Cytoscape.js)               │ (280px)               │
+│ (260px)  │ (fill)                       │                        │
+├──────────┴──────────────────────────────┴────────────────────────┤
+│ Zone 3: TimelinePanel (120px) + ConversationPanel (fill)          │
+├──────────────────────────────────────────────────────────────────┤
+│ LLM Dashboard (collapsible)                                       │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 4. Component Specs
+## 5. Component Specs
 
-### GraphPanel
+### graph/ directory
 
+#### GraphPanel
 ```typescript
-interface GraphPanelProps {
-  simulationId: string;
-  currentStep: number;
-  highlightedCommunity: string | null;
-  onAgentHover: (agentId: string | null) => void;
-  onAgentClick: (agentId: string) => void;
-}
+// components/graph/GraphPanel.tsx
+// @spec docs/spec/07_FRONTEND_SPEC.md#graphpanel
 ```
-
-**Behavior:**
 - Renders Cytoscape.js graph with nodes = agents, edges = influence links
-- Node color encodes community (each community gets distinct color)
-- Node size encodes influence_score (range: 10px–40px)
-- Node border color encodes emotion state (excitement = gold, skepticism = grey, trust = blue)
-- Edge opacity: weight (0.1–0.9)
-- Edge color: sentiment polarity of last propagation (green=positive, red=negative, grey=neutral)
-- Edge thickness: message_strength (novelty+controversy+utility) — thicker = stronger message
-- Edge animation: pulsing animation on active propagation events this step
-- Viral cascade cluster highlighted with pulsing orange ring
-- Community cluster convex hull shapes drawn (optional, toggle)
-- Hover tooltip shows: agent_type, community, action, adoption status, top emotion
+- Node color: community, Node size: influence_score (10px–40px)
+- Node border: emotion state, Edge opacity: weight, Edge color: sentiment polarity
+- Hover tooltip: agent_type, community, action, adoption status
+- Click → opens AgentInspector
+- Community highlight via `highlightedCommunity` store state
 
-**Layout:** Compound layout (communities as parent nodes) via `cytoscape-compound-drag-and-drop`
-
-**Update strategy:** On step_result WebSocket event, only mutate changed node data (do NOT re-render full graph — diffuse updates for performance)
-
-### TimelinePanel
-
+#### CommunityPanel
 ```typescript
-interface TimelinePanelProps {
-  simulationId: string;
-  steps: StepResult[];
-  emergentEvents: EmergentEvent[];
-}
+// components/graph/CommunityPanel.tsx
 ```
+- Left panel (260px) in Zone 2
+- Community list with adoption rates, member counts
+- Click to highlight community on graph
 
-**Charts (stacked, scrollable):**
-1. **Adoption Rate** — line chart, one line per community + total
-2. **Sentiment** — area chart, mean_belief per community
-3. **Diffusion Rate R(t)** — bar chart
-4. **Action Distribution** — stacked bar (ignore/like/share/adopt per step)
-
-**Emergent event markers:** Vertical dotted lines on all charts at step where event detected, with label (e.g., "⚡ Viral", "⚠ Collapse")
-
-### ControlPanel
-
+#### MetricsPanel
 ```typescript
-interface ControlPanelProps {
-  simulationId: string;
-  status: SimulationStatus;
-  currentStep: number;
-  maxSteps: number;
-  onPlay: () => void;
-  onPause: () => void;
-  onStep: () => void;
-  onStop: () => void;
-  onSpeedChange: (stepsPerSecond: number) => void;
-  onInjectEvent: (event: EnvironmentEvent) => void;
-}
+// components/graph/MetricsPanel.tsx
 ```
+- Right panel (280px) in Zone 2
+- Real-time metrics: adoption rate, sentiment, diffusion rate, action distribution
 
-**Buttons:**
-- Play: POST /start (disabled if RUNNING)
-- Pause: POST /pause (disabled if not RUNNING)
-- Step: POST /step (enabled when PAUSED or CONFIGURED)
-- Stop: POST /stop (confirmation dialog)
-
-**Inject Event button:** Opens modal to configure a NegativeEvent or custom EnvironmentEvent
-
-**SLM/LLM Ratio Slider** (Prophet-unique UX):
-- Slider range: 0.0 (all SLM) to 1.0 (max LLM)
-- Real-time 4-indicator display:
-  1. Cost Efficiency: estimated $ per step
-  2. Reasoning Depth: 양적/균형/질적
-  3. Simulation Velocity: estimated seconds per step
-  4. Prediction Type: Quantitative / Hybrid / Qualitative
-- Optional: Budget input field → auto-adjusts slider to fit budget
-- Calls `POST /engine-control` when changed (requires PAUSED state)
-
-### AgentInspector (right drawer)
-
-Opened by clicking an agent node in GraphPanel.
-
+#### AgentNode
 ```typescript
-interface AgentInspectorProps {
-  agentId: string;
-  simulationId: string;
-  isPaused: boolean;
-}
+// components/graph/AgentNode.tsx
 ```
+- Custom Cytoscape node renderer
 
-**Shows:**
-- Agent ID, type, community
-- Personality radar chart (5 axes)
-- Emotion bar chart
-- Belief gauge (-1 to +1)
-- Influence score
-- Action history (last 5 steps)
-- Memory list (last 10 entries, expandable)
-- **Edit panel** (only when simulation PAUSED): sliders for personality/emotion/belief
+#### EgoGraph
+```typescript
+// components/graph/EgoGraph.tsx
+// @spec docs/spec/ui/UI_11_AGENT_CONNECTIONS.md
+```
+- Ego-network subgraph for agent connections tab
+- Community-based filtering (popover with checkboxes)
 
-### LLMDashboard (collapsible bottom bar)
+### control/ directory
 
-- Provider status indicators (green/red dot)
-- Real-time call counter + cache hit rate
-- Average latency sparkline
-- Toggle: show/hide prompt log table
-- Prompt log: agent_id, step, provider, prompt preview (truncated), latency, cached
+#### ControlPanel
+```typescript
+// components/control/ControlPanel.tsx
+// @spec docs/spec/ui/UI_01_SIMULATION_MAIN.md
+```
+- Simulation lifecycle buttons: Play, Pause, Step, Stop
+- Speed selector (1x/2x/5x/10x)
+- Project/Simulation selectors
+- "New Simulation" button: inline creation via API (no page navigation)
+- Inject Event, Replay, Monte Carlo, Engine Control 버튼 → 모달 열기
+
+#### ConversationPanel
+```typescript
+// components/control/ConversationPanel.tsx
+```
+- Bottom zone conversation feed
+- Agent messages from current step
+
+#### EngineControlPanel
+```typescript
+// components/control/EngineControlPanel.tsx
+```
+- SLM/LLM ratio slider with 4-indicator display
+- Budget input → auto-adjusts ratio
+- Calls `POST /engine-control` (requires PAUSED state)
+
+### shared/ directory
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `AppSidebar` | `shared/AppSidebar.tsx` | Collapsible sidebar navigation, project links |
+| `AgentInterveneModal` | `shared/AgentInterveneModal.tsx` | Agent intervention modal (UI_10) |
+| `InfluencersFilter` | `shared/InfluencersFilter.tsx` | Multi-criteria filter popover (UI_09) |
+| `InjectEventModal` | `shared/InjectEventModal.tsx` | Event injection modal |
+| `MonteCarloModal` | `shared/MonteCarloModal.tsx` | Monte Carlo configuration modal |
+| `ReplayModal` | `shared/ReplayModal.tsx` | Replay from step modal |
+| `SimulationReportModal` | `shared/SimulationReportModal.tsx` | Post-completion summary report |
+| `PageNav` | `shared/PageNav.tsx` | Breadcrumb navigation |
+| `StatCard` | `shared/StatCard.tsx` | Reusable KPI stat card |
+| `ThemeToggle` | `shared/ThemeToggle.tsx` | Dark/Light mode toggle |
+| `ToastNotification` | `shared/ToastNotification.tsx` | Toast notification container |
+
+### Other directories
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `TimelinePanel` | `timeline/TimelinePanel.tsx` | Step charts (adoption, sentiment, diffusion, action distribution) |
+| `AgentInspector` | `agent/AgentInspector.tsx` | Right drawer with agent detail + edit panel (when paused) |
+| `LLMDashboard` | `llm/LLMDashboard.tsx` | Collapsible LLM stats + prompt log |
 
 ---
 
-## 5. State Management (Zustand)
+## 6. State Management (Zustand)
 
 ```typescript
 // store/simulationStore.ts
 interface SimulationStore {
+  // Core simulation state
   simulation: SimulationRun | null;
   status: SimulationStatus;
   currentStep: number;
@@ -257,12 +337,24 @@ interface SimulationStore {
   highlightedCommunity: string | null;
   isAgentInspectorOpen: boolean;
   isLLMDashboardOpen: boolean;
+  speed: number;                              // Playback speed (1/2/5/10)
+  theme: 'dark' | 'light';                   // Dark/light mode
+
+  // Project context
+  currentProjectId: string | null;
+  projects: ProjectSummary[];
+  scenarios: ScenarioInfo[];
 
   // Engine control
   slmLlmRatio: number;
   tierDistribution: TierDistribution | null;
   impactAssessment: EngineImpactReport | null;
-  setSlmLlmRatio: (ratio: number) => void;
+
+  // Clone flow
+  cloneConfig: CreateSimulationConfig | null;
+
+  // Toast notifications
+  toasts: Toast[];
 
   // Actions
   setSimulation: (sim: SimulationRun) => void;
@@ -270,16 +362,29 @@ interface SimulationStore {
   appendEmergentEvent: (event: EmergentEvent) => void;
   setStatus: (status: SimulationStatus) => void;
   selectAgent: (agentId: string | null) => void;
+  setSlmLlmRatio: (ratio: number) => void;
+  setSpeed: (speed: number) => void;
+  toggleTheme: () => void;
+  toggleLLMDashboard: () => void;
+  setHighlightedCommunity: (id: string | null) => void;
+  setCurrentProject: (id: string | null) => void;
+  setProjects: (projects: ProjectSummary[]) => void;
+  setScenarios: (scenarios: ScenarioInfo[]) => void;
+  setCloneConfig: (config: CreateSimulationConfig | null) => void;
+  addToast: (toast: Omit<Toast, 'id'>) => void;
+  removeToast: (id: string) => void;
 }
 ```
 
 ---
 
-## 6. WebSocket Hook
+## 7. Hooks
+
+### useSimulationSocket
 
 ```typescript
 // hooks/useSimulationSocket.ts
-function useSimulationSocket(simulationId: string): {
+function useSimulationSocket(simulationId: string | null): {
   connected: boolean;
   lastMessage: WSMessage | null;
   send: (message: WSClientMessage) => void;
@@ -287,38 +392,22 @@ function useSimulationSocket(simulationId: string): {
 ```
 
 **Reconnection Policy:**
-- Auto-reconnect on disconnect: exponential backoff (1s, 2s, 4s, 8s, 16s, max 30s)
-- Max 5 retry attempts before giving up
-- `JSON.parse` must be wrapped in try/catch (server may send non-JSON pings)
-- On reconnect failure: show banner "Connection failed. Click to retry."
+- Auto-reconnect: exponential backoff (1s, 2s, 4s, 8s, 16s, max 30s)
+- Max 5 retry attempts
+- `JSON.parse` wrapped in try/catch
 
-- Dispatches to Zustand store on every received message
-- Heartbeat ping every 30s
+> **미구현 항목:** heartbeat ping (30s), "Click to retry" banner — TODO
 
----
-
-## 7. TypeScript Types
-
-All backend response types are mirrored in `src/types/`:
+### useSimulationData
 
 ```typescript
-// src/types/simulation.ts
-export interface SimulationRun { ... }
-export interface StepResult { ... }
-export interface AgentState { ... }
-export interface AgentPersonality { ... }
-export interface AgentEmotion { ... }
-export interface EmergentEvent { ... }
-export interface CommunityStepMetrics { ... }
-
-// src/types/network.ts
-export interface CytoscapeNode { data: AgentNodeData }
-export interface CytoscapeEdge { data: EdgeData }
-export interface NetworkGraphData { nodes: CytoscapeNode[]; edges: CytoscapeEdge[] }
-
-// src/types/llm.ts
-export interface LLMCallLog { ... }
-export interface LLMStats { ... }
+// hooks/useSimulationData.ts — TanStack Query wrappers
+export function useSimulation(id: string | null): UseQueryResult<SimulationRun>;
+export function useSimulationList(): UseQueryResult<SimulationRun[]>;
+export function useStepMutation(id: string): UseMutationResult<StepResult>;
+export function useNetworkGraph(id: string | null): UseQueryResult<CytoscapeGraph>;
+export function useLLMStats(id: string | null): UseQueryResult<LLMStats>;
+export function useSimulationRun(): UseMutationResult<RunAllReport>;
 ```
 
 ---
@@ -329,32 +418,74 @@ export interface LLMStats { ... }
 // src/api/client.ts
 const apiClient = {
   simulations: {
-    create: (config: SimulationConfig) => Promise<SimulationRun>,
+    create: (config: CreateSimulationConfig) => Promise<SimulationRun>,
     get: (id: string) => Promise<SimulationRun>,
-    list: (params?: ListParams) => Promise<PaginatedResponse<SimulationRun>>,
-    start: (id: string) => Promise<void>,
+    list: () => Promise<{ items: SimulationRun[]; total: number }>,
+    start: (id: string) => Promise<{ status: string }>,
     step: (id: string) => Promise<StepResult>,
-    pause: (id: string) => Promise<void>,
-    resume: (id: string) => Promise<void>,
-    stop: (id: string) => Promise<void>,
-    getSteps: (id: string, params?: StepParams) => Promise<StepResult[]>,
-    injectEvent: (id: string, event: EnvironmentEvent) => Promise<void>,
-    compare: (id: string, otherId: string) => Promise<ScenarioComparison>,
-    runMonteCarlo: (id: string, options: MCOptions) => Promise<{ job_id: string }>,
+    pause: (id: string) => Promise<{ status: string }>,
+    resume: (id: string) => Promise<{ status: string }>,
+    stop: (id: string) => Promise<{ status: string }>,
+    getSteps: (id: string) => Promise<StepResult[]>,
+    injectEvent: (id: string, event) => Promise<{ event_id: string; effective_step: number }>,
+    replay: (id: string, step: number) => Promise<{ replay_id: string; from_step: number }>,
+    compare: (id: string, otherId: string) => Promise<Record<string, unknown>>,
+    monteCarlo: (id: string, opts) => Promise<{ job_id: string }>,
+    getMonteCarloJob: (id: string, jobId: string) => Promise<Record<string, unknown>>,
+    engineControl: (id: string, body) => Promise<Record<string, unknown>>,
+    runAll: (id: string) => Promise<RunAllReport>,
+    recommendEngine: (body) => Promise<Record<string, unknown>>,
+    export: (id: string, format: 'json' | 'csv') => void,  // window.open
   },
   agents: {
-    list: (simId: string, params?: AgentListParams) => Promise<PaginatedResponse<AgentSummary>>,
+    list: (simId: string, params?) => Promise<{ items: AgentSummary[]; total: number }>,
     get: (simId: string, agentId: string) => Promise<AgentDetail>,
-    modify: (simId: string, agentId: string, mod: AgentModification) => Promise<AgentState>,
-    getMemory: (simId: string, agentId: string) => Promise<MemoryRecord[]>,
+    modify: (simId: string, agentId: string, body) => Promise<AgentDetail>,
+    getMemory: (simId: string, agentId: string) => Promise<{ memories: MemoryRecord[] }>,
+  },
+  communities: {
+    list: (simId: string) => Promise<{ communities: CommunityInfo[] }>,
+  },
+  communityThreads: {
+    list: (simId: string, communityId: string) => Promise<{ threads: ThreadSummary[] }>,
+    get: (simId: string, communityId: string, threadId: string) => Promise<ThreadDetail>,
+  },
+  communityTemplates: {
+    list: () => Promise<{ templates: CommunityTemplate[] }>,
+    create: (data: CommunityTemplateInput) => Promise<CommunityTemplate>,
+    update: (id: string, data: CommunityTemplateInput) => Promise<CommunityTemplate>,
+    delete: (id: string) => Promise<void>,
+  },
+  projects: {
+    list: () => Promise<ProjectSummary[]>,
+    get: (id: string) => Promise<ProjectDetail>,
+    create: (data) => Promise<ProjectSummary>,
+    createScenario: (projectId: string, data) => Promise<ScenarioInfo>,
+    runScenario: (projectId: string, scenarioId: string) => Promise<{ simulation_id: string; status: string }>,
+    deleteScenario: (projectId: string, scenarioId: string) => Promise<void>,
+    update: (id: string, data) => Promise<ProjectSummary>,
+    delete: (id: string) => Promise<void>,
   },
   network: {
-    get: (simId: string, format?: NetworkFormat) => Promise<NetworkGraphData>,
+    get: (simId: string) => Promise<CytoscapeGraph>,     // hardcodes ?format=cytoscape
     getMetrics: (simId: string) => Promise<NetworkMetrics>,
   },
   llm: {
     getStats: (simId: string) => Promise<LLMStats>,
-    getCalls: (simId: string, params?: LLMCallParams) => Promise<LLMCallLog[]>,
+    getImpact: (simId: string) => Promise<EngineImpactReport>,
+  },
+  auth: {
+    register: (username: string, password: string) => Promise<{ user_id: string; username: string }>,
+    login: (username: string, password: string) => Promise<{ token: string; user_id: string; username: string }>,
+    me: () => Promise<{ user_id: string; username: string }>,
+  },
+  settings: {
+    get: () => Promise<SettingsResponse>,
+    update: (data: SettingsUpdateRequest) => Promise<{ status: string }>,
+    listOllamaModels: () => Promise<{ models: string[] }>,
+    testOllama: () => Promise<{ status: string; model?: string; latency_ms?: number; message?: string }>,
+    listPlatforms: () => Promise<{ platforms: unknown[] }>,
+    listRecsys: () => Promise<{ algorithms: unknown[] }>,
   },
 }
 ```
@@ -364,63 +495,78 @@ const apiClient = {
 모든 API 호출은 `@tanstack/react-query`의 `useQuery`/`useMutation`을 통해 수행한다.
 직접 `fetch`나 `apiClient` 호출을 컴포넌트에서 하지 않는다.
 
-- `useQuery`: GET 요청 (자동 캐시, 리패치, 로딩/에러 상태)
-- `useMutation`: POST/PATCH/DELETE 요청 (옵티미스틱 업데이트)
-- 모든 데이터 패칭 컴포넌트는 loading spinner + error fallback UI 필수
+---
+
+## 9. TypeScript Types
+
+All backend response types are mirrored in `src/types/` and `src/api/client.ts`:
+
+```typescript
+// src/types/simulation.ts
+export type SimulationStatus = 'created' | 'configured' | 'running' | 'paused' | 'completed' | 'failed';
+export type AgentAction = 'ignore' | 'like' | 'share' | 'adopt' | ...;
+export interface SimulationRun { ... }
+export interface StepResult { ... }
+export interface EmergentEvent { ... }
+export interface CommunityStepMetrics { ... }
+export interface TierDistribution { ... }
+export interface EngineImpactReport { ... }
+
+// src/api/client.ts (co-located interfaces)
+export interface AgentSummary { ... }
+export interface AgentDetail extends AgentSummary { ... }
+export interface CommunityInfo { ... }
+export interface ThreadSummary { ... }
+export interface ThreadDetail { ... }
+export interface ProjectSummary { ... }
+export interface ProjectDetail { ... }
+export interface ScenarioInfo { ... }
+export interface CytoscapeGraph { nodes: [...]; edges: [...] }
+export interface NetworkMetrics { ... }
+export interface RunAllReport { ... }
+export interface SettingsResponse { ... }
+export interface CommunityTemplate { ... }
+```
 
 ---
 
-## 9. Error Specification
+## 10. Error Specification
 
-| Situation | Exception Type | Recovery | User Feedback |
-|-----------|---------------|----------|---------------|
-| WebSocket disconnect | — (auto-reconnect) | Exponential backoff reconnect (1s, 2s, 4s, max 30s); buffer local state | Toast: "Connection lost. Reconnecting..." |
-| WebSocket reconnect after N failures (N=5) | — (give up) | Stop retry, show manual reconnect button | Banner: "Connection failed. Click to retry." |
-| API call HTTP 4xx (client error) | — (display) | Show error detail from RFC 7807 response body | Toast: error `detail` field |
-| API call HTTP 5xx (server error) | — (display) | Show generic error, log full response to console | Toast: "Server error. Please try again." |
-| API call network timeout | — (retry) | Auto-retry once; if fail → show error | Toast: "Request timed out." |
-| Cytoscape render crash (>5000 nodes) | `ErrorBoundary` | Catch in React Error Boundary, show fallback UI | Panel: "Graph too large. Apply filters to reduce nodes." |
-| Invalid simulation config form submit | — (validation) | Block submit, highlight invalid fields | Inline: field-level error messages |
-| Agent inspector receives stale data | — (refetch) | Auto-refetch on panel open; show loading state | Spinner while loading |
-| Zustand store hydration failure | — (reset) | Reset to default state, refetch from API | Toast: "State reset. Refreshing data..." |
-| Browser localStorage quota exceeded | — (graceful) | Skip persistence, continue in-memory only | Console warning (no user toast) |
+| Situation | Recovery | User Feedback |
+|-----------|----------|---------------|
+| WebSocket disconnect | Exponential backoff reconnect (1s–30s, max 5 retries) | Toast: "Connection lost. Reconnecting..." |
+| WebSocket reconnect failure (5x) | Stop retry | Banner: "Connection failed. Click to retry." (TODO) |
+| API call HTTP 4xx | Show error detail from RFC 7807 response | Toast: error `detail` field |
+| API call HTTP 5xx | Show generic error, log to console | Toast: "Server error. Please try again." |
+| Cytoscape render crash | React ErrorBoundary → fallback UI | "Graph too large. Apply filters." |
+| Invalid form submit | Block submit, highlight fields | Inline field-level error messages |
+| Agent inspector stale data | Auto-refetch on panel open | Spinner while loading |
 
 ---
 
-## 9.5. Testing
+## 11. Testing
 
 ### Unit Tests (Vitest)
 - Framework: **Vitest** + **@testing-library/react** + **jsdom**
 - Config: `vite.config.ts` (test section) + `src/test/setup.ts`
 - Run: `npx vitest run`
-- Tests: `src/__tests__/*.test.{ts,tsx}` (145 tests, 13 files)
-- Covers: API client methods, Zustand store actions, component rendering
+- Tests: `src/__tests__/*.test.{ts,tsx}` (180+ tests)
+- Covers: API client methods, Zustand store actions, component rendering, page rendering
 
 ### E2E Tests (Playwright)
 - Framework: **Playwright** (Chromium)
 - Config: `playwright.config.ts`
 - Run: `npx playwright test`
-- Tests: `e2e/*.spec.ts` (26 tests, 3 files)
-- Covers:
-  - All page routes render without errors
-  - Simulation main page 4-zone layout
-  - Phase B modals (InjectEvent, Replay, MonteCarlo, EngineControl)
-  - API lifecycle (create → start → step → list)
-  - Console error detection
-  - Navigation flow
-
-### Test Requirements
-- Requires Docker Compose running (backend + frontend + PostgreSQL)
-- Frontend: `http://localhost:5173`, Backend: `http://localhost:8000`
-- No external data dependencies for default test suite
+- Tests: `e2e/*.spec.ts` (26 tests)
+- Requires Docker Compose (backend + frontend + PostgreSQL)
 
 ---
 
-## 10. Acceptance Criteria
+## 12. Acceptance Criteria
 
 | ID | Test | Expected |
 |----|------|----------|
-| FE-01 | Graph panel renders 1000 nodes without freeze | Frame rate ≥ 30fps |
+| FE-01 | Graph panel renders 1000 nodes without freeze | Frame rate >= 30fps |
 | FE-02 | Step update refreshes graph within 500ms | WebSocket → Cytoscape update |
 | FE-03 | Agent hover shows correct tooltip data | Matches backend AgentState |
 | FE-04 | Play/Pause buttons change simulation status | Backend status matches UI |
@@ -430,3 +576,8 @@ const apiClient = {
 | FE-08 | WebSocket reconnects after disconnect | `connected` returns to true |
 | FE-09 | Community highlight filters graph nodes | Non-selected nodes dimmed |
 | FE-10 | Simulation setup form validates required fields | Submit blocked on invalid input |
+| FE-11 | Inline "New Simulation" creates sim without page navigation | API call + store update |
+| FE-12 | Dark/Light theme toggle works across all pages | CSS variables switch correctly |
+| FE-13 | All sidebar pages render without errors | No console errors |
+| FE-14 | Project CRUD (create/update/delete) works | API integration verified |
+| FE-15 | Community template CRUD works | Templates persist across sessions |

@@ -120,7 +120,7 @@ class TestNetworkGenerationRecovery:
         ])
         network = gen.generate(config, seed=42)
         evolver = NetworkEvolver()
-        updated = evolver.evolve(network, actions=[], step=1)
+        updated = evolver.evolve_step(network, actions=[], step=1)
         assert updated.graph.number_of_edges() == network.graph.number_of_edges()
 
     def test_seed_reuse_deterministic(self):

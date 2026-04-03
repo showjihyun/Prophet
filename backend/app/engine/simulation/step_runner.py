@@ -453,7 +453,7 @@ class StepRunner:
                 aid = data.get("agent_id")
                 if aid is not None:
                     agent_to_node_evolve[aid] = node
-            state.network = self._network_evolver.evolve(
+            state.network = self._network_evolver.evolve_step(
                 state.network,
                 updated_agents,
                 step_num,

@@ -1,5 +1,5 @@
 # 00 — System Architecture
-Version: 0.1.0 | Status: DRAFT
+Version: 0.2.0 | Status: REVIEW
 
 ---
 
@@ -27,9 +27,10 @@ Version: 0.1.0 | Status: DRAFT
 │                          API LAYER (FastAPI)                          │
 │                                                                       │
 │   ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────┐    │
-│   │  /simulations   │  │  /agents        │  │  /campaigns      │    │
+│   │  /simulations   │  │  /agents        │  │  /projects       │    │
 │   │  /steps         │  │  /communities   │  │  /scenarios      │    │
 │   │  /metrics       │  │  /networks      │  │  /llm/dashboard  │    │
+│   │  /auth          │  │  /settings      │  │  /community-tpls │    │
 │   └────────┬────────┘  └────────┬────────┘  └────────┬─────────┘    │
 │            │                    │                     │              │
 │   ┌────────▼────────────────────▼─────────────────────▼─────────┐   │
@@ -162,8 +163,13 @@ Prophet/
 │   │   │   ├── simulations.py
 │   │   │   ├── agents.py
 │   │   │   ├── communities.py
-│   │   │   ├── campaigns.py
-│   │   │   └── ws.py              # WebSocket
+│   │   │   ├── projects.py            # Project/Scenario CRUD
+│   │   │   ├── auth.py                # JWT authentication (/api/v1/auth/*)
+│   │   │   ├── community_templates.py # Community template CRUD
+│   │   │   ├── llm_dashboard.py       # LLM stats/impact endpoints
+│   │   │   ├── settings.py            # Settings management
+│   │   │   └── ws.py                  # WebSocket
+│   │   │   # NOTE: api/campaigns.py does NOT exist — campaign data is part of simulation config
 │   │   │
 │   │   ├── engine/                # Core simulation engines
 │   │   │   ├── agent/
@@ -173,7 +179,14 @@ Prophet/
 │   │   │   │   ├── emotion_model.py
 │   │   │   │   ├── cognition_engine.py
 │   │   │   │   ├── decision_model.py
-│   │   │   │   └── influence_model.py
+│   │   │   │   ├── influence_model.py
+│   │   │   │   ├── drift.py           # Personality drift module
+│   │   │   │   ├── expert_engine.py   # Expert-specific agent engine
+│   │   │   │   ├── interview.py       # Agent interviewer
+│   │   │   │   ├── group_chat.py      # Group chat manager
+│   │   │   │   ├── tick.py            # Agent tick logic
+│   │   │   │   ├── tier_selector.py   # Tier selection
+│   │   │   │   └── schema.py          # Agent data schemas
 │   │   │   │
 │   │   │   ├── network/
 │   │   │   │   ├── generator.py
@@ -187,11 +200,20 @@ Prophet/
 │   │   │   │   ├── cascade_detector.py
 │   │   │   │   └── sentiment_model.py
 │   │   │   │
+│   │   │   ├── platform/              # Platform plugin directory
+│   │   │   │
 │   │   │   └── simulation/
 │   │   │       ├── orchestrator.py
 │   │   │       ├── step_runner.py
 │   │   │       ├── metric_collector.py
-│   │   │       └── monte_carlo.py
+│   │   │       ├── monte_carlo.py
+│   │   │       ├── community_orchestrator.py  # Per-community tick orchestration
+│   │   │       ├── distributed.py             # Distributed simulation support
+│   │   │       ├── env_wrapper.py             # Environment wrapper
+│   │   │       ├── event_activation.py        # Event activation logic
+│   │   │       ├── persistence.py             # DB persistence (fire-and-forget)
+│   │   │       ├── benchmark.py               # Performance benchmarking
+│   │   │       └── exceptions.py              # Simulation-specific exceptions
 │   │   │
 │   │   ├── llm/
 │   │   │   ├── adapter.py         # LLMAdapter interface
@@ -199,14 +221,23 @@ Prophet/
 │   │   │   ├── claude_client.py
 │   │   │   ├── openai_client.py
 │   │   │   ├── prompt_builder.py
-│   │   │   └── cache.py           # Valkey-backed LLM cache
+│   │   │   ├── cache.py           # Valkey-backed LLM cache
+│   │   │   ├── gateway.py         # Central LLM call manager with 3-tier cache
+│   │   │   ├── vllm_client.py     # vLLM distributed inference adapter
+│   │   │   ├── engine_control.py  # Engine controller
+│   │   │   ├── quota.py           # LLM quota management
+│   │   │   ├── registry.py        # Adapter registry
+│   │   │   └── schema.py          # LLM data schemas
 │   │   │
 │   │   └── models/                # SQLAlchemy ORM models
-│   │       ├── simulation.py
-│   │       ├── agent.py
+│   │       ├── simulation.py      # Simulation, SimStep, SimulationEvent
+│   │       ├── agent.py           # Agent, AgentState
 │   │       ├── community.py
 │   │       ├── campaign.py
-│   │       └── memory.py          # pgvector memory model
+│   │       ├── network.py         # NetworkEdge
+│   │       ├── propagation.py     # EmergentEvent, LLMCall, ExpertOpinion, MonteCarloRun
+│   │       ├── project.py         # Project, Scenario
+│   │       └── memory.py          # AgentMemory (pgvector)
 │   │
 │   ├── harness/                   # F18–F30 test harness
 │   │   ├── fixtures/
@@ -223,16 +254,48 @@ Prophet/
     │   ├── pages/
     │   │   ├── SimulationPage.tsx
     │   │   ├── CampaignSetupPage.tsx
-    │   │   └── AnalyticsPage.tsx
+    │   │   ├── ProjectsListPage.tsx
+    │   │   ├── ProjectScenariosPage.tsx
+    │   │   ├── CommunitiesDetailPage.tsx
+    │   │   ├── CommunityManagePage.tsx
+    │   │   ├── TopInfluencersPage.tsx
+    │   │   ├── AgentDetailPage.tsx
+    │   │   ├── GlobalMetricsPage.tsx
+    │   │   ├── ScenarioOpinionsPage.tsx
+    │   │   ├── CommunityOpinionPage.tsx
+    │   │   ├── ConversationThreadPage.tsx
+    │   │   ├── SettingsPage.tsx
+    │   │   ├── LoginPage.tsx
+    │   │   ├── AnalyticsPage.tsx
+    │   │   └── ComparisonPage.tsx
     │   │
     │   ├── components/
     │   │   ├── graph/
     │   │   │   ├── GraphPanel.tsx
+    │   │   │   ├── CommunityPanel.tsx
+    │   │   │   ├── MetricsPanel.tsx
+    │   │   │   ├── EgoGraph.tsx
     │   │   │   └── AgentNode.tsx
     │   │   ├── timeline/
     │   │   │   └── TimelinePanel.tsx
     │   │   ├── control/
-    │   │   │   └── ControlPanel.tsx
+    │   │   │   ├── ControlPanel.tsx
+    │   │   │   ├── ConversationPanel.tsx
+    │   │   │   └── EngineControlPanel.tsx
+    │   │   ├── agent/
+    │   │   │   └── AgentInspector.tsx
+    │   │   ├── shared/
+    │   │   │   ├── AppSidebar.tsx
+    │   │   │   ├── AgentInterveneModal.tsx
+    │   │   │   ├── InfluencersFilter.tsx
+    │   │   │   ├── InjectEventModal.tsx
+    │   │   │   ├── MonteCarloModal.tsx
+    │   │   │   ├── ReplayModal.tsx
+    │   │   │   ├── SimulationReportModal.tsx
+    │   │   │   ├── PageNav.tsx
+    │   │   │   ├── StatCard.tsx
+    │   │   │   ├── ThemeToggle.tsx
+    │   │   │   └── ToastNotification.tsx
     │   │   └── llm/
     │   │       └── LLMDashboard.tsx
     │   │

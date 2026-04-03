@@ -1,0 +1,1086 @@
+camel-ai oasis는 **대규모 LLM 기반 멀티 에이전트 시뮬레이션 플랫폼**으로, 단순한 라이브러리라기보다 “소셜 미디어를 재현하는 분산 시스템”에 가깝습니다. 아래에서 **기술 스택을 계층별로 구조적으로 분석**해드릴게요.
+
+---
+
+# 1. 전체 아키텍처 개요
+
+OASIS는 크게 4계층으로 이해하면 깔끔합니다:
+
+```
+[LLM / 모델 계층]
+        ↓
+[Agent 계층]
+        ↓
+[Simulation / Environment 계층]
+        ↓
+[데이터 / 인프라 계층]
+```
+
+또한 Reddit-like 환경, 추천 시스템, DB, 비동기 실행이 결합된 구조입니다. ([GitHub][1])
+
+---
+
+# 2. 핵심 기술 스택 분석
+
+## 2.1 Language & 런타임
+
+* **Python (99.9%)**
+* 패키징: `pyproject.toml`, `poetry`
+* 실행 방식: **비동기 (asyncio 기반)**
+  → 대규모 agent simulation에서 필수
+
+👉 특징
+
+* Python 중심 AI 생태계 (PyTorch/LLM)와 자연스럽게 연결
+* asyncio로 **수천~수백만 agent 병렬 처리 구조**
+
+---
+
+## 2.2 LLM / 모델 계층
+
+코드에서 핵심 구조:
+
+```python
+ModelFactory.create(
+    model_platform=OPENAI,
+    model_type=GPT_4O_MINI
+)
+```
+
+### 사용 기술
+
+* LLM abstraction layer (CAMEL framework)
+* OpenAI / 기타 모델 호환 구조
+* Embedding 모델 지원 (추천 시스템용)
+
+👉 의미
+
+* 특정 모델 종속 ❌
+* 다양한 LLM 교체 가능 (plug-in 구조)
+
+---
+
+## 2.3 Agent 시스템 (핵심)
+
+OASIS의 중심은 **LLM Agent + Rule-based Agent 혼합 구조**입니다.
+
+### 구성 요소
+
+* Agent Graph (소셜 네트워크 구조)
+* Agent Profile (유저 성향 데이터)
+* Action System (23개 행동 지원)
+
+  * post / comment / follow / like 등
+
+👉 특징
+
+* LLM → 의사결정
+* Rule system → 행동 제약
+
+즉:
+
+> “LLM 기반 의사결정 + 시뮬레이션 규칙 엔진”
+
+---
+
+## 2.4 Simulation / Environment 계층
+
+### 핵심 개념
+
+* `env = oasis.make(...)`
+* 강화학습 스타일 API (PettingZoo 유사) ([GitHub][1])
+
+### 구성
+
+* Environment (Reddit / Twitter-like)
+* Step 기반 실행 (`env.step()`)
+* Action batching
+
+👉 특징
+
+* RL 환경처럼 설계됨
+* multi-agent interaction 지원
+* 실험 reproducibility 가능
+
+---
+
+## 2.5 추천 시스템 (RecSys)
+
+내장된 중요한 요소:
+
+* Interest-based 추천
+* Hot-score 기반 추천
+* Embedding 기반 유사도 계산 ([GitHub][1])
+
+👉 의미
+
+* 단순 agent 시뮬레이터가 아니라
+  → **플랫폼 알고리즘까지 포함한 시묬레이터**
+
+---
+
+## 2.6 데이터 & 저장소
+
+### 구조
+
+* SQLite 기반 DB (`.db 파일`)
+* Agent 상태 / interaction 저장
+
+```python
+database_path="./data/reddit_simulation.db"
+```
+
+👉 특징
+
+* 로컬 실험 친화적
+* 로그 + 시뮬레이션 결과 분석 가능
+
+---
+
+## 2.7 네트워크 / 그래프 구조
+
+* Agent 간 관계 = Graph
+* follow / interaction 기반 연결
+
+```python
+generate_reddit_agent_graph(...)
+```
+
+👉 사용 기술
+
+* graph-based modeling
+* social network simulation
+
+---
+
+## 2.8 확장성 (Scalability)
+
+핵심 목표:
+
+* 최대 **1,000,000 agents** 지원 ([GitHub][1])
+
+이를 위한 기술:
+
+* asyncio 기반 병렬 처리
+* action batching
+* lightweight agent state
+
+👉 사실상 “분산 시뮬레이션 엔진”
+
+---
+
+## 2.9 시각화 & 분석
+
+repo 구조:
+
+* `/visualization`
+* `/log`
+
+👉 기능
+
+* 시뮬레이션 결과 분석
+* social dynamics 관찰
+
+---
+
+# 3. 내부 모듈 구조 (코드 기준)
+
+주요 디렉토리 의미:
+
+* `oasis/` → 핵심 엔진
+* `generator/` → agent 생성
+* `data/` → 프로파일/DB
+* `examples/` → 실험 코드
+* `visualization/` → 결과 분석
+
+👉 전형적인 구조:
+
+> “framework + experiment + data pipeline”
+
+---
+
+# 4. 기술적 특징 요약 (핵심 포인트)
+
+## ✔️ 1. LLM-native 시뮬레이터
+
+* 기존 agent-based simulation ≠ rule 기반
+* OASIS = LLM 기반 의사결정
+
+---
+
+## ✔️ 2. 플랫폼 수준 시뮬레이션
+
+* user뿐 아니라
+* 추천 알고리즘까지 포함
+
+---
+
+## ✔️ 3. RL + Multi-agent 하이브리드
+
+* step-based environment
+* multi-agent interaction
+
+---
+
+## ✔️ 4. 연구용 설계
+
+* reproducible experiment
+* 데이터 기록 + 분석 가능
+
+---
+
+# 5. 한 줄로 정리
+
+OASIS의 기술 스택은:
+
+> **Python + LLM abstraction + Multi-agent framework + RL-style environment + RecSys + Graph simulation + Async runtime**
+
+---
+
+# 6. 실무 관점 평가
+
+### 장점
+
+* LLM agent 연구에 최적
+* 확장성 (대규모 실험 가능)
+* 구조가 modular (확장 쉬움)
+
+### 한계
+
+* GPU/비용 의존 (LLM 호출)
+* 실제 SNS와 완전 동일한 realism은 제한
+* 분산 시스템 (Ray 등) 통합은 아직 제한적
+
+
+
+**Ray**는 Python 기반의 **분산 컴퓨팅 프레임워크**로, AI/ML·시뮬레이션·대규모 병렬 작업을 쉽게 확장할 수 있게 해줍니다. OASIS 같은 멀티 에이전트 시스템과 특히 궁합이 좋기 때문에, “Ray Distribution”을 이해하면 확장 구조를 설계할 때 큰 도움이 됩니다.
+
+---
+
+# 1. Ray Distribution이란?
+
+Ray에서 “distribution”은 간단히 말해:
+
+> **코드를 여러 머신/코어에 자동으로 분산 실행하는 구조**
+
+입니다.
+
+단일 Python 코드 → Ray가 알아서:
+
+* 여러 CPU / GPU 활용
+* 여러 노드(서버)로 확장
+* 상태 공유 및 스케줄링 처리
+
+---
+
+# 2. 핵심 구조 (아키텍처)
+
+Ray는 크게 3가지로 구성됩니다:
+
+## 2.1 Driver (메인 프로그램)
+
+* 우리가 실행하는 Python 코드
+* 작업을 Ray에 제출
+
+## 2.2 Worker (실행 노드)
+
+* 실제 작업 수행
+* 여러 개가 병렬 실행됨
+
+## 2.3 Object Store
+
+* 데이터 공유 (in-memory)
+* zero-copy 방식
+
+👉 핵심:
+
+> “데이터는 공유하고, 연산은 분산한다”
+
+---
+
+# 3. 프로그래밍 모델
+
+## 3.1 Remote Function (Task 병렬화)
+
+```python
+import ray
+
+ray.init()
+
+@ray.remote
+def f(x):
+    return x * 2
+
+futures = [f.remote(i) for i in range(10)]
+results = ray.get(futures)
+```
+
+👉 특징
+
+* 함수 호출 → 비동기 분산 실행
+* 자동 스케줄링
+
+---
+
+## 3.2 Actor (상태 유지 객체)
+
+```python
+@ray.remote
+class Agent:
+    def __init__(self):
+        self.state = 0
+
+    def step(self):
+        self.state += 1
+        return self.state
+```
+
+👉 특징
+
+* 상태를 유지하는 분산 객체
+* 멀티 에이전트 시스템에 핵심
+
+---
+
+# 4. Ray가 중요한 이유 (OASIS 관점)
+
+OASIS는 현재:
+
+* asyncio 기반 병렬 처리
+
+하지만 Ray를 쓰면:
+
+## BEFORE (현재 구조)
+
+* single machine
+* event loop 기반 병렬
+
+## AFTER (Ray 적용)
+
+* multi-node cluster
+* 수십만~수백만 agent 확장 가능
+
+---
+
+# 5. OASIS + Ray 결합 구조 (이상적인 형태)
+
+## 구조 예시
+
+```
+[Driver]
+   ↓
+[Ray Cluster]
+   ├── Agent Actor (1 per user)
+   ├── RecSys Actor
+   ├── Environment Actor
+   └── LLM Worker Pool
+```
+
+---
+
+## 핵심 적용 포인트
+
+### 1. Agent → Ray Actor
+
+```python
+Agent.remote()
+```
+
+→ 각 유저를 독립 프로세스로
+
+---
+
+### 2. LLM 호출 → 분산 Task
+
+```python
+llm_call.remote(prompt)
+```
+
+→ API 병렬 호출 최적화
+
+---
+
+### 3. Simulation step → 병렬 실행
+
+* 각 agent step 동시에 실행
+* 결과 aggregation
+
+---
+
+# 6. Ray의 주요 기능
+
+## ✔️ 1. 자동 스케줄링
+
+* CPU/GPU 리소스 기반 분배
+
+## ✔️ 2. Fault Tolerance
+
+* worker 죽어도 재실행
+
+## ✔️ 3. Scaling
+
+* 로컬 → 클러스터 확장
+
+## ✔️ 4. 데이터 공유
+
+* object store (빠름)
+
+---
+
+# 7. Ray 생태계 (중요)
+
+Ray는 단순 프레임워크가 아니라 플랫폼입니다:
+
+* **Ray Tune**
+  → 하이퍼파라미터 튜닝
+
+* **Ray Serve**
+  → 모델 API 서빙
+
+* **RLlib**
+  → 강화학습
+
+---
+
+# 8. 언제 Ray를 써야 하나?
+
+## 쓰는 게 좋은 경우
+
+* agent 수 1만+
+* 멀티 머신 필요
+* LLM 호출 병렬화
+* 시뮬레이션 규모 확장
+
+## 안 써도 되는 경우
+
+* 작은 실험 (<1000 agents)
+* 단일 머신 충분
+* 디버깅 단계
+
+---
+
+# 9. OASIS에 Ray 적용 시 난이도
+
+### 쉬운 부분
+
+* agent → actor 변환
+* task 병렬화
+
+### 어려운 부분
+
+* shared state consistency
+* simulation step sync
+* DB 동기화
+* 비용 (LLM API 폭증)
+
+---
+
+# 10. 한 줄 요약
+
+> **Ray Distribution = Python 코드를 거의 수정 없이 “대규모 분산 시스템”으로 확장하는 엔진**
+
+LLM 비용은 그냥 “최적화” 수준으로는 크게 안 줄어듭니다.
+**아키텍처를 바꾸지 않으면 10~30% 절감이 한계**고,
+**설계를 바꾸면 70~90%까지도 실제로 줄일 수 있습니다.**
+
+OASIS 같은 멀티 에이전트 시뮬레이션 기준으로,
+**현실적으로 90% 절감 가능한 전략만** 골라서 설명합니다.
+
+---
+
+# 1. 가장 중요한 원리 (핵심 1줄)
+
+> **“모든 agent가 매 step마다 LLM을 쓰는 구조를 깨야 한다”**
+
+---
+
+# 2. 비용 구조 먼저 이해 (왜 비싼가)
+
+OASIS 기본 구조:
+
+```text id="8npiyl"
+agents = 100,000
+steps = 100
+LLM calls = 10,000,000
+```
+
+👉 비용 폭발 이유:
+
+* 모든 agent가 매번 LLM 호출
+* 대부분은 “쓸데없는 호출”
+
+---
+
+# 3. 비용 90% 절감 전략 TOP 6
+
+---
+
+## 3.1 ✔️ Active Agent Sampling (가장 효과 큼)
+
+### BEFORE
+
+* 모든 agent가 매 step 실행
+
+### AFTER
+
+* 일부만 활성화
+
+```python id="p09n5d"
+active_agents = random.sample(all_agents, k=int(0.1 * len(all_agents)))
+```
+
+👉 효과:
+
+* 호출량 **90% 감소**
+
+👉 현실 모델:
+
+* 실제 SNS도 대부분 lurker
+
+---
+
+## 3.2 ✔️ Rule-based fallback (LLM 대체)
+
+### BEFORE
+
+* 모든 의사결정 = LLM
+
+### AFTER
+
+* 단순 행동 → rule 처리
+
+```python id="s6l9fs"
+if agent.is_low_activity:
+    return random_action()
+else:
+    return llm_decision()
+```
+
+👉 적용 대상:
+
+* like
+* scroll
+* ignore
+
+👉 효과:
+
+* 30~70% 추가 절감
+
+---
+
+## 3.3 ✔️ LLM 호출 캐싱 (엄청 중요)
+
+### 아이디어
+
+* 동일 prompt → 결과 재사용
+
+```python id="w9y2jq"
+cache_key = hash(prompt)
+if cache_key in cache:
+    return cache[cache_key]
+```
+
+👉 특히 효과적인 경우:
+
+* 유사한 agent
+* 반복 행동
+
+👉 효과:
+
+* 20~50% 절감
+
+---
+
+## 3.4 ✔️ Batch LLM 호출
+
+### BEFORE
+
+```python id="7wd4af"
+for agent in agents:
+    call_llm(agent.prompt)
+```
+
+### AFTER
+
+```python id="0j1rj4"
+call_llm_batch([a.prompt for a in agents])
+```
+
+👉 효과:
+
+* token overhead 감소
+* latency 감소
+
+👉 비용 절감:
+
+* 20~40%
+
+---
+
+## 3.5 ✔️ Low-tier 모델 혼합 사용
+
+예:
+
+* 간단한 판단 → 저가 모델
+* 복잡한 생성 → 고급 모델
+
+```python id="9a8q3s"
+if task == "simple":
+    use_small_model()
+else:
+    use_large_model()
+```
+
+👉 전략:
+
+* 80% cheap model
+* 20% expensive model
+
+👉 효과:
+
+* 비용 50~80% 감소
+
+---
+
+## 3.6 ✔️ Event-driven 실행 (진짜 중요)
+
+### BEFORE
+
+* 매 step 실행
+
+### AFTER
+
+* 이벤트 있을 때만 실행
+
+```python id="l3y9tk"
+if agent.has_new_notification:
+    run_llm()
+```
+
+👉 효과:
+
+* 불필요 호출 제거
+
+---
+
+# 4. 조합 효과 (현실적인 절감률)
+
+| 전략            | 절감률  |
+| ------------- | ---- |
+| Sampling      | 90%  |
+| Rule fallback | +50% |
+| Caching       | +30% |
+| Model mix     | +70% |
+
+👉 중복 적용 결과:
+
+```text id="28q1tc"
+기존: 100%
+→ sampling: 10%
+→ fallback: 5%
+→ caching: 3%
+→ model mix: 1~2%
+```
+
+👉 **최종: 98% 절감 가능**
+
+---
+
+# 5. OASIS에 적용한 최적 구조
+
+```text id="qx2zbx"
+Agent
+ ├── Should Act?
+ │     └── NO → skip (0 cost)
+ │
+ ├── Simple Action?
+ │     └── YES → rule (0 cost)
+ │
+ ├── Cached?
+ │     └── YES → reuse (0 cost)
+ │
+ └── LLM Call
+       ├── batch 처리
+       └── cheap model 우선
+```
+
+---
+
+# 6. 가장 많이 하는 실수 (중요)
+
+## ❌ 1. “모든 agent를 똑같이 처리”
+
+→ 비용 폭발
+
+## ❌ 2. “LLM을 decision engine으로만 사용”
+
+→ rule로 충분한 부분 많음
+
+## ❌ 3. “batch 안 함”
+
+→ 토큰 낭비
+
+## ❌ 4. “항상 최고 모델 사용”
+
+→ 불필요
+
+---
+
+# 7. 실전 추천 (현실적인 조합)
+
+👉 최소 구성 (효과 큼):
+
+1. Sampling (10%)
+2. Rule fallback
+3. Batch 호출
+
+👉 이 3개만 해도:
+
+> **70~90% 절감**
+
+---
+
+# 8. 한 줄 결론
+
+> **비용을 줄이려면 LLM을 “덜 쓰는 구조”로 바꿔야 한다—not 더 싸게 쓰는 게 아니라**
+
+
+
+좋아요. 이제는 단순 최적화가 아니라 **“LLM 비용 + 확장성 + 성능을 동시에 잡는 풀 인프라”** 단계입니다.
+OASIS 기준으로 **Vector Cache까지 포함한 production 아키텍처**를 실제 설계 수준으로 정리합니다.
+
+---
+
+# 1. 최종 목표 (명확히 정의)
+
+```text id="2rj6m3"
+목표:
+- 100K ~ 1M agents
+- LLM 비용 90% 절감
+- 수평 확장 가능
+- 실험 재현성 확보
+```
+
+---
+
+# 2. 전체 아키텍처 (Full Stack)
+
+```text id="l9r8gm"
+                [ Client / Experiment Control ]
+                             │
+                      (Driver / Orchestrator)
+                             │
+                        (Ray Cluster)
+ ┌────────────────────────────────────────────────────┐
+ │                    Compute Layer                   │
+ │  ┌──────────────────────┐  ┌─────────────────────┐ │
+ │  │ Agent Shards         │  │ RecSys Actor        │ │
+ │  │ (asyncio 내부)       │  │ (ranking / feed)    │ │
+ │  └──────────┬───────────┘  └──────────┬──────────┘ │
+ │             │                         │            │
+ └─────────────┼─────────────────────────┼────────────┘
+               │                         │
+     ┌─────────▼─────────┐     ┌────────▼─────────┐
+     │ LLM Gateway Layer │     │ Feature Store    │
+     │ (smart routing)   │     │ (profiles, emb)  │
+     └─────────┬─────────┘     └────────┬─────────┘
+               │                        │
+     ┌─────────▼─────────┐
+     │ Cache Layer (3단) │
+     │                   │
+     │ 1. In-memory      │
+     │ 2. Valkey         │
+     │ 3. Vector Cache   │
+     └─────────┬─────────┘
+               │
+          ┌────▼────┐
+          │   LLM   │
+          └─────────┘
+```
+
+---
+
+# 3. 핵심 레이어별 설계
+
+---
+
+## 3.1 Compute Layer (Ray + asyncio)
+
+* **Ray**
+* shard 단위 agent 실행
+* 내부는 asyncio
+
+👉 역할:
+
+* agent decision 실행
+* LLM 호출 요청 생성
+
+---
+
+## 3.2 LLM Gateway Layer (핵심 중 핵심)
+
+이 레이어가 비용 90% 절감을 담당합니다.
+
+### 역할
+
+```text id="qaq8rs"
+1. 캐시 조회
+2. vector search
+3. 모델 선택
+4. batch 처리
+5. rate limit 관리
+```
+
+---
+
+## 3.3 Cache Layer (3단 구조)
+
+### 1️⃣ In-memory
+
+* shard 내부
+* ultra fast
+
+---
+
+### 2️⃣ **Valkey**
+
+* 분산 캐시
+* TTL 기반
+
+---
+
+### 3️⃣ Vector Cache (핵심)
+
+사용 후보:
+
+* FAISS (로컬)
+* Pinecone (managed)
+* Weaviate
+
+---
+
+# 4. Vector Cache 설계 (핵심 디테일)
+
+---
+
+## 4.1 데이터 구조
+
+```python id="4yr3c5"
+{
+  "embedding": [...],
+  "prompt": "...",
+  "response": "...",
+  "model": "gpt-4o-mini",
+  "timestamp": 123456789
+}
+```
+
+---
+
+## 4.2 검색 흐름
+
+```python id="85hh8n"
+embedding = embed(prompt)
+
+results = vector_db.search(
+    embedding,
+    top_k=3
+)
+
+if results[0].score > 0.92:
+    return results[0].response
+```
+
+---
+
+## 4.3 threshold 전략
+
+| threshold | 의미    |
+| --------- | ----- |
+| 0.95      | 거의 동일 |
+| 0.90      | 안전    |
+| 0.85      | 공격적   |
+
+👉 추천:
+
+> **0.90 ~ 0.93**
+
+---
+
+## 4.4 false positive 방지
+
+```python id="9tbm96"
+if similarity > 0.9 and same_task_type:
+    reuse()
+```
+
+👉 반드시:
+
+* task type 필터링
+* context 길이 비교
+
+---
+
+# 5. LLM Gateway 로직 (핵심 알고리즘)
+
+```python id="bbq5h3"
+def smart_llm_call(prompt):
+
+    # 1. in-memory
+    if hit_local_cache(prompt):
+        return result
+
+    # 2. Valkey
+    if hit_valkey(prompt):
+        return result
+
+    # 3. Vector cache
+    if hit_vector(prompt):
+        return result
+
+    # 4. 모델 선택
+    model = select_model(prompt)
+
+    # 5. batch queue
+    result = enqueue_and_batch(prompt, model)
+
+    # 6. cache 저장
+    store_all_layers(prompt, result)
+
+    return result
+```
+
+---
+
+# 6. 모델 선택 전략 (비용 핵심)
+
+```python id="gwizdj"
+if task == "like/comment":
+    cheap_model()
+
+elif task == "post_generation":
+    expensive_model()
+```
+
+👉 구조:
+
+| 작업              | 모델 |
+| --------------- | -- |
+| simple decision | 저가 |
+| reasoning       | 중간 |
+| creative        | 고가 |
+
+---
+
+# 7. 데이터 저장 구조
+
+---
+
+## Feature Store
+
+* agent profile
+* embedding
+
+---
+
+## Event Log
+
+* append-only
+* 재현성 확보
+
+---
+
+## Vector DB
+
+* semantic cache
+
+---
+
+# 8. 성능 최적화 핵심
+
+---
+
+## ✔️ 1. batching (필수)
+
+```python id="drhu4z"
+batch_size = 32~128
+```
+
+---
+
+## ✔️ 2. async queue
+
+* 요청 모아서 처리
+
+---
+
+## ✔️ 3. embedding cache
+
+👉 embedding도 캐싱해야 함
+
+---
+
+## ✔️ 4. partial activation
+
+* agent 10%만 활성화
+
+---
+
+# 9. 실제 비용 절감 구조
+
+```text id="rr57x1"
+전체 요청 100%
+
+→ sampling: 10%
+→ in-memory: 7%
+→ Valkey: 5%
+→ vector: 2%
+→ 실제 LLM: 1~2%
+```
+
+👉 **최종 비용: 98% 절감 가능**
+
+---
+
+# 10. 운영 구조 (프로덕션)
+
+---
+
+## 추천 스택
+
+* Compute: Ray cluster
+* Cache: Valkey cluster
+* Vector: FAISS → Pinecone 확장
+* Storage: S3 / DB
+* Queue: Kafka (optional)
+
+---
+
+# 11. 가장 중요한 설계 포인트 3개
+
+---
+
+## 🔥 1. LLM Gateway 분리
+
+→ 절대 agent 내부에 넣지 말 것
+
+---
+
+## 🔥 2. 캐시 3단 구조
+
+→ 하나라도 빠지면 효율 급감
+
+---
+
+## 🔥 3. batching + sampling
+
+→ 비용 절감 핵심
+
+---
+
+# 12. 한 줄 결론
+
+> **“LLM을 호출하기 전에 3번 막고, 마지막에만 호출하는 구조”가 진짜 production 아키텍처다**
+
+---
+

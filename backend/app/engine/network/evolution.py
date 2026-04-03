@@ -18,7 +18,7 @@ class NetworkEvolver:
     def __init__(self, config: EvolutionConfig | None = None) -> None:
         self.config = config or EvolutionConfig()
 
-    def evolve(
+    def evolve_step(
         self,
         network: SocialNetwork,
         actions: list[Any],

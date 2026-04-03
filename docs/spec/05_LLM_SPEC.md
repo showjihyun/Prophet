@@ -1,5 +1,5 @@
 # 05 — LLM Integration SPEC
-Version: 0.1.1 | Status: DRAFT
+Version: 0.2.0 | Status: REVIEW
 
 ---
 
@@ -243,12 +243,27 @@ class LLMAdapterRegistry:
     async def get_healthy(self) -> LLMAdapter:
         """
         Returns first healthy provider from priority list:
-        [ollama, claude, openai]
+        [ollama, vllm, claude, openai]
         Used for fallback when primary is unavailable.
         """
 
     def get_slm(self) -> SLMBatchInferencer:
         """Returns the Tier 1 SLM batch inferencer (always local Ollama)."""
+
+    def register_adapter(self, adapter: LLMAdapter) -> None:
+        """Register a new adapter instance by its provider_name."""
+
+    async def evaluate(self, prompt: LLMPrompt, options: LLMOptions) -> LLMResponse:
+        """Full tier-fallback chain convenience method."""
+
+    async def embed(self, text: str) -> list[float]:
+        """Embedding via registry (delegates to default adapter)."""
+```
+
+### Provider Fallback Priority
+
+```python
+_PROVIDER_PRIORITY = ["ollama", "vllm", "claude", "openai"]
 ```
 
 ---
@@ -349,6 +364,58 @@ class LLMResponseCache:
     async def invalidate_simulation(self, simulation_id: UUID) -> None:
         """Clear all cache entries for a simulation (e.g., on agent modification)."""
 ```
+
+### 6.2 Multi-tier Cache (LLMGateway)
+
+```python
+# backend/app/llm/gateway.py
+class LLMGateway:
+    """Central LLM call manager with 3-tier cache + smart routing.
+    @spec docs/spec/platform/14_LLM_GATEWAY_SPEC.md
+    """
+
+class InMemoryLLMCache:
+    """L1 cache: in-memory LRU. Fastest, volatile."""
+
+class VectorLLMCache:
+    """L2 cache: pgvector semantic similarity. Matches similar (not identical) prompts."""
+```
+
+Cache lookup order: L1 (InMemoryLLMCache) → L2 (VectorLLMCache) → L3 (LLMResponseCache/Valkey)
+
+---
+
+### 6.3 vLLM Adapter
+
+```python
+# backend/app/llm/vllm_client.py
+class VLLMAdapter(LLMAdapter):
+    """vLLM distributed inference adapter.
+    provider_name = "vllm"
+    Used for high-throughput inference with GPU clusters.
+    @spec docs/spec/platform/13_SCALE_VALIDATION_SPEC.md
+    """
+```
+
+---
+
+### 6.4 File Layout
+
+| File | Class | Purpose |
+|------|-------|---------|
+| `adapter.py` | `LLMAdapter` (ABC) | Base interface |
+| `ollama_client.py` | `OllamaAdapter` | Local Ollama |
+| `claude_client.py` | `ClaudeAdapter` | Anthropic Claude API |
+| `openai_client.py` | `OpenAIAdapter` | OpenAI API |
+| `vllm_client.py` | `VLLMAdapter` | vLLM distributed inference |
+| `gateway.py` | `LLMGateway`, `InMemoryLLMCache`, `VectorLLMCache` | Central call manager |
+| `registry.py` | `LLMAdapterRegistry` | Provider registry + fallback |
+| `cache.py` | `LLMResponseCache` | Valkey-backed L3 cache |
+| `prompt_builder.py` | `PromptBuilder` | Agent cognition prompts |
+| `slm_batch.py` | `SLMBatchInferencer` | Tier 1 batch inference |
+| `engine_control.py` | `EngineController` | Tier distribution + impact assessment |
+| `quota.py` | `LLMQuotaManager` | Rate limiting + budget enforcement |
+| `schema.py` | Various dataclasses | `LLMPrompt`, `LLMOptions`, `LLMResponse`, `TierDistribution`, `EngineImpactReport` |
 
 ---
 

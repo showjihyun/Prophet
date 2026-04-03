@@ -1,5 +1,5 @@
 # 06 — FastAPI Endpoint SPEC
-Version: 0.1.0 | Status: DRAFT
+Version: 0.2.0 | Status: REVIEW
 
 ---
 
@@ -8,9 +8,15 @@ Version: 0.1.0 | Status: DRAFT
 ```
 Base URL: http://localhost:8000/api/v1
 WebSocket: ws://localhost:8000/ws
+Health:    http://localhost:8000/health
 ```
 
 All endpoints return JSON. Errors follow RFC 7807 Problem Details format.
+
+### Authentication
+
+All endpoints except `/auth/*` and `/health` accept an optional `Authorization: Bearer <token>` header.
+In development mode, authentication is optional. In production, unauthenticated requests return 401.
 
 ---
 
@@ -51,7 +57,11 @@ Create a new simulation run.
   ],
   "max_steps": 50,
   "default_llm_provider": "ollama",
-  "random_seed": 42
+  "random_seed": 42,
+  "project_id": "uuid (optional)",
+  "slm_llm_ratio": 0.5,
+  "slm_model": "phi4",
+  "budget_usd": 50.0
 }
 ```
 
@@ -133,7 +143,13 @@ Get step history.
       "adoption_rate": 0.03,
       "mean_sentiment": 0.21,
       "diffusion_rate": 12,
-      "emergent_events": []
+      "emergent_events": [],
+      "total_adoption": 30,
+      "sentiment_variance": 0.08,
+      "community_metrics": {},
+      "action_distribution": {},
+      "llm_calls_this_step": 5,
+      "step_duration_ms": 287
     }
   ]
 }
@@ -181,6 +197,8 @@ Run Monte Carlo analysis.
 ```
 
 **Response 202:** `{ "job_id": "uuid", "status": "queued" }`
+
+> **구현 참고:** 현재 Monte Carlo는 `asyncio.create_task` (in-process)로 실행됨. Celery + Valkey 큐 통합은 Scale Phase에서 예정.
 
 ---
 
@@ -291,6 +309,65 @@ Budget-based auto engine recommendation (Prophet-unique feature).
 
 ---
 
+### POST /simulations/{simulation_id}/run-all
+Run all remaining steps to completion and return summary report.
+
+**Response 200:**
+```json
+{
+  "simulation_id": "uuid",
+  "status": "completed",
+  "total_steps": 50,
+  "final_adoption_rate": 0.72,
+  "final_mean_sentiment": 0.58,
+  "community_summary": [],
+  "emergent_events_count": 3,
+  "duration_ms": 14320
+}
+```
+
+---
+
+### GET /simulations/{simulation_id}/export
+Export simulation data as JSON or CSV.
+
+**Query params:** `format` (`json` | `csv`, default `json`)
+
+**Response:** File download with `Content-Disposition` header.
+
+---
+
+### POST /simulations/{simulation_id}/group-chat
+Create a group chat session between agents.
+
+**Request:**
+```json
+{
+  "agent_ids": ["uuid1", "uuid2", "uuid3"],
+  "topic": "Campaign discussion"
+}
+```
+
+**Response 201:** `{ "group_id": "uuid", "participants": int }`
+
+---
+
+### GET /simulations/{simulation_id}/group-chat/{group_id}
+Get group chat messages.
+
+**Response 200:** `{ "group_id": "uuid", "messages": [ChatMessage] }`
+
+---
+
+### POST /simulations/{simulation_id}/group-chat/{group_id}/message
+Add a message to group chat (researcher intervention).
+
+**Request:** `{ "content": "What do you think about the campaign?" }`
+
+**Response 200:** `{ "messages": [ChatMessage] }`
+
+---
+
 ## 3. Agent Endpoints
 
 ### GET /simulations/{simulation_id}/agents
@@ -331,6 +408,28 @@ Get agent memory records.
 **Query params:** `memory_type`, `limit`
 
 **Response 200:** `{ "memories": [MemoryRecord] }`
+
+---
+
+### POST /simulations/{simulation_id}/agents/{agent_id}/interview
+Interview an agent mid-simulation (Tier 3 LLM).
+
+**Request:**
+```json
+{
+  "question": "What is your current opinion about the campaign?"
+}
+```
+
+**Response 200:**
+```json
+{
+  "agent_id": "uuid",
+  "response": "I'm skeptical about the claims...",
+  "emotion_state": { "trust": 0.3, "interest": 0.6 },
+  "belief": 0.25
+}
+```
 
 ---
 
@@ -717,21 +816,18 @@ Create a new project.
 ### GET /projects
 List all projects.
 
-**Response 200:**
+**Response 200:** `ProjectSummary[]` (array directly, no wrapper)
 ```json
-{
-  "items": [
-    {
-      "project_id": "uuid",
-      "name": "Q2 Smartphone Launch",
-      "description": "...",
-      "scenario_count": 3,
-      "status": "active",
-      "created_at": "..."
-    }
-  ],
-  "total": 1
-}
+[
+  {
+    "project_id": "uuid",
+    "name": "Q2 Smartphone Launch",
+    "description": "...",
+    "scenario_count": 3,
+    "status": "active",
+    "created_at": "..."
+  }
+]
 ```
 
 ### GET /projects/{project_id}
@@ -796,6 +892,28 @@ Run a scenario (creates a simulation and starts it).
 }
 ```
 
+### PATCH /projects/{project_id}
+Update project name/description.
+
+**Request:**
+```json
+{
+  "name": "Updated Name",
+  "description": "Updated description"
+}
+```
+
+**Response 200:** Updated `ProjectSummary`
+
+---
+
+### DELETE /projects/{project_id}
+Delete project and all its scenarios.
+
+**Response 204:** No content.
+
+---
+
 ### DELETE /projects/{project_id}/scenarios/{scenario_id}
 Delete a scenario.
 
@@ -803,7 +921,79 @@ Delete a scenario.
 
 ---
 
-## 10. Acceptance Criteria (Harness Tests)
+## 10. Settings Sub-Endpoints
+
+### GET /api/v1/settings/platforms
+List available platform plugins.
+
+**Response 200:** `{ "platforms": [] }`
+
+---
+
+### GET /api/v1/settings/recsys
+List available RecSys algorithms.
+
+**Response 200:** `{ "algorithms": [] }`
+
+---
+
+## 11. Authentication Endpoints
+
+### POST /api/v1/auth/register
+Register a new user.
+
+**Request:**
+```json
+{ "username": "researcher1", "password": "securepass" }
+```
+
+**Response 201:**
+```json
+{ "user_id": "uuid", "username": "researcher1" }
+```
+
+---
+
+### POST /api/v1/auth/login
+Login and receive JWT token.
+
+**Request:**
+```json
+{ "username": "researcher1", "password": "securepass" }
+```
+
+**Response 200:**
+```json
+{ "token": "eyJhbG...", "user_id": "uuid", "username": "researcher1" }
+```
+
+---
+
+### GET /api/v1/auth/me
+Get current authenticated user info.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response 200:**
+```json
+{ "user_id": "uuid", "username": "researcher1" }
+```
+
+---
+
+## 12. Health Endpoint
+
+### GET /health
+Health check (no `/api/v1` prefix).
+
+**Response 200:**
+```json
+{ "status": "ok", "version": "0.1.0" }
+```
+
+---
+
+## 13. Acceptance Criteria (Harness Tests)
 
 | ID | Test | Expected |
 |----|------|----------|

@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Play,
   BarChart3,
+  TrendingUp,
   Settings,
   Users,
   Crown,
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { icon: Users, label: "Communities", href: "/communities" },
   { icon: Crown, label: "Influencers", href: "/influencers" },
   { icon: BarChart3, label: "Global Insights", href: "/metrics" },
+  { icon: TrendingUp, label: "Analytics", href: "/analytics" },
   { icon: MessageSquare, label: "Opinions", href: "/opinions" },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];

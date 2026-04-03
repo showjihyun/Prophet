@@ -25,7 +25,7 @@ class ExpertInterventionEngine:
     - Only processes agents with agent_type == AgentType.EXPERT.
     """
 
-    def generate_opinion(
+    def generate_expert_opinion(
         self,
         agent: AgentState,
         campaign: object,  # CampaignConfig or CampaignEvent — used for community list
@@ -45,7 +45,7 @@ class ExpertInterventionEngine:
         """
         if agent.agent_type != AgentType.EXPERT:
             logger.debug(
-                "generate_opinion: agent %s is not EXPERT (type=%s), skipping",
+                "generate_expert_opinion: agent %s is not EXPERT (type=%s), skipping",
                 agent.agent_id,
                 agent.agent_type,
             )

@@ -1,5 +1,5 @@
 # 08 — Database SPEC (PostgreSQL 16 + pgvector)
-Version: 0.1.1 | Status: DRAFT
+Version: 0.2.0 | Status: REVIEW
 
 ---
 
@@ -395,6 +395,38 @@ CREATE INDEX idx_monte_carlo_sim ON monte_carlo_runs(simulation_id);
 
 ---
 
+### projects
+
+```sql
+CREATE TABLE projects (
+    project_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        VARCHAR(200) NOT NULL,
+    description TEXT DEFAULT '',
+    status      VARCHAR(20) DEFAULT 'active',
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+```
+
+---
+
+### scenarios
+
+```sql
+CREATE TABLE scenarios (
+    scenario_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id    UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    name          VARCHAR(200) NOT NULL,
+    description   TEXT DEFAULT '',
+    status        VARCHAR(20) DEFAULT 'draft',
+    simulation_id UUID REFERENCES simulations(simulation_id),
+    config        JSONB DEFAULT '{}',
+    created_at    TIMESTAMPTZ DEFAULT now()
+);
+```
+
+---
+
 ## 3. Key Queries
 
 ### Get simulation dashboard data
@@ -445,10 +477,33 @@ backend/migrations/
     env.py
     script.py.mako
     versions/
-        001_initial_schema.py
-        002_add_pgvector_memory.py
-        003_add_llm_calls.py
+        b55bc066a0f8_initial_schema.py    # Consolidated initial schema (all tables)
 ```
+
+> **구현 참고:** SPEC의 3-migration 시퀀스(001, 002, 003)는 단일 initial migration으로 통합됨.
+
+---
+
+## 4.5. Implementation Notes
+
+### ORM vs SQL 제약조건 차이
+
+현재 SQLAlchemy ORM 모델은 SPEC에 정의된 일부 제약조건을 포함하지 않는다:
+
+| SPEC 정의 | ORM 구현 상태 |
+|-----------|-------------|
+| SQL indexes (`CREATE INDEX`) | ORM `__table_args__`에 미정의. Alembic migration에서 생성 필요. |
+| Foreign key (`REFERENCES ... ON DELETE CASCADE`) | 대부분 미정의 (`Scenario.project_id` 제외). Application-level consistency 사용. |
+| UNIQUE constraints | ORM 모델에 미정의 |
+| CHECK constraints (`CHECK (weight BETWEEN 0 AND 1)`) | ORM 모델에 미정의 |
+
+향후 Alembic migration을 통해 누락된 제약조건을 추가할 예정.
+
+### Community Templates
+
+Community templates는 DB 테이블이 아닌 **파일 기반 저장소**를 사용한다:
+- 경로: `data/community_templates.json`
+- CRUD: `backend/app/api/community_templates.py`에서 JSON 파일 직접 읽기/쓰기
 
 ---
 

@@ -1,6 +1,6 @@
 # MASTER SPEC — Prophet (MCASP)
 **Multi-Community Agent Simulation Platform**
-Version: 0.1.0 | Status: DRAFT | Date: 2026-03-27
+Version: 0.2.0 | Status: REVIEW | Date: 2026-04-04
 
 ---
 
@@ -53,7 +53,7 @@ Prophet's differentiation: combining **Network Science + Behavioral Economics + 
 | Language | Python | 3.12+ |
 | API Framework | FastAPI | 0.115+ |
 | ORM | SQLAlchemy (async) | 2.0+ |
-| Task Queue | Celery + Valkey (Monte Carlo only) | 5.x |
+| Task Queue | asyncio.create_task (Monte Carlo, in-process) | built-in |
 | Async Engine | asyncio (step loop, real-time) | built-in |
 | SLM Inference | Ollama (vLLM optional) | local GPU/CPU |
 | WebSocket | FastAPI WebSocket | built-in |
@@ -94,20 +94,20 @@ LLM calls are abstracted behind `LLMAdapter` interface — provider is swappable
 
 ## 3. SPEC Document Index
 
-| # | Document | Description | Status |
-|---|----------|-------------|--------|
-| 00 | [ARCHITECTURE.md](./00_ARCHITECTURE.md) | System architecture, component diagram | DRAFT |
-| 01 | [AGENT_SPEC.md](./01_AGENT_SPEC.md) | Agent 6-Layer interface contracts | DRAFT |
-| 02 | [NETWORK_SPEC.md](./02_NETWORK_SPEC.md) | Hybrid network generator spec | DRAFT |
-| 03 | [DIFFUSION_SPEC.md](./03_DIFFUSION_SPEC.md) | Social diffusion engine spec | DRAFT |
-| 04 | [SIMULATION_SPEC.md](./04_SIMULATION_SPEC.md) | Simulation orchestrator spec | DRAFT |
-| 05 | [LLM_SPEC.md](./05_LLM_SPEC.md) | LLM adapter + prompt management | DRAFT |
-| 06 | [API_SPEC.md](./06_API_SPEC.md) | FastAPI endpoint contracts | DRAFT |
-| 07 | [FRONTEND_SPEC.md](./07_FRONTEND_SPEC.md) | React 18 component + page spec | DRAFT |
-| 08 | [DB_SPEC.md](./08_DB_SPEC.md) | PostgreSQL schema + pgvector | DRAFT |
-| 09 | [HARNESS_SPEC.md](./09_HARNESS_SPEC.md) | Test harness F18–F30 spec | DRAFT |
-| 10 | [VALIDATION_SPEC.md](./10_VALIDATION_SPEC.md) | Validation methodology (Twitter15/16 reference) | DRAFT |
-| 11 | [SKILLS_SPEC.md](./11_SKILLS_SPEC.md) | Plugins & custom skills configuration | DRAFT |
+| # | Document | Version | Description | Status |
+|---|----------|---------|-------------|--------|
+| 00 | [ARCHITECTURE.md](./00_ARCHITECTURE.md) | 0.2.0 | System architecture, component diagram | REVIEW |
+| 01 | [AGENT_SPEC.md](./01_AGENT_SPEC.md) | 0.3.0 | Agent 6-Layer interface contracts | REVIEW |
+| 02 | [NETWORK_SPEC.md](./02_NETWORK_SPEC.md) | 0.1.0 | Hybrid network generator spec | DRAFT |
+| 03 | [DIFFUSION_SPEC.md](./03_DIFFUSION_SPEC.md) | 0.1.0 | Social diffusion engine spec | DRAFT |
+| 04 | [SIMULATION_SPEC.md](./04_SIMULATION_SPEC.md) | 0.2.0 | Simulation orchestrator spec | REVIEW |
+| 05 | [LLM_SPEC.md](./05_LLM_SPEC.md) | 0.2.0 | LLM adapter + prompt management + gateway | REVIEW |
+| 06 | [API_SPEC.md](./06_API_SPEC.md) | 0.2.0 | FastAPI endpoint contracts (53 endpoints) | REVIEW |
+| 07 | [FRONTEND_SPEC.md](./07_FRONTEND_SPEC.md) | 0.2.0 | React 18 — 16 pages, 30+ components | REVIEW |
+| 08 | [DB_SPEC.md](./08_DB_SPEC.md) | 0.2.0 | PostgreSQL schema + pgvector + projects | REVIEW |
+| 09 | [HARNESS_SPEC.md](./09_HARNESS_SPEC.md) | 0.1.0 | Test harness F18–F30 spec | DRAFT |
+| 10 | [VALIDATION_SPEC.md](./10_VALIDATION_SPEC.md) | 0.1.0 | Validation methodology (Twitter15/16 reference) | DRAFT |
+| 11 | [SKILLS_SPEC.md](./11_SKILLS_SPEC.md) | 0.1.0 | Plugins & custom skills configuration | DRAFT |
 | -- | [INIT_REQUIREMENTS.md](./INIT_REQUIREMENTS.md) | 원본 기획서 9개 통합 (source of truth) | BASELINE |
 | UI-01 | [UI_01_SIMULATION_MAIN.md](./ui/UI_01_SIMULATION_MAIN.md) | Main simulation screen (Pencil sync) | DRAFT |
 | UI-02 | [UI_02_COMMUNITIES_DETAIL.md](./ui/UI_02_COMMUNITIES_DETAIL.md) | Communities detail screen (Pencil sync) | DRAFT |
@@ -313,3 +313,65 @@ ProphetBaseError
 5. **PostgreSQL is source of truth** — All simulation state must be persisted; in-memory state is cache only.
 6. **SPEC changes require version bump** — Breaking SPEC changes increment minor version; additive changes increment patch.
 7. **uv only** — No `pip`, `pip3`, `pip install` anywhere in the codebase, scripts, Dockerfile, or CI.
+
+---
+
+## 10. Implementation Status (2026-04-04)
+
+### Phase Completion
+
+| Phase | 내용 | 상태 | 테스트 |
+|-------|------|------|--------|
+| Phase 0 | SPEC 작성 | ✅ 완료 | 15 SPEC + 16 UI SPEC |
+| Phase 1 | 프로젝트 구조 + 하네스 기반 | ✅ 완료 | 8/8 GREEN |
+| Phase 2 | Agent Core (6-Layer) | ✅ 완료 | 81/81 GREEN |
+| Phase 3 | Network Generator | ✅ 완료 | 19/19 GREEN |
+| Phase 4 | Diffusion Engine | ✅ 완료 | 78/78 GREEN |
+| Phase 5 | LLM Integration | ✅ 완료 | 92/92 GREEN |
+| Phase 6 | Simulation Orchestrator + API | ✅ 완료 | 127/127 GREEN |
+| Phase 7 | Visualization (Frontend) | ✅ 완료 | tsc 0 errors |
+| Phase A | API→Frontend 37 endpoints 연결 | ✅ 완료 | — |
+| Phase B | 5개 기능 UI (Inject/Replay/MC/Engine/Compare) | ✅ 완료 | — |
+| Phase C | Mock→Real API (5 pages) | ✅ 완료 | — |
+| Phase D | Design tokens (70+ 색상) + Vitest (145 tests) | ✅ 완료 | — |
+| DB | PostgreSQL persistence (fire-and-forget) | ✅ 완료 | — |
+| LLM | Async Tier 3 cognition | ✅ 완료 | — |
+| VAL | Validation pipeline VAL-01~08 | ✅ 완료 | 33 tests |
+| S | Silent Stub 해소 | ✅ 완료 | — |
+| M | Mock→Real (GlobalMetrics/Opinions/Thread) | ✅ 완료 | — |
+| T | 실패 테스트 수정 + CampaignSetup | ✅ 완료 | — |
+| F | Campaign Setup + Project CRUD + EgoGraph Filter | ✅ 완료 | — |
+
+### Test Summary
+
+| Target | Count | Command |
+|--------|-------|---------|
+| Backend | 586 passed, 1 skipped | `uv run pytest tests/` |
+| Frontend | 180+ passed | `npx vitest run` |
+| E2E | 26 tests (Docker required) | `npx playwright test` |
+| **Total** | **795+** | — |
+
+### Performance Benchmarks (2026-03-30)
+
+| Metric | Result | SPEC Goal |
+|--------|--------|-----------|
+| 1,000 agents x 1 step | **287ms avg** | <1,000ms (NF01) |
+| Simulation creation (1,000 agents + network) | 1,362ms | — |
+| Docker E2E (5 services healthy) | ✅ | — |
+
+### Key Capabilities (Post-SPEC additions)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| JWT Authentication | ✅ | `/api/v1/auth/*` endpoints |
+| Project/Scenario Management | ✅ | Full CRUD |
+| Community Templates | ✅ | File-based persistence |
+| LLM Gateway (3-tier cache) | ✅ | InMemory → Vector → Valkey |
+| vLLM Adapter | ✅ | Distributed inference |
+| Export (JSON/CSV) | ✅ | `GET /simulations/{id}/export` |
+| Group Chat | ✅ | Multi-agent discussions |
+| Agent Interview | ✅ | Mid-simulation interviews |
+| Dark/Light Theme | ✅ | CSS variables + Zustand |
+| Inline Simulation Creation | ✅ | No page navigation |
+| Run-All Endpoint | ✅ | `POST /simulations/{id}/run-all` |
+| 53 API Endpoints | ✅ | 16 pages, 15 routes |

@@ -3,7 +3,7 @@ SPEC: docs/spec/08_DB_SPEC.md#simulations
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, Text, DateTime, func
+from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, Index, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,6 +12,9 @@ from app.database import Base
 
 class Simulation(Base):
     __tablename__ = "simulations"
+    __table_args__ = (
+        Index("idx_simulations_status", "status"),
+    )
 
     simulation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -30,9 +33,13 @@ class Simulation(Base):
 
 class SimStep(Base):
     __tablename__ = "sim_steps"
+    __table_args__ = (
+        UniqueConstraint("simulation_id", "step", "replay_id", name="uq_sim_steps_sim_step_replay"),
+        Index("idx_steps_simulation_step", "simulation_id", "step"),
+    )
 
     step_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    simulation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    simulation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("simulations.simulation_id", ondelete="CASCADE"), nullable=False)
     step: Mapped[int] = mapped_column(Integer, nullable=False)
     total_adoption: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     adoption_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0)
@@ -50,9 +57,12 @@ class SimStep(Base):
 
 class SimulationEvent(Base):
     __tablename__ = "simulation_events"
+    __table_args__ = (
+        Index("idx_sim_events_simulation", "simulation_id", "created_at"),
+    )
 
     event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    simulation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    simulation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("simulations.simulation_id", ondelete="CASCADE"), nullable=False)
     step: Mapped[int | None] = mapped_column(Integer)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     payload: Mapped[dict | None] = mapped_column(JSONB)

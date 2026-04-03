@@ -123,7 +123,7 @@ class TestNetworkAcceptance:
         actions = [FakeTickResult(agent_id=node, action=AgentAction.SHARE,
                                   content_id=uuid4(), step=1)]
         evolver = NetworkEvolver()
-        updated = evolver.evolve(network, actions=actions, step=1)
+        updated = evolver.evolve_step(network, actions=actions, step=1)
         # At least some edge weights should have changed
         changed = False
         for u, v, d in updated.graph.edges(data=True):

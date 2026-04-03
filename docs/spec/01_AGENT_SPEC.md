@@ -1,5 +1,5 @@
 # 01 — Agent SPEC
-Version: 0.2.0 | Status: DRAFT | Previous: 0.1.0
+Version: 0.3.0 | Status: REVIEW | Previous: 0.2.0
 
 ---
 
@@ -1230,6 +1230,71 @@ class PersonalityDrift:
         Side Effects: None.
         """
 ```
+
+---
+
+## 8.5. Additional Agent Modules (Post-initial SPEC)
+
+### tick.py — Agent Tick Logic
+```python
+# backend/app/engine/agent/tick.py
+class AgentTick:
+    """Main per-step agent processing.
+    Orchestrates the 6-layer pipeline: Perception → Memory → Emotion → Cognition → Decision → Influence.
+    agent_core.py is a re-export shim that exports AgentTick.
+    """
+    async def tick(self, agent: AgentState, context: TickContext) -> AgentTickResult: ...
+```
+
+### expert_engine.py — Expert Agent Engine
+```python
+# backend/app/engine/agent/expert_engine.py
+class ExpertEngine:
+    """Expert-specific agent engine using Tier 3 LLM cognition.
+    Provides deeper analysis for expert agent types.
+    @spec docs/spec/platform/13_SCALE_VALIDATION_SPEC.md
+    """
+    async def evaluate(self, agent: AgentState, context: TickContext) -> CognitionResult: ...
+```
+
+### interview.py — Agent Interviewer
+```python
+# backend/app/engine/agent/interview.py
+class AgentInterviewer:
+    """Enables mid-simulation agent interviews via Tier 3 LLM.
+    Researcher can ask questions to agents and receive in-character responses.
+    @spec docs/spec/platform/13_SCALE_VALIDATION_SPEC.md
+    """
+    async def interview(self, agent: AgentState, question: str) -> InterviewResponse: ...
+```
+
+### group_chat.py — Group Chat Manager
+```python
+# backend/app/engine/agent/group_chat.py
+class GroupChatManager:
+    """Multi-agent group discussions.
+    Creates chat sessions between selected agents for researcher observation.
+    @spec docs/spec/platform/13_SCALE_VALIDATION_SPEC.md
+    """
+    async def create_session(self, agents: list[AgentState], topic: str) -> GroupChatSession: ...
+    async def add_message(self, session_id: UUID, content: str) -> list[ChatMessage]: ...
+```
+
+### File Name Aliases
+
+구현에서 6-layer 파일은 두 가지 이름이 공존한다:
+| Canonical (SPEC) | Alias (legacy) |
+|-------------------|---------------|
+| `cognition_engine.py` | `cognition.py` |
+| `decision_model.py` | `decision.py` |
+| `emotion_model.py` | `emotion.py` |
+| `memory_layer.py` | `memory.py` |
+| `influence_model.py` | `influence.py` |
+
+Canonical 이름이 정식이며, alias는 import 편의를 위해 유지.
+
+### TODO
+- `AgentState.activity_vector`: `len == 24` invariant를 `__post_init__`에서 강제하지 않음. 향후 추가 필요.
 
 ---
 
