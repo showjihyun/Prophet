@@ -131,30 +131,31 @@ export default function AnalyticsPage() {
   const simulation = useSimulationStore((s) => s.simulation);
   const storeSteps = useSimulationStore((s) => s.steps);
 
-  const [steps, setSteps] = useState<StepResult[]>(storeSteps);
+  const [fetchedSteps, setFetchedSteps] = useState<StepResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch steps from API if store is empty
+  // Derive steps: prefer store (live), fall back to locally fetched
+  const steps = storeSteps.length > 0 ? storeSteps : fetchedSteps;
+
+  // Fetch steps from API only when store is empty
   useEffect(() => {
-    if (storeSteps.length > 0) {
-      setSteps(storeSteps);
-      return;
-    }
+    if (storeSteps.length > 0) return;
     if (!simulation) return;
 
-    setLoading(true);
+    const simulationId = simulation.simulation_id;
+    queueMicrotask(() => setLoading(true));
     apiClient.simulations
-      .getSteps(simulation.simulation_id)
+      .getSteps(simulationId)
       .then((fetched) => {
-        setSteps(fetched);
+        setFetchedSteps(fetched);
         setLoading(false);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "Failed to load steps");
         setLoading(false);
       });
-  }, [simulation, storeSteps]);
+  }, [simulation, storeSteps.length]);
 
   const adoptionData = buildAdoptionData(steps);
   const sentimentData = buildSentimentData(steps);

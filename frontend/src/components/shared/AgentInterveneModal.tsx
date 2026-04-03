@@ -117,7 +117,7 @@ export default function AgentInterveneModal({
     }
 
     onClose();
-  }, [state, agentId, agentLabel, onClose]);
+  }, [state, agentId, onClose]);
 
   if (!isOpen) return null;
 

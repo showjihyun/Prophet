@@ -448,7 +448,7 @@ export default function GraphPanel() {
     sorted.slice(0, adoptCount).forEach((node) => {
       node.addClass("adopted-live");
     });
-  }, [steps.length]);
+  }, [steps]);
 
   // --- Community highlight: dim non-matching nodes when a community is selected ---
   useEffect(() => {
