@@ -181,8 +181,35 @@ class CommunityOrchestrator:
         llm_calls = 0
         action_counter: Counter[str] = Counter()
 
-        # Track tier-3 agents for async LLM refinement pass
-        tier3_pending: list[tuple[AgentState, AgentTickResult, int]] = []
+        # Tier 3 agents are run via async_tick() which uses embedding-based memory
+        # and real LLM cognition (GraphRAG path). Tier 1/2 use the fast sync tick().
+        campaign_obj = campaign_events[0] if campaign_events else None
+
+        async def _run_agent_tick(agent: AgentState, tier: int) -> AgentTickResult:
+            """Dispatch to async_tick for Tier 3 (embeddings + LLM) or sync tick for Tier 1/2."""
+            if tier == 3 and self._agent_tick._llm_adapter is not None:
+                try:
+                    return await self._agent_tick.async_tick(
+                        agent=agent,
+                        environment_events=env_events,
+                        neighbor_actions=neighbor_actions_map.get(agent.agent_id, []),
+                        cognition_tier=tier,
+                        seed=seed,
+                        graph_context=graph_context,
+                        campaign=campaign_obj,
+                    )
+                except Exception:
+                    # Graceful fallback to sync tick on any async failure
+                    pass
+            # Fast path: Tier 1/2, or Tier 3 fallback when LLM is unavailable
+            return self._agent_tick.tick(
+                agent=agent,
+                environment_events=env_events,
+                neighbor_actions=neighbor_actions_map.get(agent.agent_id, []),
+                cognition_tier=tier,
+                seed=seed,
+                graph_context=graph_context,
+            )
 
         # Process agents in batches to yield to event loop between batches
         for i in range(0, len(self.agents), self.BATCH_SIZE):
@@ -196,25 +223,14 @@ class CommunityOrchestrator:
 
                 tier = tier_map.get(agent.agent_id, 1)
 
-                result: AgentTickResult = self._agent_tick.tick(
-                    agent=agent,
-                    environment_events=env_events,
-                    neighbor_actions=neighbor_actions_map.get(agent.agent_id, []),
-                    cognition_tier=tier,
-                    seed=seed,
-                    graph_context=graph_context,
-                )
+                result: AgentTickResult = await _run_agent_tick(agent, tier)
 
                 new_agent = result.updated_state
                 updated.append(new_agent)
                 action_counter[result.action.value] += 1
 
-                if result.llm_call_log:
+                if result.llm_call_log or result.llm_tier_used == 3:
                     llm_calls += 1
-
-                # Queue tier-3 agents for async LLM refinement
-                if tier == 3 and self._agent_tick._llm_adapter is not None:
-                    tier3_pending.append((agent, result, len(updated) - 1))
 
                 # Separate intra-community vs outbound propagation
                 for pe in result.propagation_events:
@@ -227,60 +243,6 @@ class CommunityOrchestrator:
                         outbound.append(pe)  # target not in this community
             # Yield to event loop between batches (allows other communities to progress)
             await asyncio.sleep(0)
-
-        # 5.5. Async LLM refinement pass for Tier 3 agents
-        if tier3_pending:
-            campaign_obj = campaign_events[0] if campaign_events else None
-            cognition_layer = self._agent_tick._cognition
-            community_bias = community_beliefs.get(self.community_id, 0.0)
-
-            async def _refine_tier3(
-                orig_agent: AgentState,
-                sync_result: AgentTickResult,
-                idx: int,
-            ) -> None:
-                nonlocal llm_calls
-                try:
-                    perception = self._agent_tick._perception.observe(
-                        orig_agent, env_events,
-                        neighbor_actions_map.get(orig_agent.agent_id, []),
-                    )
-                    memories = self._agent_tick._memory.retrieve(
-                        orig_agent.agent_id,
-                        perception.feed_items[0].message[:200] if perception.feed_items else "",
-                        top_k=10,
-                        current_step=step,
-                    )
-                    llm_result = await cognition_layer.evaluate_async(
-                        orig_agent,
-                        perception,
-                        memories,
-                        3,
-                        community_bias,
-                        campaign=campaign_obj,
-                    )
-                    if llm_result.tier_used == 3:
-                        # Override the heuristic action with the LLM result
-                        from dataclasses import replace as _replace
-                        old_agent = updated[idx]
-                        new_belief = max(-1.0, min(1.0, orig_agent.belief + llm_result.evaluation_score * 0.1))
-                        updated[idx] = _replace(
-                            old_agent,
-                            action=llm_result.recommended_action,
-                            belief=new_belief,
-                            adopted=old_agent.adopted or (llm_result.recommended_action.value == "adopt"),
-                            llm_tier_used=3,
-                        )
-                        action_counter[sync_result.action.value] = max(0, action_counter.get(sync_result.action.value, 0) - 1)
-                        action_counter[llm_result.recommended_action.value] = action_counter.get(llm_result.recommended_action.value, 0) + 1
-                        llm_calls += 1
-                except Exception:
-                    pass  # Keep heuristic result on LLM failure
-
-            await asyncio.gather(*[
-                _refine_tier3(orig, res, idx)
-                for orig, res, idx in tier3_pending
-            ])
 
         # 5.5. Flush gateway step cache after all agent ticks
         if self._gateway:
