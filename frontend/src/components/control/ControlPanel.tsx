@@ -318,6 +318,7 @@ export default function ControlPanel() {
         {/* Project selector */}
         <select
           data-testid="project-select"
+          aria-label="Select project"
           className="h-8 px-2 text-xs border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-1 focus:ring-gray-300"
           value={currentProjectId ?? ""}
           onChange={(e) => handleProjectChange(e.target.value)}
@@ -332,6 +333,7 @@ export default function ControlPanel() {
         <div className="flex items-center gap-1">
           <select
             data-testid="scenario-select"
+            aria-label="Select scenario"
             className="h-8 px-2 text-xs border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-1 focus:ring-gray-300"
             defaultValue=""
             onChange={(e) => handleScenarioChange(e.target.value)}
@@ -344,10 +346,11 @@ export default function ControlPanel() {
           <button
             onClick={handleNewScenario}
             title="New scenario"
+            aria-label="New scenario"
             disabled={!currentProjectId}
             className="h-8 w-8 flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
         </div>
 
@@ -527,8 +530,9 @@ export default function ControlPanel() {
         <button
           className="w-8 h-8 rounded-full bg-[var(--secondary)] flex items-center justify-center hover:bg-[var(--secondary)] transition-colors ml-1"
           title="User profile"
+          aria-label="User profile"
         >
-          <User className="w-4 h-4 text-[var(--muted-foreground)]" />
+          <User className="w-4 h-4 text-[var(--muted-foreground)]" aria-hidden="true" />
         </button>
       </div>
 
