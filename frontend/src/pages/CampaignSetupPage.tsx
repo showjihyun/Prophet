@@ -252,9 +252,10 @@ export default function CampaignSetupPage() {
 
           {/* Section 1: Project Selector */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--foreground)]">Project</label>
+            <label htmlFor="campaign-project" className="text-sm font-medium text-[var(--foreground)]">Project</label>
             {urlProjectId ? (
               <input
+                id="campaign-project"
                 type="text"
                 readOnly
                 value={projects.find((p) => p.project_id === urlProjectId)?.name ?? urlProjectId}
@@ -262,6 +263,7 @@ export default function CampaignSetupPage() {
               />
             ) : (
               <select
+                id="campaign-project"
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(e.target.value)}
                 className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
@@ -276,8 +278,9 @@ export default function CampaignSetupPage() {
 
           {/* Section 2: Campaign Info */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--foreground)]">Campaign Name</label>
+            <label htmlFor="campaign-name" className="text-sm font-medium text-[var(--foreground)]">Campaign Name</label>
             <input
+              id="campaign-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -288,8 +291,9 @@ export default function CampaignSetupPage() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--foreground)]">Budget ($)</label>
+            <label htmlFor="campaign-budget" className="text-sm font-medium text-[var(--foreground)]">Budget ($)</label>
             <input
+              id="campaign-budget"
               type="number"
               value={budget}
               onChange={(e) => setBudget(e.target.value)}
@@ -317,8 +321,9 @@ export default function CampaignSetupPage() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--foreground)]">Campaign Message</label>
+            <label htmlFor="campaign-message" className="text-sm font-medium text-[var(--foreground)]">Campaign Message</label>
             <textarea
+              id="campaign-message"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Enter the campaign message to simulate..."
@@ -360,10 +365,11 @@ export default function CampaignSetupPage() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm text-[var(--muted-foreground)]">Controversy</label>
+                  <label htmlFor="attr-controversy" className="text-sm text-[var(--muted-foreground)]">Controversy</label>
                   <span className="text-xs font-mono text-[var(--muted-foreground)]">{controversy.toFixed(1)}</span>
                 </div>
                 <input
+                  id="attr-controversy"
                   type="range"
                   min="0"
                   max="1"
@@ -376,10 +382,11 @@ export default function CampaignSetupPage() {
               </div>
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm text-[var(--muted-foreground)]">Novelty</label>
+                  <label htmlFor="attr-novelty" className="text-sm text-[var(--muted-foreground)]">Novelty</label>
                   <span className="text-xs font-mono text-[var(--muted-foreground)]">{novelty.toFixed(1)}</span>
                 </div>
                 <input
+                  id="attr-novelty"
                   type="range"
                   min="0"
                   max="1"
@@ -392,10 +399,11 @@ export default function CampaignSetupPage() {
               </div>
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm text-[var(--muted-foreground)]">Utility</label>
+                  <label htmlFor="attr-utility" className="text-sm text-[var(--muted-foreground)]">Utility</label>
                   <span className="text-xs font-mono text-[var(--muted-foreground)]">{utility.toFixed(1)}</span>
                 </div>
                 <input
+                  id="attr-utility"
                   type="range"
                   min="0"
                   max="1"
@@ -523,8 +531,9 @@ export default function CampaignSetupPage() {
             </summary>
             <div className="px-4 pb-4 flex flex-col gap-4 border-t border-[var(--border)] pt-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--muted-foreground)]">Max Steps (simulation days)</label>
+                <label htmlFor="adv-max-steps" className="text-sm font-medium text-[var(--muted-foreground)]">Max Steps (simulation days)</label>
                 <input
+                  id="adv-max-steps"
                   type="number"
                   value={maxSteps}
                   onChange={(e) => setMaxSteps(Number(e.target.value))}
@@ -534,8 +543,9 @@ export default function CampaignSetupPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--muted-foreground)]">Random Seed</label>
+                <label htmlFor="adv-random-seed" className="text-sm font-medium text-[var(--muted-foreground)]">Random Seed</label>
                 <input
+                  id="adv-random-seed"
                   type="number"
                   value={randomSeed}
                   onChange={(e) => setRandomSeed(Number(e.target.value))}
@@ -543,8 +553,9 @@ export default function CampaignSetupPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--muted-foreground)]">LLM Provider</label>
+                <label htmlFor="adv-llm-provider" className="text-sm font-medium text-[var(--muted-foreground)]">LLM Provider</label>
                 <select
+                  id="adv-llm-provider"
                   value={llmProvider}
                   onChange={(e) => setLlmProvider(e.target.value)}
                   className="h-10 px-3 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
@@ -555,10 +566,11 @@ export default function CampaignSetupPage() {
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-[var(--muted-foreground)]">
+                <label htmlFor="adv-slm-ratio" className="text-sm font-medium text-[var(--muted-foreground)]">
                   SLM / LLM Ratio: {slmLlmRatio}% SLM / {100 - slmLlmRatio}% LLM
                 </label>
                 <input
+                  id="adv-slm-ratio"
                   type="range"
                   min="0"
                   max="100"
