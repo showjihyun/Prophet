@@ -69,7 +69,7 @@ export default function ProjectScenariosPage() {
     apiClient.projects.get(projectId)
       .then((detail) => {
         setProject(detail);
-        setScenarios(detail.scenarios);
+        setScenarios(detail.scenarios ?? []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
