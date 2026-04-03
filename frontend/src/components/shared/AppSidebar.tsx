@@ -88,11 +88,11 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
       <div className="flex items-center h-14 border-b border-[var(--border)] px-3 gap-2">
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className="interactive p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] shrink-0"
+          className="interactive p-2.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] shrink-0"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? <Menu className="w-4 h-4" /> : <X className="w-4 h-4" />}
+          {collapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
         </button>
         {!collapsed && (
           <div className="flex items-center gap-2 overflow-hidden">
