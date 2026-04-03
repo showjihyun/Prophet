@@ -313,7 +313,7 @@ Prophet/
 
 | Phase | 내용 | 상태 |
 |-------|------|------|
-| **Phase 0** | SPEC 작성 | ✅ 완료 (15개 SPEC + 15개 UI SPEC) |
+| **Phase 0** | SPEC 작성 | ✅ 완료 (15개 SPEC + 16개 UI SPEC) |
 | **Phase 1** | 프로젝트 구조 + 하네스 기반 | ✅ 완료 (8/8 GREEN 테스트) |
 | **Phase 2** | Agent Core (6-Layer) | ✅ 완료 (81/81 GREEN 테스트) |
 | **Phase 3** | Network Generator | ✅ 완료 (19/19 GREEN 테스트) |
@@ -328,13 +328,17 @@ Prophet/
 | **DB** | PostgreSQL persistence (fire-and-forget) | ✅ 완료 |
 | **LLM** | Async Tier 3 cognition (evaluate_async) | ✅ 완료 |
 | **VAL** | Validation pipeline VAL-01~08 (33 tests) | ✅ 완료 |
+| **S** | Silent Stub 해소 (Network/LLM/Memory/Inject) | ✅ 완료 |
+| **M** | Mock→Real 페이지 (GlobalMetrics/Opinions/Thread) | ✅ 완료 |
+| **T** | 실패 테스트 41개 수정 + CampaignSetup 29개 추가 | ✅ 완료 |
+| **F** | Campaign Setup + Project CRUD + EgoGraph Filter | ✅ 완료 |
 
-> **총 테스트: 763+ GREEN** (Backend 586 + Frontend 151 + E2E 26)
+> **총 테스트: 795+ GREEN** (Backend 586 + Frontend 180 + E2E 26 대기)
 > - Backend: `uv run pytest tests/` → 586 passed, 1 skipped
-> - Frontend: `npx vitest run` → 151 passed (16 test files)
-> - E2E: `npx playwright test` → 26 passed (Chromium)
-> - Docker: 5 services healthy, QA health score 95/100
-> - API: 49 endpoints, 16 pages, 15 routes
+> - Frontend: `npx vitest run` → 180 passed (14 test files)
+> - E2E: `npx playwright test` → 26 tests (Docker 필요)
+> - Docker: 5 services healthy
+> - API: 53 endpoints, 16 pages, 15 routes
 > - Sidebar: 전역 레이아웃 (SimulationPage 제외)
 
 ### 성능 벤치마크 (2026-03-30)
