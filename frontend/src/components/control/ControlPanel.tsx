@@ -263,8 +263,8 @@ export default function ControlPanel() {
   return (
     <div
       data-testid="control-panel"
-      className="shrink-0 relative flex items-center justify-between px-4 border-b border-[var(--border)] bg-[var(--card)]"
-      style={{ height: "var(--control-bar-height)" }}
+      className="shrink-0 relative flex items-center justify-between px-4 border-b border-[var(--border)] bg-[var(--card)] overflow-x-auto"
+      style={{ minHeight: "var(--control-bar-height)" }}
     >
       {/* Left: Logo + Status */}
       <div className="flex items-center gap-3">
