@@ -298,7 +298,7 @@ export default function ScenarioOpinionsPage() {
         </div>
 
         {/* 4 Stat cards */}
-        <div className="grid grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard
             label="Avg Sentiment"
             value={`+${s.avg_sentiment.toFixed(2)}`}

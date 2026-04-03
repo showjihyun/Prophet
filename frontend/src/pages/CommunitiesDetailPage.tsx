@@ -171,7 +171,7 @@ export default function CommunitiesDetailPage() {
 
       <div className="flex-1 p-6 flex flex-col gap-6 overflow-auto">
         {/* Summary Stats */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Total Communities"
             value={communities.length}

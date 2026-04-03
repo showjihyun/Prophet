@@ -252,7 +252,7 @@ export default function TopInfluencersPage() {
 
       <div className="flex-1 p-6 flex flex-col gap-6 overflow-auto">
         {/* Summary Stats — updated per UI-08 SPEC */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Influencers Tracked" value={String(stats.total)} icon={<CrownIcon />} />
           <StatCard label="Avg Influence Score" value={String(stats.avg)} icon={<BarChartIcon />} />
           <StatCard label="Top Community" value="Alpha" icon={<UsersIcon />} />

@@ -152,7 +152,7 @@ export default function GlobalMetricsPage() {
         )}
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Total Agents" value={hasData ? totalAgents.toLocaleString() : "—"} change={hasData ? "active" : "no data"} changeType="positive" icon={<UsersIcon />} changeTestId="total-agents-delta" />
           <StatCard label="Active Cascades" value={hasData ? activeCascades.toLocaleString() : "—"} change={hasData ? `step ${currentStep}` : "no data"} changeType="positive" icon={<ZapIcon />} changeTestId="cascades-delta" />
           <StatCard label="Polarization" value={hasData ? polarization.toFixed(2) : "—"} change={hasData ? `${polDelta >= 0 ? "+" : ""}${polDelta.toFixed(2)} from prev` : "no data"} changeType={polDelta > 0 ? "negative" : "positive"} icon={<ActivityIcon />} changeTestId="polarization-delta" />
