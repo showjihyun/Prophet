@@ -4,7 +4,7 @@
  * @spec docs/spec/ui/UI_07_PROJECT_SCENARIOS.md#app-sidebar
  */
 import { useEffect, useState, useCallback } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
   Brain,
   FolderOpen,
@@ -92,11 +92,11 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
+          {collapsed ? <Menu className="w-5 h-5" aria-hidden="true" /> : <X className="w-5 h-5" aria-hidden="true" />}
         </button>
         {!collapsed && (
           <div className="flex items-center gap-2 overflow-hidden">
-            <Brain className="w-5 h-5 text-[var(--foreground)] shrink-0" />
+            <Brain className="w-5 h-5 text-[var(--foreground)] shrink-0" aria-hidden="true" />
             <span className="text-base font-bold text-[var(--foreground)] whitespace-nowrap">MCASP Prophet</span>
           </div>
         )}
@@ -107,21 +107,21 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
         {NAV_ITEMS.map((item) => {
           const active = isActive(item.href);
           return (
-            <button
+            <Link
               key={item.href}
-              onClick={() => navigate(item.href)}
-              title={collapsed ? item.label : undefined}
+              to={item.href}
+              aria-label={collapsed ? item.label : undefined}
               className={[
-                "interactive flex items-center rounded-md text-sm font-medium transition-colors h-10",
+                "interactive flex items-center rounded-md text-sm font-medium transition-colors h-10 no-underline",
                 collapsed ? "justify-center px-0" : "gap-3 px-3",
                 active
                   ? "bg-[var(--accent)] text-[var(--foreground)]"
                   : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
               ].join(" ")}
             >
-              <item.icon className="w-4 h-4 shrink-0" />
+              <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
               {!collapsed && item.label}
-            </button>
+            </Link>
           );
         })}
       </nav>
@@ -137,9 +137,10 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
             <button
               onClick={handleLogout}
               title="Logout"
+              aria-label="Logout"
               className="interactive p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
         )}
@@ -148,9 +149,10 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
             <button
               onClick={handleLogout}
               title={`Logout (${username})`}
+              aria-label="Logout"
               className="interactive p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
         )}
