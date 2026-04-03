@@ -172,7 +172,7 @@ export default function ProjectScenariosPage() {
                 <ProjectStatusBadge status={project.status} />
               </div>
               <Divider />
-              <InfoItem label="Scenarios" value={String(project.scenario_count)} />
+              <InfoItem label="Scenarios" value={String(scenarios.length)} />
               <Divider />
               <InfoItem
                 label="Created"
