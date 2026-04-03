@@ -220,23 +220,39 @@ async def list_simulations(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
 ) -> PaginatedResponse:
     """List all simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulations
     """
-    all_sims = orchestrator._simulations.values()
-    items = []
-    for state in all_sims:
-        item = {
+    # Build a dict of in-memory simulations (live, takes precedence)
+    mem_items: dict[str, dict] = {}
+    for state in orchestrator._simulations.values():
+        mem_items[str(state.simulation_id)] = {
             "simulation_id": str(state.simulation_id),
             "name": state.config.name,
             "status": state.status,
             "current_step": state.current_step,
             "total_agents": len(state.agents),
         }
-        if status is not None and item["status"] != status:
-            continue
-        items.append(item)
+
+    # Load DB simulations and fill in any not present in memory
+    db_sims = await persist.load_simulations(session)
+    for db_sim in db_sims:
+        sid = db_sim["simulation_id"]
+        if sid not in mem_items:
+            mem_items[sid] = {
+                "simulation_id": sid,
+                "name": db_sim.get("name", ""),
+                "status": db_sim.get("status", "completed"),
+                "current_step": db_sim.get("current_step", 0),
+                "total_agents": 0,
+            }
+
+    items = list(mem_items.values())
+    if status is not None:
+        items = [i for i in items if i["status"] == status]
 
     total = len(items)
     items = items[offset: offset + limit]
@@ -247,19 +263,56 @@ async def list_simulations(
 async def get_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
 ) -> SimulationDetailResponse:
     """Get simulation details.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_id
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    # Try in-memory first (live state)
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+    try:
+        state = orchestrator.get_state(sim_uuid)
+        return SimulationDetailResponse(
+            simulation_id=str(state.simulation_id),
+            name=state.config.name,
+            description=state.config.description,
+            status=SimulationStatus(state.status),
+            current_step=state.current_step,
+            max_steps=state.config.max_steps,
+            total_agents=len(state.agents),
+            network_metrics={
+                "clustering_coefficient": 0.0,
+                "avg_path_length": 0.0,
+            },
+            config={},
+            created_at=datetime.now(timezone.utc),
+        )
+    except (ValueError, KeyError):
+        pass
+
+    # Fallback: load from DB (read-only, completed/historical sims)
+    db_sims = await persist.load_simulations(session)
+    db_sim = next((s for s in db_sims if s["simulation_id"] == simulation_id), None)
+    if db_sim is None:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/not-found",
+                title="Simulation Not Found",
+                status=404,
+                detail=f"Simulation uuid={simulation_id} does not exist",
+                instance=f"/api/v1/simulations/{simulation_id}",
+            ).model_dump(),
+        )
     return SimulationDetailResponse(
-        simulation_id=str(state.simulation_id),
-        name=state.config.name,
-        description=state.config.description,
-        status=SimulationStatus(state.status),
-        current_step=state.current_step,
-        max_steps=state.config.max_steps,
-        total_agents=len(state.agents),
+        simulation_id=db_sim["simulation_id"],
+        name=db_sim.get("name", ""),
+        description=db_sim.get("description", ""),
+        status=SimulationStatus(db_sim.get("status", "completed")),
+        current_step=db_sim.get("current_step", 0),
+        max_steps=db_sim.get("max_steps", 0),
+        total_agents=0,
         network_metrics={
             "clustering_coefficient": 0.0,
             "avg_path_length": 0.0,
@@ -541,37 +594,72 @@ async def get_steps(
     to_step: int | None = Query(None, ge=0),
     metrics: str | None = Query(None),
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
 ) -> StepHistoryResponse:
     """Get step history.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idsteps
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+
+    # Try in-memory first
+    mem_step_history: list[Any] = []
+    try:
+        state = orchestrator.get_state(sim_uuid)
+        mem_step_history = list(state.step_history)
+    except (ValueError, KeyError):
+        pass
+
     steps = []
-    for sr in state.step_history:
-        if from_step is not None and sr.step < from_step:
-            continue
-        if to_step is not None and sr.step > to_step:
-            continue
-        # Serialize community_metrics to plain dicts
-        cm: dict[str, Any] = {}
-        for cid, metric in sr.community_metrics.items():
-            cm[str(cid)] = _community_metric_dict(metric)
-        steps.append(StepResultResponse(
-            step=sr.step,
-            adoption_rate=sr.adoption_rate,
-            mean_sentiment=sr.mean_sentiment,
-            sentiment_variance=sr.sentiment_variance,
-            diffusion_rate=sr.diffusion_rate,
-            total_adoption=sr.total_adoption,
-            community_metrics=cm,
-            action_distribution=sr.action_distribution,
-            llm_calls_this_step=sr.llm_calls_this_step,
-            step_duration_ms=sr.step_duration_ms,
-            emergent_events=[
-                {"type": e.event_type, "step": e.step, "community_id": str(e.community_id) if e.community_id else None}
-                for e in sr.emergent_events
-            ] if sr.emergent_events else [],
-        ))
+    if mem_step_history:
+        # Build from in-memory step history
+        for sr in mem_step_history:
+            if from_step is not None and sr.step < from_step:
+                continue
+            if to_step is not None and sr.step > to_step:
+                continue
+            cm: dict[str, Any] = {}
+            for cid, metric in sr.community_metrics.items():
+                cm[str(cid)] = _community_metric_dict(metric)
+            steps.append(StepResultResponse(
+                step=sr.step,
+                adoption_rate=sr.adoption_rate,
+                mean_sentiment=sr.mean_sentiment,
+                sentiment_variance=sr.sentiment_variance,
+                diffusion_rate=sr.diffusion_rate,
+                total_adoption=sr.total_adoption,
+                community_metrics=cm,
+                action_distribution=sr.action_distribution,
+                llm_calls_this_step=sr.llm_calls_this_step,
+                step_duration_ms=sr.step_duration_ms,
+                emergent_events=[
+                    {"type": e.event_type, "step": e.step, "community_id": str(e.community_id) if e.community_id else None}
+                    for e in sr.emergent_events
+                ] if sr.emergent_events else [],
+            ))
+    else:
+        # Fallback: load from DB (completed/historical sims not in memory)
+        db_steps = await persist.load_steps(session, sim_uuid)
+        for sr in db_steps:
+            step_num = sr.get("step", 0)
+            if from_step is not None and step_num < from_step:
+                continue
+            if to_step is not None and step_num > to_step:
+                continue
+            steps.append(StepResultResponse(
+                step=step_num,
+                adoption_rate=sr.get("adoption_rate", 0.0),
+                mean_sentiment=sr.get("mean_sentiment", 0.0),
+                sentiment_variance=sr.get("sentiment_variance", 0.0),
+                diffusion_rate=sr.get("diffusion_rate", 0.0),
+                total_adoption=sr.get("total_adoption", 0),
+                community_metrics=sr.get("community_metrics", {}),
+                action_distribution=sr.get("action_distribution", {}),
+                llm_calls_this_step=sr.get("llm_calls_this_step", 0),
+                step_duration_ms=sr.get("step_duration_ms", 0.0),
+                emergent_events=[],
+            ))
+
     return StepHistoryResponse(steps=steps)
 
 
