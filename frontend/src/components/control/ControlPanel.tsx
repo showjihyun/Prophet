@@ -276,7 +276,7 @@ export default function ControlPanel() {
         </div>
         {!simulation && (
           <button
-            onClick={() => navigate("/projects")}
+            onClick={() => navigate("/setup")}
             className="h-8 px-3 text-xs font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity flex items-center gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" aria-hidden="true" />
