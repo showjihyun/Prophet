@@ -270,6 +270,7 @@ export default function TopInfluencersPage() {
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
                   width="16"
                   height="16"
+                  aria-hidden="true"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -283,6 +284,7 @@ export default function TopInfluencersPage() {
                 <input
                   type="text"
                   placeholder="Search agents..."
+                  aria-label="Search agents"
                   value={search}
                   onChange={(e) => handleSearch(e.target.value)}
                   className="w-full h-10 pl-9 pr-4 text-sm border border-[var(--border)] rounded-md bg-[var(--card)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
@@ -406,6 +408,7 @@ export default function TopInfluencersPage() {
                       Rows per page:
                     </span>
                     <select
+                      aria-label="Rows per page"
                       value={rowsPerPage}
                       onChange={(e) => {
                         setRowsPerPage(Number(e.target.value));
@@ -421,6 +424,7 @@ export default function TopInfluencersPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button
+                      aria-label="Previous page"
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       disabled={safePage === 1}
                       className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
@@ -432,6 +436,8 @@ export default function TopInfluencersPage() {
                       <button
                         key={page}
                         onClick={() => setCurrentPage(page)}
+                        aria-label={`Page ${page}`}
+                        aria-current={page === safePage ? "page" : undefined}
                         className={`rounded-md px-3 py-1 text-sm ${page === safePage ? "font-bold" : ""}`}
                         style={{
                           backgroundColor: page === safePage ? "var(--primary)" : "transparent",
@@ -442,6 +448,7 @@ export default function TopInfluencersPage() {
                       </button>
                     ))}
                     <button
+                      aria-label="Next page"
                       onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                       disabled={safePage === totalPages}
                       className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
