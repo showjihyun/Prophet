@@ -185,6 +185,7 @@ async def create_simulation(
         slm_llm_ratio=body.slm_llm_ratio,
         slm_model=body.slm_model,
         budget_usd=body.budget_usd,
+        platform=body.platform,
     )
 
     state = orchestrator.create_simulation(config)

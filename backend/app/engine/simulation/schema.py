@@ -85,7 +85,8 @@ class SimulationConfig:
     fixed_step_hours: float = 1.0
     temporal_config: TemporalConfig | None = None
 
-    # RecSys
+    # Platform & RecSys
+    platform: str = "default"
     recsys_config: RecSysConfig | None = None
 
     # LLM

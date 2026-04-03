@@ -61,6 +61,7 @@ class CreateSimulationRequest(BaseModel):
     slm_llm_ratio: float = Field(default=0.5, ge=0.0, le=1.0)
     slm_model: str = "phi4"
     budget_usd: float = Field(default=10.0, ge=0.0)
+    platform: str = "default"
 
 
 class InjectEventRequest(BaseModel):
