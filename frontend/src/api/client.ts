@@ -189,6 +189,18 @@ export interface CommunityTemplateInput {
   personality_profile?: Record<string, number>;
 }
 
+/** Report returned by POST /simulations/{id}/run-all. @spec docs/spec/06_API_SPEC.md#post-simulationssimulation_idrun-all */
+export interface RunAllReport {
+  simulation_id: string;
+  status: string;
+  total_steps: number;
+  final_adoption_rate: number;
+  final_mean_sentiment: number;
+  community_summary: Array<Record<string, unknown>>;
+  emergent_events_count: number;
+  duration_ms: number;
+}
+
 /** Cytoscape graph format. @spec docs/spec/06_API_SPEC.md#get-network */
 export interface CytoscapeGraph {
   nodes: Array<{ data: Record<string, unknown> }>;
@@ -248,6 +260,8 @@ export const apiClient = {
       request<Record<string, unknown>>(`/simulations/${id}/monte-carlo/${jobId}`),
     engineControl: (id: string, body: { slm_llm_ratio: number; slm_model?: string; budget_usd?: number }) =>
       request<Record<string, unknown>>(`/simulations/${id}/engine-control`, { method: "POST", body: JSON.stringify(body) }),
+    runAll: (id: string) =>
+      request<RunAllReport>(`/simulations/${id}/run-all`, { method: "POST" }),
     recommendEngine: (body: { agent_count: number; budget_usd: number; max_steps?: number }) =>
       request<Record<string, unknown>>("/simulations/recommend-engine", { method: "POST", body: JSON.stringify(body) }),
     export: (id: string, format: 'json' | 'csv' = 'json') => {

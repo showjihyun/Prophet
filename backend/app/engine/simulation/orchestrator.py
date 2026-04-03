@@ -314,6 +314,78 @@ class SimulationOrchestrator:
                 state.status = SimulationStatus.FAILED.value
                 raise
 
+    async def run_all(self, simulation_id: UUID) -> dict:
+        """Run all remaining steps to completion and return a summary report.
+
+        SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+
+        If the simulation is CONFIGURED it will be started automatically.
+        Runs until max_steps is reached or the simulation moves to COMPLETED/FAILED.
+
+        Returns a report dict with:
+          total_steps, final_adoption_rate, final_mean_sentiment,
+          community_breakdown, duration_ms, emergent_events_count
+        """
+        import time as _time
+
+        state = self._get_state(simulation_id)
+
+        # Auto-start from CONFIGURED
+        if state.status == SimulationStatus.CONFIGURED.value:
+            self.start(simulation_id)
+        elif state.status != SimulationStatus.RUNNING.value:
+            raise ValueError(
+                f"run_all requires CONFIGURED or RUNNING status, got '{state.status}'"
+            )
+
+        start_ts = _time.monotonic()
+        emergent_count = 0
+
+        while state.status == SimulationStatus.RUNNING.value:
+            result = await self.run_step(simulation_id)
+            emergent_count += len(result.emergent_events)
+            # Yield control to event loop so WebSocket broadcasts can fire
+            await asyncio.sleep(0)
+
+        duration_ms = (_time.monotonic() - start_ts) * 1000.0
+
+        # Build community breakdown from the last step in history
+        community_breakdown: list[dict] = []
+        if state.step_history:
+            last = state.step_history[-1]
+            for cid, metric in last.community_metrics.items():
+                if isinstance(metric, dict):
+                    community_breakdown.append({
+                        "community_id": str(cid),
+                        "adoption_rate": metric.get("adoption_rate", 0.0),
+                        "mean_belief": metric.get("mean_belief", 0.0),
+                        "dominant_action": metric.get("dominant_action", "ignore"),
+                    })
+                else:
+                    community_breakdown.append({
+                        "community_id": str(cid),
+                        "adoption_rate": getattr(metric, "adoption_rate", 0.0),
+                        "mean_belief": getattr(metric, "mean_belief", 0.0),
+                        "dominant_action": str(getattr(metric, "dominant_action", "ignore")),
+                    })
+
+        final_adoption_rate = 0.0
+        final_mean_sentiment = 0.0
+        if state.step_history:
+            last = state.step_history[-1]
+            final_adoption_rate = last.adoption_rate
+            final_mean_sentiment = last.mean_sentiment
+
+        return {
+            "total_steps": state.current_step,
+            "final_adoption_rate": final_adoption_rate,
+            "final_mean_sentiment": final_mean_sentiment,
+            "community_breakdown": community_breakdown,
+            "duration_ms": duration_ms,
+            "emergent_events_count": emergent_count,
+            "status": state.status,
+        }
+
     async def pause(self, simulation_id: UUID) -> None:
         """Pause a running simulation.
 

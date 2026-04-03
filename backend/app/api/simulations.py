@@ -34,6 +34,7 @@ from app.api.schemas import (
     RecommendEngineRequest,
     RecommendEngineResponse,
     ReplayResponse,
+    RunAllResponse,
     ScenarioComparisonResponse,
     SimulationDetailResponse,
     SimulationResponse,
@@ -398,6 +399,67 @@ async def step_simulation(
             {"type": e.event_type, "step": e.step, "community_id": str(e.community_id) if e.community_id else None}
             for e in result.emergent_events
         ] if result.emergent_events else [],
+    )
+
+
+@router.post("/{simulation_id}/run-all", response_model=RunAllResponse)
+async def run_all_simulation(
+    simulation_id: str,
+    orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
+) -> RunAllResponse:
+    """Run all remaining steps to completion and return a report.
+    SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idrun-all
+    """
+    state = _get_state_or_404(orchestrator, simulation_id)
+    _require_status(state, SimulationStatus.CONFIGURED, SimulationStatus.RUNNING)
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+
+    try:
+        report = await orchestrator.run_all(sim_uuid)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/invalid-state",
+                title="Invalid Simulation State",
+                status=409,
+                detail=str(exc),
+                instance=f"/api/v1/simulations/{simulation_id}/run-all",
+            ).model_dump(),
+        )
+
+    # Persist final status
+    await persist.persist_status(session, sim_uuid, report["status"], report["total_steps"])
+
+    # Broadcast completion via WebSocket
+    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        "type": "run_all_complete",
+        "data": {
+            "simulation_id": simulation_id,
+            "total_steps": report["total_steps"],
+            "final_adoption_rate": report["final_adoption_rate"],
+            "final_mean_sentiment": report["final_mean_sentiment"],
+            "emergent_events_count": report["emergent_events_count"],
+            "duration_ms": report["duration_ms"],
+            "status": report["status"],
+        },
+    }))
+    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        "type": "status_change",
+        "data": {"status": report["status"]},
+    }))
+
+    return RunAllResponse(
+        simulation_id=simulation_id,
+        status=report["status"],
+        total_steps=report["total_steps"],
+        final_adoption_rate=report["final_adoption_rate"],
+        final_mean_sentiment=report["final_mean_sentiment"],
+        community_summary=report["community_breakdown"],
+        emergent_events_count=report["emergent_events_count"],
+        duration_ms=report["duration_ms"],
     )
 
 

@@ -13,6 +13,7 @@ import {
   Play,
   Pause,
   SkipForward,
+  ChevronsRight,
   RotateCcw,
   Rewind,
   Settings,
@@ -59,6 +60,7 @@ export default function ControlPanel() {
   const [monteCarloOpen, setMonteCarloOpen] = useState(false);
   const [engineOpen, setEngineOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [runAllLoading, setRunAllLoading] = useState(false);
 
   // Previous simulations list for the "Load Previous" dropdown
   const [prevSimulations, setPrevSimulations] = useState<SimulationRun[]>([]);
@@ -221,6 +223,19 @@ export default function ControlPanel() {
         setStatus('created');
       }
     } catch { /* ignore */ }
+  };
+
+  const handleRunAll = async () => {
+    if (!simulation?.simulation_id || runAllLoading) return;
+    setRunAllLoading(true);
+    try {
+      const report = await apiClient.simulations.runAll(simulation.simulation_id);
+      setStatus(report.status as 'completed' | 'failed');
+    } catch {
+      // leave status unchanged on failure
+    } finally {
+      setRunAllLoading(false);
+    }
   };
 
   // Keyboard shortcuts: Space=Play/Pause, ArrowRight=Step, Escape=Reset
@@ -451,6 +466,13 @@ export default function ControlPanel() {
           hidden={!isRunning}
         />
         <ControlButton
+          testId="run-all-btn"
+          icon={runAllLoading ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <ChevronsRight className="w-4 h-4" />}
+          label="Run All"
+          onClick={handleRunAll}
+          disabled={isRunning || runAllLoading || !simulation || (status !== 'configured' && status !== 'paused')}
+        />
+        <ControlButton
           testId="step-btn"
           icon={<SkipForward className="w-4 h-4" />}
           label="Step"
@@ -531,12 +553,14 @@ function ControlButton({
   onClick,
   testId,
   hidden,
+  disabled,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
   testId?: string;
   hidden?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -544,7 +568,8 @@ function ControlButton({
       onClick={onClick}
       title={label}
       aria-hidden={hidden}
-      className={`w-8 h-8 flex items-center justify-center rounded-md text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors ${hidden ? "invisible absolute" : ""}`}
+      disabled={disabled}
+      className={`w-8 h-8 flex items-center justify-center rounded-md text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${hidden ? "invisible absolute" : ""}`}
     >
       {icon}
     </button>

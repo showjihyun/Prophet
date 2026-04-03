@@ -259,6 +259,20 @@ class RecommendEngineResponse(BaseModel):
     mode: str = ""
 
 
+class RunAllResponse(BaseModel):
+    """Response after running all remaining steps to completion.
+    SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idrun-all
+    """
+    simulation_id: str
+    status: str
+    total_steps: int
+    final_adoption_rate: float
+    final_mean_sentiment: float
+    community_summary: list[dict]
+    emergent_events_count: int
+    duration_ms: float
+
+
 # --- Agent Responses ---
 
 class AgentSummaryResponse(BaseModel):
