@@ -160,6 +160,7 @@ export default function SettingsPage() {
   ) {
     return (
       <select
+        id={testId}
         data-testid={testId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -198,10 +199,11 @@ export default function SettingsPage() {
 
           {/* Default Provider */}
           <div className="mb-5">
-            <label className="block text-sm font-medium text-[var(--muted-foreground)] mb-1.5">
+            <label htmlFor="default-provider-select" className="block text-sm font-medium text-[var(--muted-foreground)] mb-1.5">
               Default Provider
             </label>
             <select
+              id="default-provider-select"
               data-testid="default-provider-select"
               value={defaultProvider}
               onChange={(e) => setDefaultProvider(e.target.value)}
@@ -221,25 +223,27 @@ export default function SettingsPage() {
           </h3>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Base URL</label>
+              <label htmlFor="ollama-base-url" className="block text-sm text-[var(--muted-foreground)] mb-1">Base URL</label>
               <input
+                id="ollama-base-url"
                 data-testid="ollama-base-url"
-                type="text"
+                type="url"
+                autoComplete="url"
                 value={ollamaBaseUrl}
                 onChange={(e) => setOllamaBaseUrl(e.target.value)}
                 className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               />
             </div>
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Default Model</label>
+              <label htmlFor="ollama-default-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Default Model</label>
               {modelSelect("ollama-default-model", ollamaDefaultModel, setOllamaDefaultModel, ollamaModels)}
             </div>
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">SLM Model (Tier 1)</label>
+              <label htmlFor="ollama-slm-model" className="block text-sm text-[var(--muted-foreground)] mb-1">SLM Model (Tier 1)</label>
               {modelSelect("ollama-slm-model", slmModel, setSlmModel, ollamaModels)}
             </div>
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Embed Model</label>
+              <label htmlFor="ollama-embed-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Embed Model</label>
               {modelSelect("ollama-embed-model", ollamaEmbedModel, setOllamaEmbedModel, ollamaModels)}
             </div>
           </div>
@@ -252,9 +256,9 @@ export default function SettingsPage() {
               className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-[var(--border)] bg-[var(--card)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
             >
               {testing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
               ) : (
-                <TestTube2 className="w-4 h-4" />
+                <TestTube2 className="w-4 h-4" aria-hidden="true" />
               )}
               Test Connection
             </button>
@@ -266,12 +270,12 @@ export default function SettingsPage() {
               >
                 {testResult.status === "ok" ? (
                   <>
-                    <CheckCircle2 className="w-4 h-4" />
+                    <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
                     Connected ({testResult.latency_ms}ms)
                   </>
                 ) : (
                   <>
-                    <XCircle className="w-4 h-4" />
+                    <XCircle className="w-4 h-4" aria-hidden="true" />
                     {testResult.message || "Connection failed"}
                   </>
                 )}
@@ -287,10 +291,12 @@ export default function SettingsPage() {
           </h3>
           <div className="grid grid-cols-2 gap-4 mb-5">
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
+              <label htmlFor="anthropic-api-key" className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
               <input
+                id="anthropic-api-key"
                 data-testid="anthropic-api-key"
                 type="password"
+                autoComplete="off"
                 value={anthropicApiKey}
                 onChange={(e) => setAnthropicApiKey(e.target.value)}
                 placeholder={anthropicKeySet ? "sk-ant-*******" : "Not set"}
@@ -298,8 +304,9 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
+              <label htmlFor="anthropic-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
               <select
+                id="anthropic-model"
                 data-testid="anthropic-model"
                 value={anthropicModel}
                 onChange={(e) => setAnthropicModel(e.target.value)}
@@ -320,10 +327,12 @@ export default function SettingsPage() {
           </h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
+              <label htmlFor="openai-api-key" className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
               <input
+                id="openai-api-key"
                 data-testid="openai-api-key"
                 type="password"
+                autoComplete="off"
                 value={openaiApiKey}
                 onChange={(e) => setOpenaiApiKey(e.target.value)}
                 placeholder={openaiKeySet ? "sk-*******" : "Not set"}
@@ -331,8 +340,9 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
+              <label htmlFor="openai-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
               <select
+                id="openai-model"
                 data-testid="openai-model"
                 value={openaiModel}
                 onChange={(e) => setOpenaiModel(e.target.value)}
@@ -355,10 +365,11 @@ export default function SettingsPage() {
           <div className="space-y-4">
             {/* SLM/LLM Ratio */}
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">
+              <label htmlFor="slm-llm-ratio" className="block text-sm text-[var(--muted-foreground)] mb-1">
                 SLM/LLM Ratio: <span className="font-mono">{slmLlmRatio.toFixed(2)}</span>
               </label>
               <input
+                id="slm-llm-ratio"
                 data-testid="slm-llm-ratio"
                 type="range"
                 min={0}
@@ -372,8 +383,9 @@ export default function SettingsPage() {
 
             {/* Tier 3 Ratio */}
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">LLM Tier 3 Ratio</label>
+              <label htmlFor="tier3-ratio" className="block text-sm text-[var(--muted-foreground)] mb-1">LLM Tier 3 Ratio</label>
               <input
+                id="tier3-ratio"
                 data-testid="tier3-ratio"
                 type="number"
                 min={0}
@@ -387,10 +399,11 @@ export default function SettingsPage() {
 
             {/* Cache TTL */}
             <div>
-              <label className="block text-sm text-[var(--muted-foreground)] mb-1">
+              <label htmlFor="cache-ttl" className="block text-sm text-[var(--muted-foreground)] mb-1">
                 LLM Cache TTL (seconds)
               </label>
               <input
+                id="cache-ttl"
                 data-testid="cache-ttl"
                 type="number"
                 min={0}
@@ -452,20 +465,20 @@ export default function SettingsPage() {
             className="inline-flex items-center gap-2 h-10 px-6 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium hover:bg-[var(--primary)]/90 disabled:opacity-50"
           >
             {saving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
             ) : (
-              <Save className="w-4 h-4" />
+              <Save className="w-4 h-4" aria-hidden="true" />
             )}
             Save Settings
           </button>
           {saveSuccess === true && (
             <span className="text-sm text-[var(--sentiment-positive)] flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" /> Saved
+              <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Saved
             </span>
           )}
           {saveSuccess === false && (
             <span className="text-sm text-[var(--destructive)] flex items-center gap-1">
-              <XCircle className="w-4 h-4" /> Save failed
+              <XCircle className="w-4 h-4" aria-hidden="true" /> Save failed
             </span>
           )}
         </div>
