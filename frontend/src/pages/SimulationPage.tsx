@@ -20,6 +20,7 @@ import ConversationPanel from "../components/control/ConversationPanel";
 import LLMDashboard from "../components/llm/LLMDashboard";
 import SimulationReportModal from "../components/shared/SimulationReportModal";
 import ToastContainer from "../components/shared/ToastNotification";
+import AgentInspector from "../components/agent/AgentInspector";
 import { useSimulationSocket } from "../hooks/useSimulationSocket";
 import { useSimulationStore } from "../store/simulationStore";
 import type { StepResult, EmergentEvent, SimulationStatus } from "../types/simulation";
@@ -34,6 +35,8 @@ export default function SimulationPage() {
   const status = useSimulationStore((s) => s.status);
   const steps = useSimulationStore((s) => s.steps);
   const addToast = useSimulationStore((s) => s.addToast);
+  const selectedAgentId = useSimulationStore((s) => s.selectedAgentId);
+  const isAgentInspectorOpen = useSimulationStore((s) => s.isAgentInspectorOpen);
 
   const [reportOpen, setReportOpen] = useState(false);
 
@@ -131,6 +134,15 @@ export default function SimulationPage() {
         <div className="shrink-0 border-t border-[var(--border)] bg-[var(--card)]">
           <LLMDashboard />
         </div>
+      )}
+
+      {/* Agent Inspector — right drawer, shown when agent selected */}
+      {isAgentInspectorOpen && selectedAgentId && simulation && (
+        <AgentInspector
+          agentId={selectedAgentId}
+          simulationId={simulation.simulation_id}
+          isPaused={status === "paused"}
+        />
       )}
 
       {/* Simulation Report Modal — shown on completion */}
