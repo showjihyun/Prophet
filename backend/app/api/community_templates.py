@@ -3,14 +3,19 @@ SPEC: docs/spec/06_API_SPEC.md#community-template-endpoints
 """
 from __future__ import annotations
 
+import json
 import uuid
+from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1/communities/templates", tags=["community_templates"])
 
-# In-memory store for community templates
-_community_templates: dict[str, dict] = {
+# Persistence file path
+_TEMPLATES_FILE = Path(__file__).resolve().parents[3] / "data" / "community_templates.json"
+
+# Default templates used when no persisted file exists
+_DEFAULT_TEMPLATES: dict[str, dict] = {
     "early_adopters": {
         "template_id": "early_adopters",
         "name": "Early Adopters",
@@ -84,6 +89,34 @@ _community_templates: dict[str, dict] = {
 }
 
 
+def _load_templates() -> dict[str, dict]:
+    """Load templates from JSON file, falling back to defaults on any error."""
+    try:
+        if _TEMPLATES_FILE.exists():
+            data = json.loads(_TEMPLATES_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return dict(_DEFAULT_TEMPLATES)
+
+
+def _save_templates(templates: dict[str, dict]) -> None:
+    """Persist templates dict to JSON file, creating parent dirs as needed."""
+    try:
+        _TEMPLATES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _TEMPLATES_FILE.write_text(
+            json.dumps(templates, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+# In-memory store — initialised from persisted file (or defaults)
+_community_templates: dict[str, dict] = _load_templates()
+
+
 class CommunityTemplateInput(BaseModel):
     """Input schema for creating/updating a community template."""
     name: str
@@ -116,6 +149,7 @@ async def create_template(body: CommunityTemplateInput) -> dict:
         "personality_profile": body.personality_profile,
     }
     _community_templates[template_id] = template
+    _save_templates(_community_templates)
     return template
 
 
@@ -135,6 +169,7 @@ async def update_template(template_id: str, body: CommunityTemplateInput) -> dic
         "personality_profile": body.personality_profile,
     }
     _community_templates[template_id] = updated
+    _save_templates(_community_templates)
     return updated
 
 
@@ -146,6 +181,7 @@ async def delete_template(template_id: str) -> None:
     if template_id not in _community_templates:
         raise HTTPException(status_code=404, detail=f"Template '{template_id}' not found")
     del _community_templates[template_id]
+    _save_templates(_community_templates)
 
 
 __all__ = ["router"]
