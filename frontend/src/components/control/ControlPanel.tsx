@@ -61,6 +61,7 @@ export default function ControlPanel() {
   const [engineOpen, setEngineOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [runAllLoading, setRunAllLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   // Previous simulations list for the "Load Previous" dropdown
   const [prevSimulations, setPrevSimulations] = useState<SimulationRun[]>([]);
@@ -101,7 +102,7 @@ export default function ControlPanel() {
         stepIntervalRef.current = null;
       }
     };
-  }, [status, speed, simulation?.simulation_id]);
+  }, [status, speed, simulation?.simulation_id, appendStep, setStatus, simulation?.max_steps]);
 
   // Load projects list on mount
   useEffect(() => {
@@ -141,6 +142,36 @@ export default function ControlPanel() {
       const scenario = await apiClient.projects.createScenario(currentProjectId, { name: name.trim() });
       setScenarios([...scenarios, scenario]);
     } catch { /* ignore */ }
+  };
+
+  // Create new simulation inline — no page navigation
+  const handleNewSimulation = async () => {
+    if (!currentProjectId) {
+      alert("Please select a project first.");
+      return;
+    }
+    const name = window.prompt("Simulation name:", `Simulation ${new Date().toLocaleDateString()}`);
+    if (!name?.trim()) return;
+    setCreating(true);
+    try {
+      const sim = await apiClient.simulations.create({
+        name: name.trim(),
+        project_id: currentProjectId,
+        campaign: {
+          name: name.trim(),
+          channels: ["social_media"],
+          message: "Default campaign message",
+          target_communities: [],
+        },
+        max_steps: 365,
+      });
+      setSimulation(sim);
+      setStatus("configured");
+    } catch (err) {
+      alert(`Failed to create simulation: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setCreating(false);
+    }
   };
 
   // Load list of previous simulations when dropdown is opened
@@ -276,11 +307,12 @@ export default function ControlPanel() {
         </div>
         {!simulation && (
           <button
-            onClick={() => navigate("/setup")}
-            className="h-8 px-3 text-xs font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity flex items-center gap-1.5"
+            onClick={handleNewSimulation}
+            disabled={creating}
+            className="h-8 px-3 text-xs font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50"
           >
             <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-            New Simulation
+            {creating ? "Creating\u2026" : "New Simulation"}
           </button>
         )}
         <span data-testid="status-badge" className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--card)]">

@@ -22,6 +22,7 @@ export interface CommunityConfigInput {
 export interface CreateSimulationConfig {
   name: string;
   description?: string;
+  project_id?: string;
   campaign: {
     name: string;
     budget?: number;
