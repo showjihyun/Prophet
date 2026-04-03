@@ -152,14 +152,14 @@ export default function ProjectScenariosPage() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button className="inline-flex items-center gap-2 h-9 px-3 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors">
-                  <Settings className="w-4 h-4" />
+                  <Settings className="w-4 h-4" aria-hidden="true" />
                   Settings
                 </button>
                 <button
                   onClick={handleNewScenario}
                   className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-[var(--primary-foreground)] bg-[var(--primary)] rounded-md hover:bg-[var(--primary)]/90 transition-colors"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4 h-4" aria-hidden="true" />
                   New Scenario
                 </button>
               </div>
@@ -246,12 +246,16 @@ export default function ProjectScenariosPage() {
                       <button
                         onClick={() => handleDelete(scenario)}
                         title="Delete scenario"
+                        aria-label="Delete scenario"
                         className="h-8 w-8 flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--destructive)] hover:bg-[var(--accent)] rounded-md transition-colors"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </button>
-                      <button className="h-8 w-8 flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors">
-                        <MoreHorizontal className="w-4 h-4" />
+                      <button
+                        aria-label="More options"
+                        className="h-8 w-8 flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors"
+                      >
+                        <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
                       </button>
                     </div>
                   </div>
