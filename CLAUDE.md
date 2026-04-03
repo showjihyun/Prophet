@@ -361,6 +361,15 @@ Prophet/
 - **PostgreSQL이 source of truth** — 인메모리 상태는 캐시일 뿐
 - **SPEC 트레이서빌리티** — 모든 모듈 docstring에 SPEC 문서 참조를 명시한다
 
+## Health Stack
+
+- typecheck: cd frontend && npx tsc --noEmit
+- lint: cd frontend && npx eslint .
+- test-fe: cd frontend && npx vitest run
+- test-be: cd backend && uv run pytest tests/ -q
+- deadcode: (not installed)
+- shell: (not installed)
+
 ## Skill routing
 
 When the user's request matches an available skill, ALWAYS invoke it using the Skill
