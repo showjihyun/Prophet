@@ -266,7 +266,7 @@ const CY_STYLE: cytoscape.Stylesheet[] = [
 export default function GraphPanel() {
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
-  navigateRef.current = navigate;
+  useEffect(() => { navigateRef.current = navigate; });
   const cyRef = useRef<Core | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);

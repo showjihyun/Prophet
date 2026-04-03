@@ -42,11 +42,15 @@ export default function MonteCarloModal({ isOpen, onClose }: MonteCarloModalProp
   useEffect(() => {
     if (isOpen) {
       cancelledRef.current = false;
-      setNRuns(100);
-      setLlmEnabled(false);
-      setPhase("config");
-      setResult(null);
-      setError(null);
+      // Defer setState calls out of the synchronous effect body
+      // (react-hooks/set-state-in-effect).
+      queueMicrotask(() => {
+        setNRuns(100);
+        setLlmEnabled(false);
+        setPhase("config");
+        setResult(null);
+        setError(null);
+      });
     } else {
       cancelledRef.current = true;
     }

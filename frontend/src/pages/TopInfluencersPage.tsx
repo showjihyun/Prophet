@@ -19,10 +19,11 @@ import {
 } from "recharts";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
-import InfluencersFilter, {
+import InfluencersFilter from "../components/shared/InfluencersFilter";
+import {
   DEFAULT_FILTERS,
   type FilterState,
-} from "../components/shared/InfluencersFilter";
+} from "../components/shared/influencersFilterTypes";
 
 interface Influencer {
   rank: number;

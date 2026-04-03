@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSimulationStore } from "../../store/simulationStore";
-import { apiClient, type AgentSummary } from "../../api/client";
+import { apiClient } from "../../api/client";
 
 const COMMUNITY_COLORS: Record<string, string> = {
   Alpha: "var(--community-alpha)",

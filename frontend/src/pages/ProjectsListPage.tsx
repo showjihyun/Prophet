@@ -5,7 +5,6 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Plus, Layers, Clock } from "lucide-react";
-import AppSidebar from "../components/shared/AppSidebar";
 import { apiClient } from "../api/client";
 import type { ProjectSummary } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";

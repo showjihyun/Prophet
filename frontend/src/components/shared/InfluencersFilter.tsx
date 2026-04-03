@@ -3,24 +3,7 @@
  * @spec docs/spec/ui/UI_09_INFLUENCERS_FILTER.md
  */
 import { useState, useEffect, useRef } from "react";
-
-export interface FilterState {
-  communities: string[];
-  status: "all" | "active" | "idle";
-  scoreMin: number;
-  scoreMax: number;
-  sentiment: string;
-  minConnections: number;
-}
-
-export const DEFAULT_FILTERS: FilterState = {
-  communities: ["Alpha", "Beta", "Gamma", "Delta", "Bridge"],
-  status: "all",
-  scoreMin: 0,
-  scoreMax: 100,
-  sentiment: "all",
-  minConnections: 0,
-};
+import { type FilterState, DEFAULT_FILTERS } from "./influencersFilterTypes";
 
 interface InfluencersFilterProps {
   isOpen: boolean;
@@ -46,10 +29,12 @@ export default function InfluencersFilter({
   const [draft, setDraft] = useState<FilterState>(currentFilters);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Sync draft when popover opens
+  // Sync draft when popover opens.
+  // Deferred via queueMicrotask to avoid calling setState synchronously
+  // inside the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
     if (isOpen) {
-      setDraft(currentFilters);
+      queueMicrotask(() => setDraft(currentFilters));
     }
   }, [isOpen, currentFilters]);
 

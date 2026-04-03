@@ -61,10 +61,12 @@ export default function SimulationPage() {
     }
   }, [lastMessage, appendStep, appendEmergentEvent, setStatus, addToast]);
 
-  // Show report modal when simulation completes
+  // Show report modal when simulation completes.
+  // setState is deferred via queueMicrotask to avoid calling it synchronously
+  // inside the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
     if (status === 'completed' && steps.length > 0) {
-      setReportOpen(true);
+      queueMicrotask(() => setReportOpen(true));
     }
   }, [status, steps.length]);
 

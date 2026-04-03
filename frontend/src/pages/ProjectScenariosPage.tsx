@@ -13,7 +13,6 @@ import {
   MoreHorizontal,
   Trash2,
 } from "lucide-react";
-import AppSidebar from "../components/shared/AppSidebar";
 import { apiClient } from "../api/client";
 import type { ProjectDetail, ScenarioInfo } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";
@@ -85,9 +84,9 @@ export default function ProjectScenariosPage() {
     if (!projectId) return;
     try {
       const res = await apiClient.projects.runScenario(projectId, scenario.scenario_id);
-      if (res && (res as any).simulation_id) {
+      if (res && res.simulation_id) {
         try {
-          const sim = await apiClient.simulations.get((res as any).simulation_id);
+          const sim = await apiClient.simulations.get(res.simulation_id);
           useSimulationStore.getState().setSimulation(sim);
         } catch { /* ignore */ }
       }

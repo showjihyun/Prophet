@@ -95,7 +95,7 @@ export default function CampaignSetupPage() {
     try {
       const res = await apiClient.communityTemplates.list();
       const templates = res.templates ?? [];
-      const loaded: CommunityConfigInput[] = templates.map((t: CommunityTemplate, i: number) => ({
+      const loaded: CommunityConfigInput[] = templates.map((t: CommunityTemplate) => ({
         id: t.template_id,
         name: t.name,
         size: t.default_size,
@@ -208,12 +208,12 @@ export default function CampaignSetupPage() {
       setSimulation({
         simulation_id: sim.simulation_id,
         name: config.name,
-        status: sim.status as any,
+        status: sim.status,
         current_step: 0,
         max_steps: config.max_steps ?? 50,
         created_at: new Date().toISOString(),
       });
-      setStatus(sim.status as any);
+      setStatus(sim.status);
       await apiClient.projects.createScenario(selectedProjectId, {
         name: config.name,
         config: { simulation_id: sim.simulation_id },

@@ -210,7 +210,6 @@ export default function ScenarioOpinionsPage() {
     const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
     if (!latestStep || !latestStep.community_metrics) return [];
     return Object.entries(latestStep.community_metrics).map(([cid, metrics], idx) => {
-      const adoptionPct = Math.round(metrics.adoption_rate * 100);
       const beliefScore = metrics.mean_belief;
       const positivePct = Math.round(Math.max(0, beliefScore) * 100);
       const negativePct = Math.round(Math.max(0, -beliefScore) * 100);

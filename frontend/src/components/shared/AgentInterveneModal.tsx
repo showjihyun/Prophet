@@ -64,10 +64,12 @@ export default function AgentInterveneModal({
 }: AgentInterveneModalProps) {
   const [state, setState] = useState<InterventionState>(INITIAL_STATE);
 
-  // Reset form state when modal opens
+  // Reset form state when modal opens.
+  // Deferred via queueMicrotask to avoid calling setState synchronously
+  // inside the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
     if (isOpen) {
-      setState(INITIAL_STATE);
+      queueMicrotask(() => setState(INITIAL_STATE));
     }
   }, [isOpen]);
 

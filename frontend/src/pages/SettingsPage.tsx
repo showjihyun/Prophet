@@ -11,7 +11,6 @@ import {
   XCircle,
   Loader2,
 } from "lucide-react";
-import AppSidebar from "../components/shared/AppSidebar";
 import { apiClient } from "../api/client";
 import type { SettingsResponse } from "../api/client";
 

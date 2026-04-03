@@ -150,7 +150,7 @@ export default function CommunityOpinionPage() {
   const derivedClusters = useMemo<ClusterData[]>(() => {
     if (!communityId || steps.length === 0) return [];
     const recent = steps.slice(-5);
-    return recent.map((step, idx) => {
+    return recent.map((step) => {
       const cm = step.community_metrics?.[communityId];
       const adoptRate = cm?.adoption_rate ?? 0;
       const support = Math.round(adoptRate * 100);

@@ -18,6 +18,7 @@ import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
 import { apiClient } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";
+import type { CommunityStepMetrics } from "../types/simulation";
 
 const COMMUNITY_COLORS = [
   "var(--community-alpha)", "var(--community-beta)", "var(--community-gamma)",
@@ -51,7 +52,7 @@ export default function GlobalMetricsPage() {
   const totalAgents = useMemo(() => {
     if (!latestStep?.community_metrics) return 0;
     return Object.values(latestStep.community_metrics).reduce(
-      (sum: number, cm: any) => sum + (cm.adoption_count ?? 0) / Math.max(cm.adoption_rate ?? 1, 0.001), 0,
+      (sum: number, cm: CommunityStepMetrics) => sum + (cm.adoption_count ?? 0) / Math.max(cm.adoption_rate ?? 1, 0.001), 0,
     );
   }, [latestStep]);
 
@@ -65,7 +66,7 @@ export default function GlobalMetricsPage() {
 
   const sentimentByCommunity = useMemo(() => {
     if (!latestStep?.community_metrics) return [];
-    return Object.entries(latestStep.community_metrics).map(([cid, cm]: [string, any], idx) => {
+    return Object.entries(latestStep.community_metrics).map(([cid, cm]: [string, CommunityStepMetrics], idx) => {
       const belief = cm.mean_belief ?? 0;
       // Derive sentiment distribution from belief (-1 to +1)
       const positive = Math.max(0, Math.round((belief + 1) / 2 * 100));

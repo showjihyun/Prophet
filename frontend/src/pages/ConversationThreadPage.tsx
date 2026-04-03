@@ -3,7 +3,7 @@
  * @spec docs/spec/ui/UI_15_CONVERSATION_THREAD.md
  */
 import { useMemo, useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import { useSimulationStore } from "../store/simulationStore";
 import { apiClient, type ThreadDetail } from "../api/client";
@@ -133,7 +133,6 @@ const COMMUNITY_COLORS_ARRAY = [
 
 export default function ConversationThreadPage() {
   const { communityId, threadId: _threadId } = useParams<{ communityId: string; threadId: string }>();
-  const navigate = useNavigate();
   const simulation = useSimulationStore((st) => st.simulation);
   const steps = useSimulationStore((st) => st.steps);
   const emergentEvents = useSimulationStore((st) => st.emergentEvents);
@@ -144,12 +143,16 @@ export default function ConversationThreadPage() {
 
   useEffect(() => {
     if (!simulation?.simulation_id || !communityId || !_threadId) return;
-    setApiLoading(true);
-    apiClient.communityThreads
-      .get(simulation.simulation_id, communityId, _threadId)
-      .then((data) => setApiThread(data))
-      .catch(() => setApiThread(null))
-      .finally(() => setApiLoading(false));
+    const controller = new AbortController();
+    Promise.resolve()
+      .then(() => {
+        setApiLoading(true);
+        return apiClient.communityThreads.get(simulation.simulation_id!, communityId, _threadId);
+      })
+      .then((data) => { if (!controller.signal.aborted) setApiThread(data); })
+      .catch(() => { if (!controller.signal.aborted) setApiThread(null); })
+      .finally(() => { if (!controller.signal.aborted) setApiLoading(false); });
+    return () => controller.abort();
   }, [simulation?.simulation_id, communityId, _threadId]);
 
   // Derive thread header from store data (fallback when no API data)

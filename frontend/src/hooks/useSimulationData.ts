@@ -4,7 +4,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
-import type { SimulationRun, StepResult } from '../types/simulation';
+import type { SimulationRun } from '../types/simulation';
 
 export function useSimulation(simulationId: string | null) {
   return useQuery({
@@ -25,7 +25,7 @@ export function useStepMutation(simulationId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => apiClient.simulations.step(simulationId),
-    onSuccess: (_data: StepResult) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['simulation', simulationId] });
     },
   });

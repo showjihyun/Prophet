@@ -191,7 +191,7 @@ const ALL_COMMUNITIES = Object.keys(COMMUNITY_COLOR);
 export default function EgoGraph({ agentId }: EgoGraphProps) {
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
-  navigateRef.current = navigate;
+  useEffect(() => { navigateRef.current = navigate; });
   const cyRef = useRef<Core | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
