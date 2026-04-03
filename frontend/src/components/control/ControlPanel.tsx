@@ -269,7 +269,7 @@ export default function ControlPanel() {
       {/* Left: Logo + Status */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <Brain className="w-5 h-5 text-[var(--primary)]" />
+          <Brain className="w-5 h-5 text-[var(--primary)]" aria-hidden="true" />
           <span className="text-base font-bold text-[var(--primary)]">
             MCASP Prophet Engine
           </span>
@@ -279,7 +279,7 @@ export default function ControlPanel() {
             onClick={() => navigate("/projects")}
             className="h-8 px-3 text-xs font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity flex items-center gap-1.5"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             New Simulation
           </button>
         )}
@@ -567,7 +567,9 @@ function ControlButton({
       data-testid={testId}
       onClick={onClick}
       title={label}
-      aria-hidden={hidden}
+      aria-label={label}
+      aria-hidden={hidden || undefined}
+      tabIndex={hidden ? -1 : undefined}
       disabled={disabled}
       className={`w-8 h-8 flex items-center justify-center rounded-md text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${hidden ? "invisible absolute" : ""}`}
     >
