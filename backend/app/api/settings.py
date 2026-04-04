@@ -13,6 +13,18 @@ from fastapi import APIRouter
 from app.config import settings
 from app.engine.platform.registry import PlatformRegistry
 
+# Module-level registry singleton so custom platform config persists across
+# requests within the same process lifetime.
+_registry: PlatformRegistry | None = None
+
+
+def _get_registry() -> PlatformRegistry:
+    """Return (or lazily create) the shared PlatformRegistry."""
+    global _registry
+    if _registry is None:
+        _registry = PlatformRegistry()
+    return _registry
+
 router = APIRouter(
     prefix="/api/v1/settings",
     tags=["settings"],
@@ -24,6 +36,12 @@ async def get_settings() -> dict[str, Any]:
     """Get current system settings.
     SPEC: docs/spec/06_API_SPEC.md#get-apiv1settings
     """
+    registry = _get_registry()
+    custom = registry.get_platform("custom")
+    feed_cfg = custom.get_feed_config()
+    action_weights = custom.get_action_weights()
+    prop_rules = custom.get_propagation_rules()
+
     return {
         "llm": {
             "default_provider": settings.default_llm_provider,
@@ -40,6 +58,28 @@ async def get_settings() -> dict[str, Any]:
             "slm_llm_ratio": settings.slm_llm_ratio,
             "llm_tier3_ratio": settings.llm_tier3_ratio,
             "llm_cache_ttl": settings.llm_cache_ttl,
+        },
+        "custom_platform": {
+            "display_name": custom.display_name,
+            "supported_actions": custom.supported_actions,
+            "action_weights": action_weights,
+            "feed_config": {
+                "feed_capacity": feed_cfg.feed_capacity,
+                "w_recency": feed_cfg.w_recency,
+                "w_social_affinity": feed_cfg.w_social_affinity,
+                "w_interest_match": feed_cfg.w_interest_match,
+                "w_engagement_signal": feed_cfg.w_engagement_signal,
+                "w_ad_boost": feed_cfg.w_ad_boost,
+                "enable_filter_bubble": feed_cfg.enable_filter_bubble,
+                "diversity_penalty": feed_cfg.diversity_penalty,
+            },
+            "propagation": {
+                "share_scope": prop_rules.share_scope,
+                "repost_amplification": prop_rules.repost_amplification,
+                "comment_visibility": prop_rules.comment_visibility,
+                "viral_threshold": prop_rules.viral_threshold,
+                "echo_chamber_factor": prop_rules.echo_chamber_factor,
+            },
         },
     }
 
@@ -77,6 +117,15 @@ async def update_settings(body: dict[str, Any]) -> dict[str, str]:
     if "llm_cache_ttl" in sim:
         settings.llm_cache_ttl = sim["llm_cache_ttl"]
 
+    # Custom platform reconfiguration
+    custom_cfg = body.get("custom_platform")
+    if custom_cfg is not None:
+        from app.engine.platform.custom import CustomPlatform
+
+        registry = _get_registry()
+        new_custom = CustomPlatform(config=custom_cfg)
+        registry.register_platform(new_custom)
+
     return {"status": "ok"}
 
 
@@ -102,7 +151,7 @@ async def list_platforms() -> dict[str, Any]:
     """List available platform plugins.
     SPEC: docs/spec/platform/12_PLATFORM_PLUGIN_SPEC.md#6-settings-integration
     """
-    registry = PlatformRegistry()
+    registry = _get_registry()
     return {
         "platforms": [
             {
@@ -120,7 +169,7 @@ async def list_recsys() -> dict[str, Any]:
     """List available RecSys algorithms.
     SPEC: docs/spec/platform/12_PLATFORM_PLUGIN_SPEC.md#6-settings-integration
     """
-    registry = PlatformRegistry()
+    registry = _get_registry()
     return {
         "algorithms": [{"name": r.name} for r in registry._recsys.values()]
     }

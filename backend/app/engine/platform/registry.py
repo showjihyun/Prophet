@@ -20,6 +20,7 @@ class PlatformRegistry:
 
     def _register_builtins(self) -> None:
         """Auto-register all built-in plugins."""
+        from app.engine.platform.custom import CustomPlatform
         from app.engine.platform.default import DefaultPlugin
         from app.engine.platform.instagram import InstagramPlugin
         from app.engine.platform.reddit import RedditPlugin
@@ -30,7 +31,13 @@ class PlatformRegistry:
             WeightedRecSys,
         )
 
-        for p in [DefaultPlugin(), TwitterPlugin(), RedditPlugin(), InstagramPlugin()]:
+        for p in [
+            DefaultPlugin(),
+            TwitterPlugin(),
+            RedditPlugin(),
+            InstagramPlugin(),
+            CustomPlatform(),
+        ]:
             self._platforms[p.name] = p
         for r in [WeightedRecSys(), HotScoreRecSys(), EmbeddingRecSys()]:
             self._recsys[r.name] = r

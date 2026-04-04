@@ -12,6 +12,7 @@ import pytest
 
 from app.engine.diffusion.schema import RecSysConfig
 from app.engine.platform.base import PlatformPlugin, PropagationRules
+from app.engine.platform.custom import CustomPlatform
 from app.engine.platform.default import DefaultPlugin
 from app.engine.platform.instagram import InstagramPlugin
 from app.engine.platform.recsys import (
@@ -223,7 +224,8 @@ class TestPLT05SettingsAPI:
         assert "twitter" in names
         assert "reddit" in names
         assert "instagram" in names
-        assert len(names) == 4
+        assert "custom" in names
+        assert len(names) == 5
 
     def test_list_recsys_contains_all_builtins(self) -> None:
         registry = PlatformRegistry()
@@ -284,3 +286,127 @@ class TestPLT06UnknownPlatformError:
         registry.register_platform(CustomPlugin())
         assert "custom" in registry.list_platforms()
         assert registry.get_platform("custom").display_name == "Custom Test"
+
+
+# ---------------------------------------------------------------------------
+# PLT-07: CustomPlatform — configurable action weights and feed rules
+# ---------------------------------------------------------------------------
+
+
+class TestPLT07CustomPlatform:
+    """PLT-07: CustomPlatform supports user-defined action weights and feed rules."""
+
+    def test_custom_platform_default_name(self) -> None:
+        p = CustomPlatform()
+        assert p.name == "custom"
+        assert p.display_name == "Custom Platform"
+
+    def test_custom_platform_is_registered_as_builtin(self) -> None:
+        registry = PlatformRegistry()
+        assert "custom" in registry.list_platforms()
+        p = registry.get_platform("custom")
+        assert isinstance(p, CustomPlatform)
+
+    def test_custom_platform_default_feed_config_equals_defaults(self) -> None:
+        p = CustomPlatform()
+        cfg = p.get_feed_config()
+        default_cfg = RecSysConfig()
+        assert cfg.feed_capacity == default_cfg.feed_capacity
+        assert cfg.w_recency == default_cfg.w_recency
+        assert cfg.w_social_affinity == default_cfg.w_social_affinity
+
+    def test_custom_platform_overrides_display_name(self) -> None:
+        p = CustomPlatform(config={"display_name": "My Brand Platform"})
+        assert p.display_name == "My Brand Platform"
+        assert p.name == "custom"  # name is always "custom"
+
+    def test_custom_platform_overrides_action_weights(self) -> None:
+        p = CustomPlatform(config={"action_weights": {"like": 0.9, "share": 0.1}})
+        weights = p.get_action_weights()
+        assert weights["like"] == 0.9
+        assert weights["share"] == 0.1
+        # Other defaults still present
+        assert "comment" in weights
+
+    def test_custom_platform_overrides_supported_actions(self) -> None:
+        p = CustomPlatform(config={"supported_actions": ["view", "like", "share"]})
+        assert p.supported_actions == ["view", "like", "share"]
+        assert "repost" not in p.supported_actions
+
+    def test_custom_platform_overrides_feed_config(self) -> None:
+        p = CustomPlatform(config={
+            "feed_config": {
+                "feed_capacity": 50,
+                "w_recency": 0.3,
+                "w_social_affinity": 0.2,
+                "w_interest_match": 0.2,
+                "w_engagement_signal": 0.2,
+                "w_ad_boost": 0.1,
+            }
+        })
+        cfg = p.get_feed_config()
+        assert cfg.feed_capacity == 50
+        assert cfg.w_recency == 0.3
+
+    def test_custom_platform_overrides_propagation(self) -> None:
+        p = CustomPlatform(config={
+            "propagation": {
+                "share_scope": "top_k",
+                "repost_amplification": 2.0,
+                "viral_threshold": 0.05,
+                "echo_chamber_factor": 0.8,
+            }
+        })
+        rules = p.get_propagation_rules()
+        assert rules.share_scope == "top_k"
+        assert rules.repost_amplification == 2.0
+        assert rules.viral_threshold == 0.05
+        assert rules.echo_chamber_factor == 0.8
+
+    def test_custom_platform_partial_feed_override_keeps_defaults(self) -> None:
+        """Partial feed_config override: only patch specified keys."""
+        p = CustomPlatform(config={"feed_config": {"feed_capacity": 100}})
+        cfg = p.get_feed_config()
+        assert cfg.feed_capacity == 100
+        # Other weights should remain at RecSysConfig defaults (sum == 1.0)
+        weight_sum = (
+            cfg.w_recency
+            + cfg.w_social_affinity
+            + cfg.w_interest_match
+            + cfg.w_engagement_signal
+            + cfg.w_ad_boost
+        )
+        assert abs(weight_sum - 1.0) <= 0.01
+
+    def test_custom_platform_get_action_weights_returns_copy(self) -> None:
+        """Mutations to the returned dict must not affect the plugin state."""
+        p = CustomPlatform()
+        w1 = p.get_action_weights()
+        w1["like"] = 9999.0
+        w2 = p.get_action_weights()
+        assert w2["like"] != 9999.0
+
+    def test_custom_platform_reconfigure_returns_new_instance(self) -> None:
+        p = CustomPlatform()
+        p2 = p.reconfigure({"display_name": "Reconfigured"})
+        assert isinstance(p2, CustomPlatform)
+        assert p2.display_name == "Reconfigured"
+        assert p.display_name == "Custom Platform"  # original unchanged
+
+    def test_custom_platform_registry_re_registration(self) -> None:
+        """Re-registering custom platform updates the registry entry."""
+        registry = PlatformRegistry()
+        new_custom = CustomPlatform(config={"display_name": "TikTok-like"})
+        registry.register_platform(new_custom)
+        assert registry.get_platform("custom").display_name == "TikTok-like"
+        # still only one "custom" entry
+        assert registry.list_platforms().count("custom") == 1
+
+    def test_custom_platform_satisfies_plugin_interface(self) -> None:
+        """CustomPlatform fulfils the full PlatformPlugin contract."""
+        p = CustomPlatform()
+        assert isinstance(p.get_feed_config(), RecSysConfig)
+        assert isinstance(p.get_action_weights(), dict)
+        assert isinstance(p.get_propagation_rules(), PropagationRules)
+        assert isinstance(p.supported_actions, list)
+        assert len(p.supported_actions) > 0
