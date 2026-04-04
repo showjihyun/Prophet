@@ -85,7 +85,7 @@ export default function GlobalMetricsPage() {
   // Tier distribution from step's llm_calls and action_distribution
   const tierStats = useMemo(() => {
     const agents = Math.round(totalAgents) || 0;
-    const ratio = simulation ? 0.8 : 0.8; // TODO: read from config
+    const ratio = useSimulationStore.getState().slmLlmRatio || 0.8;
     const t1 = Math.round(agents * ratio);
     const t2 = Math.round(agents * (1 - ratio) * 0.8);
     const t3 = agents - t1 - t2;
