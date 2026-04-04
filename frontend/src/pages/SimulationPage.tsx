@@ -9,7 +9,8 @@
  * Zone 3: Timeline (120px) + Conversations (fill remaining)
  */
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { apiClient } from "../api/client";
 import { FolderOpen, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
 import CommunityPanel from "../components/graph/CommunityPanel";
@@ -27,6 +28,7 @@ import type { StepResult, EmergentEvent, SimulationStatus } from "../types/simul
 
 export default function SimulationPage() {
   const navigate = useNavigate();
+  const { simulationId: urlSimId } = useParams<{ simulationId: string }>();
   const simulation = useSimulationStore((s) => s.simulation);
   const appendStep = useSimulationStore((s) => s.appendStep);
   const appendEmergentEvent = useSimulationStore((s) => s.appendEmergentEvent);
@@ -37,8 +39,19 @@ export default function SimulationPage() {
   const addToast = useSimulationStore((s) => s.addToast);
   const selectedAgentId = useSimulationStore((s) => s.selectedAgentId);
   const isAgentInspectorOpen = useSimulationStore((s) => s.isAgentInspectorOpen);
+  const setSimulation = useSimulationStore((s) => s.setSimulation);
 
   const [reportOpen, setReportOpen] = useState(false);
+
+  // G-10: Parametric route — load simulation from URL param if different from store.
+  // @spec docs/spec/06_API_SPEC.md#get-simulationssimulation_id
+  useEffect(() => {
+    if (urlSimId && urlSimId !== simulation?.simulation_id) {
+      apiClient.simulations.get(urlSimId).then((sim) => {
+        setSimulation(sim);
+      }).catch(() => {});
+    }
+  }, [urlSimId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const simulationId = simulation?.simulation_id ?? null;
   const { lastMessage } = useSimulationSocket(simulationId);

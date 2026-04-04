@@ -79,8 +79,9 @@ class CognitionLayer:
         Tier 3: LLM (async, falls back to Tier 2 on failure)
     """
 
-    def __init__(self, llm_adapter: LLMAdapter | None = None) -> None:
+    def __init__(self, llm_adapter: LLMAdapter | None = None, gateway: object | None = None) -> None:
         self._llm_adapter = llm_adapter
+        self._gateway = gateway  # LLMGateway instance for 3-tier cache routing
 
     def evaluate(
         self,
@@ -174,7 +175,7 @@ class CognitionLayer:
         if cognition_tier < 3 or self._llm_adapter is None:
             return self.evaluate(agent, perception, memories, cognition_tier, community_bias)
 
-        # Tier 3: async LLM path
+        # Tier 3: async LLM path (via Gateway if available, direct adapter otherwise)
         try:
             from app.llm.prompt_builder import PromptBuilder
             from app.llm.schema import LLMOptions
@@ -186,10 +187,18 @@ class CognitionLayer:
                 memories=memories,
                 campaign=campaign,
             )
-            response = await self._llm_adapter.complete(
-                prompt,
-                LLMOptions(temperature=0.7, max_tokens=256),
-            )
+            if self._gateway is not None:
+                response = await self._gateway.call(
+                    prompt,
+                    task_type="cognition",
+                    tier=3,
+                    options=LLMOptions(temperature=0.7, timeout_seconds=10.0),
+                )
+            else:
+                response = await self._llm_adapter.complete(
+                    prompt,
+                    LLMOptions(temperature=0.7, timeout_seconds=10.0),
+                )
 
             # Parse LLM response — expects JSON with evaluation_score and reasoning
             evaluation, reasoning = _parse_llm_cognition(response.content)

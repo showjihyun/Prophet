@@ -68,15 +68,16 @@ class AgentTick:
         perception -> memory -> emotion -> cognition -> decision -> influence -> store memory
     """
 
-    def __init__(self, llm_adapter=None):
+    def __init__(self, llm_adapter=None, gateway=None):
         """SPEC: docs/spec/01_AGENT_SPEC.md#agent-tick"""
         self._perception = PerceptionLayer(feed_capacity=20)
         self._memory = MemoryLayer(llm_adapter=llm_adapter)
         self._emotion = EmotionLayer()
-        self._cognition = CognitionLayer(llm_adapter=llm_adapter)
+        self._cognition = CognitionLayer(llm_adapter=llm_adapter, gateway=gateway)
         self._decision = DecisionLayer()
         self._influence = InfluenceLayer()
         self._llm_adapter = llm_adapter
+        self._gateway = gateway
 
     def tick(
         self,

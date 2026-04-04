@@ -76,6 +76,8 @@ function App() {
 
           {/* Simulation workspace — full screen, no sidebar */}
           <Route path="/simulation" element={<SimulationPage />} />
+          {/* Parametric simulation route — loads sim from URL param */}
+          <Route path="/simulations/:simulationId" element={<SimulationPage />} />
 
           {/* Login — no sidebar */}
           <Route path="/login" element={<LoginPage />} />

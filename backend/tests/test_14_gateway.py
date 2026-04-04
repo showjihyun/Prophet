@@ -44,7 +44,7 @@ class TestVectorCache:
         vc = VectorLLMCache()
         resp = LLMResponse("p", "m", "cached", None, 10, 5, 100)
         emb = [0.1] * 768
-        await vc.store("test prompt", emb, resp, "cognition")
+        await vc.store("test prompt", "hash1", emb, resp, "cognition")
         hit = await vc.search(emb, "cognition")  # identical embedding = sim 1.0
         assert hit is not None
         assert hit.cached is True
@@ -54,7 +54,7 @@ class TestVectorCache:
         vc = VectorLLMCache()
         resp = LLMResponse("p", "m", "cached", None, 10, 5, 100)
         emb = [0.1] * 768
-        await vc.store("test", emb, resp, "cognition")
+        await vc.store("test", "hash2", emb, resp, "cognition")
         hit = await vc.search(emb, "expert_analysis")  # wrong task type
         assert hit is None
 
@@ -62,7 +62,7 @@ class TestVectorCache:
     async def test_search_miss_low_similarity(self):
         vc = VectorLLMCache()
         resp = LLMResponse("p", "m", "cached", None, 10, 5, 100)
-        await vc.store("test", [1.0] * 768, resp, "cognition")
+        await vc.store("test", "hash3", [1.0] * 768, resp, "cognition")
         hit = await vc.search([-1.0] * 768, "cognition")  # opposite vector
         assert hit is None
 

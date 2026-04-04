@@ -68,7 +68,7 @@ class CommunityOrchestrator:
         self._bridge_node_ids = bridge_node_ids or set()
         self._gateway = gateway
 
-        self._agent_tick = AgentTick(llm_adapter=llm_adapter)
+        self._agent_tick = AgentTick(llm_adapter=llm_adapter, gateway=gateway)
         self._tier_selector = TierSelector()
         self._exposure_model = ExposureModel()
         self._sentiment_model = SentimentModel()
