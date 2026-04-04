@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.config import settings
 from app.engine.platform.registry import PlatformRegistry
@@ -117,9 +117,19 @@ async def update_settings(body: dict[str, Any]) -> dict[str, str]:
     if "llm_cache_ttl" in sim:
         settings.llm_cache_ttl = sim["llm_cache_ttl"]
 
-    # Custom platform reconfiguration
+    # Custom platform reconfiguration (with input validation)
     custom_cfg = body.get("custom_platform")
     if custom_cfg is not None:
+        if not isinstance(custom_cfg, dict):
+            raise HTTPException(status_code=422, detail="custom_platform must be a dict")
+        if len(str(custom_cfg)) > 10_000:
+            raise HTTPException(status_code=422, detail="custom_platform config too large")
+        # Validate weight fields are finite numbers
+        for key in ("feed_weight", "content_weight", "social_weight"):
+            val = custom_cfg.get(key)
+            if val is not None:
+                if not isinstance(val, (int, float)) or not (-100 <= val <= 100):
+                    raise HTTPException(status_code=422, detail=f"{key} must be a number between -100 and 100")
         from app.engine.platform.custom import CustomPlatform
 
         registry = _get_registry()

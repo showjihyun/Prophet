@@ -128,10 +128,13 @@ class GroupChatManager:
                 agent.agent_type.value if hasattr(agent.agent_type, "value") else agent.agent_type
             )
 
-            # Build conversation history context
+            # Build conversation history context (sanitize to prevent prompt injection)
             recent = chat.get_messages(last_n=5)
+            def _sanitize(text: str, max_len: int = 300) -> str:
+                clean = text.replace("\n", " ").strip()[:max_len]
+                return clean
             history = "\n".join(
-                f"Agent {m.agent_id}: {m.content}" for m in recent
+                f"Agent {m.agent_id}: {_sanitize(m.content)}" for m in recent
             ) if recent else "(no previous messages)"
 
             system = (

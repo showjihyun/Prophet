@@ -241,7 +241,7 @@ class _BatchEntry:
     def __init__(self, prompt: LLMPrompt, options: LLMOptions | None) -> None:
         self.prompt = prompt
         self.options = options
-        self.future: asyncio.Future[LLMResponse] = asyncio.get_event_loop().create_future()
+        self.future: asyncio.Future[LLMResponse] = asyncio.get_running_loop().create_future()
 
 
 class LLMGateway:
@@ -460,8 +460,12 @@ class LLMGateway:
 
         SPEC: docs/spec/platform/14_LLM_GATEWAY_SPEC.md#fallback-chain
         """
-        # Try primary adapter
+        # Try primary adapter (use SLM batch inferencer for tier 1/2)
         try:
+            if tier <= 2:
+                slm = self._registry.get_slm()
+                responses = await slm.batch_complete([prompt])
+                return responses[0]
             adapter = self._registry.get_default()
             return await adapter.complete(prompt, options)
         except Exception as primary_exc:
