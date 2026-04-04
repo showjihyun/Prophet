@@ -1,0 +1,36 @@
+{
+  "date": "2026-04-04",
+  "window": "7d",
+  "metrics": {
+    "commits": 106,
+    "contributors": 2,
+    "prs_merged": 3,
+    "insertions": 72684,
+    "deletions": 7057,
+    "net_loc": 65627,
+    "test_loc": 5200,
+    "test_ratio": 0.07,
+    "active_days": 6,
+    "sessions": 14,
+    "deep_sessions": 6,
+    "avg_session_minutes": 65,
+    "loc_per_session_hour": 4300,
+    "feat_pct": 0.38,
+    "fix_pct": 0.22,
+    "peak_hour": 23,
+    "ai_assisted_commits": 0
+  },
+  "authors": {
+    "showjihyun": { "commits": 105, "insertions": 72483, "deletions": 7053, "test_ratio": 0.07, "top_area": "frontend/src/" },
+    "Poor Coin Pepe": { "commits": 1, "insertions": 201, "deletions": 0, "test_ratio": 0, "top_area": "root" }
+  },
+  "version_range": ["0.0.0", "1.0.0"],
+  "streak_days": 2,
+  "tweetable": "Week of Mar 28: 106 commits, 72.7k LOC, 257 test files, 6 active days, peak: 11pm | Streak: 2d",
+  "test_health": {
+    "total_test_files": 257,
+    "tests_added_this_period": 23,
+    "regression_test_commits": 0,
+    "test_files_changed": 23
+  }
+}
