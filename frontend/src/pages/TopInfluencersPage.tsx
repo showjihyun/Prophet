@@ -215,9 +215,9 @@ export default function TopInfluencersPage() {
         aVal = a.community;
         bVal = b.community;
       } else if (sortConfig.key === 'belief') {
-        const sentimentOrder = { Positive: 1, Neutral: 0, Negative: -1 };
-        aVal = sentimentOrder[a.sentiment];
-        bVal = sentimentOrder[b.sentiment];
+        const sentimentOrder: Record<string, number> = { Positive: 1, Neutral: 0, Negative: -1 };
+        aVal = sentimentOrder[a.sentiment] ?? 0;
+        bVal = sentimentOrder[b.sentiment] ?? 0;
       } else {
         return 0;
       }

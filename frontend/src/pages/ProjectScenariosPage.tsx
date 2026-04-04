@@ -125,7 +125,7 @@ export default function ProjectScenariosPage() {
       const dup = await apiClient.projects.createScenario(projectId, {
         name: `${scenario.name} (copy)`,
         description: scenario.description,
-        config: scenario.config,
+        config: scenario.config ?? {},
       });
       setScenarios((prev) => [...prev, dup]);
       setMenuOpen(null);

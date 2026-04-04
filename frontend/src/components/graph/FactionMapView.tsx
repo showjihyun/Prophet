@@ -8,7 +8,7 @@
  * Edges connect communities with shared opinion flow (propagation).
  * Vertical axis spreads communities for readability.
  */
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import cytoscape, { type Core } from "cytoscape";
 
 // ---------------------------------------------------------------------------
