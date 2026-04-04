@@ -330,16 +330,21 @@ Prophet/
 | **VAL** | Validation pipeline VAL-01~08 (33 tests) | ✅ 완료 |
 | **S** | Silent Stub 해소 (Network/LLM/Memory/Inject) | ✅ 완료 |
 | **M** | Mock→Real 페이지 (GlobalMetrics/Opinions/Thread) | ✅ 완료 |
-| **T** | 실패 테스트 41개 수정 + CampaignSetup 29개 추가 | ✅ 완료 |
+| **T** | 실패 테스트 41개 수정 + 4페이지 91개 추가 | ✅ 완료 |
 | **F** | Campaign Setup + Project CRUD + EgoGraph Filter | ✅ 완료 |
+| **N** | Run-All + GraphRAG + DB복원 + Platform + Lint 10.0 | ✅ 완료 |
+| **H** | 09_HARNESS F18-F28 전체 구현 (+43 tests) | ✅ 완료 |
+| **G** | SPEC 정합성 (메서드 rename + Sidebar + AgentInspector + AnalyticsPage) | ✅ 완료 |
 
-> **총 테스트: 795+ GREEN** (Backend 586 + Frontend 180 + E2E 26 대기)
-> - Backend: `uv run pytest tests/` → 586 passed, 1 skipped
-> - Frontend: `npx vitest run` → 180 passed (14 test files)
-> - E2E: `npx playwright test` → 26 tests (Docker 필요)
-> - Docker: 5 services healthy
-> - API: 53 endpoints, 16 pages, 15 routes
-> - Sidebar: 전역 레이아웃 (SimulationPage 제외)
+> **총 테스트: 871+ GREEN** (Backend 629 + Frontend 242)
+> - Backend: `uv run pytest tests/` → 629 passed, 1 skipped
+> - Frontend: `npx vitest run` → 242 passed (18 test files)
+> - ESLint: 0 errors, 0 warnings
+> - TypeScript: 0 errors
+> - Health Score: 10.0/10 | QA Score: 97/100
+> - Docker: 5 services (4 healthy, ollama unhealthy)
+> - API: 55+ endpoints, 19 pages, 20 routes
+> - Sidebar: 전역 레이아웃 (SimulationPage/LoginPage 제외)
 
 ### 성능 벤치마크 (2026-03-30)
 
