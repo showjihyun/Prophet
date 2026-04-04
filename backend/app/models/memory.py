@@ -16,10 +16,9 @@ class AgentMemory(Base):
     __table_args__ = (
         Index("idx_memory_agent", "agent_id", "step"),
         Index("idx_memory_simulation", "simulation_id"),
-        # NOTE: IVFFlat vector index (idx_memory_embedding) must be created
-        # via raw SQL in Alembic migration after sufficient data exists:
+        # HNSW vector index created via Alembic migration c2_vector_idx:
         # CREATE INDEX idx_memory_embedding ON agent_memories
-        #     USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+        #     USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
     )
 
     memory_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
