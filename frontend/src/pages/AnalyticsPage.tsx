@@ -540,13 +540,21 @@ function SummaryCard({
 function MonteCarloSection({ simulationId }: { simulationId: string | null }) {
   const [mcData, setMcData] = useState<Record<string, unknown> | null>(null);
 
-  // Load MC results from localStorage (persisted by MonteCarloModal on completion)
+  // Load MC results: API first (PostgreSQL), localStorage fallback
   useEffect(() => {
     if (!simulationId) return;
-    try {
-      const stored = localStorage.getItem(`prophet-mc-${simulationId}`);
-      if (stored) queueMicrotask(() => setMcData(JSON.parse(stored)));
-    } catch { /* ignore */ }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.simulations.getLatestMonteCarlo(simulationId);
+        if (!cancelled && res) { queueMicrotask(() => setMcData(res)); return; }
+      } catch { /* API unavailable, try localStorage */ }
+      try {
+        const stored = localStorage.getItem(`prophet-mc-${simulationId}`);
+        if (!cancelled && stored) queueMicrotask(() => setMcData(JSON.parse(stored)));
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
   }, [simulationId]);
 
   if (!mcData || mcData.status !== "completed") {

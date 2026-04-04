@@ -767,7 +767,7 @@ async def compare_simulations(
     )
 
 
-async def _run_monte_carlo(job_id: str, config: Any, n_runs: int) -> None:
+async def _run_monte_carlo(job_id: str, simulation_id: str, config: Any, n_runs: int) -> None:
     """Background task to actually run Monte Carlo.
     SPEC: docs/spec/04_SIMULATION_SPEC.md#metriccollector
     """
@@ -775,6 +775,7 @@ async def _run_monte_carlo(job_id: str, config: Any, n_runs: int) -> None:
         _monte_carlo_jobs[job_id]["status"] = "running"
         runner = MonteCarloRunner()
         result = await runner.run(config, n_runs=n_runs)
+        completed_at = datetime.now(timezone.utc)
         _monte_carlo_jobs[job_id].update({
             "status": "completed",
             "viral_probability": result.viral_probability,
@@ -783,13 +784,66 @@ async def _run_monte_carlo(job_id: str, config: Any, n_runs: int) -> None:
             "p50_reach": result.p50_reach,
             "p95_reach": result.p95_reach,
             "community_adoption": result.community_adoption,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": completed_at.isoformat(),
         })
+        # Persist to PostgreSQL (NF07: DB is source of truth)
+        await _persist_monte_carlo(job_id, simulation_id, n_runs, result, completed_at)
     except Exception as e:
         _monte_carlo_jobs[job_id].update({
             "status": "failed",
             "error_message": str(e),
         })
+        await _persist_monte_carlo_failure(job_id, simulation_id, n_runs, str(e))
+
+
+async def _persist_monte_carlo(
+    job_id: str, simulation_id: str, n_runs: int, result: Any, completed_at: datetime
+) -> None:
+    """Persist completed MC results to monte_carlo_runs table."""
+    from app.database import async_session
+    from app.models.propagation import MonteCarloRun
+    try:
+        async with async_session() as session:
+            run = MonteCarloRun(
+                job_id=uuid.UUID(job_id),
+                simulation_id=uuid.UUID(simulation_id),
+                status="completed",
+                n_runs=n_runs,
+                viral_probability=result.viral_probability,
+                expected_reach=result.expected_reach,
+                p5_reach=result.p5_reach,
+                p50_reach=result.p50_reach,
+                p95_reach=result.p95_reach,
+                community_adoption=result.community_adoption,
+                started_at=_monte_carlo_jobs.get(job_id, {}).get("started_at"),
+                completed_at=completed_at,
+            )
+            session.add(run)
+            await session.commit()
+    except Exception:
+        pass  # Best-effort persist; in-memory result is still available
+
+
+async def _persist_monte_carlo_failure(
+    job_id: str, simulation_id: str, n_runs: int, error: str
+) -> None:
+    """Persist failed MC job to monte_carlo_runs table."""
+    from app.database import async_session
+    from app.models.propagation import MonteCarloRun
+    try:
+        async with async_session() as session:
+            run = MonteCarloRun(
+                job_id=uuid.UUID(job_id),
+                simulation_id=uuid.UUID(simulation_id),
+                status="failed",
+                n_runs=n_runs,
+                error_message=error,
+                started_at=_monte_carlo_jobs.get(job_id, {}).get("started_at"),
+            )
+            session.add(run)
+            await session.commit()
+    except Exception:
+        pass
 
 
 @router.post(
@@ -810,6 +864,7 @@ async def start_monte_carlo(
     now = datetime.now(timezone.utc)
     job = {
         "job_id": job_id,
+        "simulation_id": simulation_id,
         "status": "queued",
         "n_runs": body.n_runs,
         "started_at": now,
@@ -817,13 +872,57 @@ async def start_monte_carlo(
     _monte_carlo_jobs[job_id] = job
 
     # Fire background task using the simulation's config
-    asyncio.create_task(_run_monte_carlo(job_id, state.config, body.n_runs))
+    asyncio.create_task(_run_monte_carlo(job_id, simulation_id, state.config, body.n_runs))
 
     return MonteCarloStatusResponse(
         job_id=job_id,
         status="queued",
         n_runs=body.n_runs,
         started_at=now,
+    )
+
+
+@router.get(
+    "/{simulation_id}/monte-carlo",
+    response_model=MonteCarloStatusResponse | None,
+)
+async def get_latest_monte_carlo(
+    simulation_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> MonteCarloStatusResponse | None:
+    """Get the latest Monte Carlo result for a simulation.
+    SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idmonte-carlo
+    """
+    # Check in-memory first
+    for job in reversed(list(_monte_carlo_jobs.values())):
+        if job.get("simulation_id") == simulation_id:
+            return MonteCarloStatusResponse(**{k: v for k, v in job.items() if k != "simulation_id"})
+
+    # Fallback: PostgreSQL
+    from app.models.propagation import MonteCarloRun
+    from sqlalchemy import select
+    result = await session.execute(
+        select(MonteCarloRun)
+        .where(MonteCarloRun.simulation_id == uuid.UUID(simulation_id))
+        .order_by(MonteCarloRun.created_at.desc())
+        .limit(1)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return None
+    return MonteCarloStatusResponse(
+        job_id=str(row.job_id),
+        status=row.status,
+        n_runs=row.n_runs,
+        viral_probability=row.viral_probability,
+        expected_reach=row.expected_reach,
+        p5_reach=row.p5_reach,
+        p50_reach=row.p50_reach,
+        p95_reach=row.p95_reach,
+        community_adoption=row.community_adoption,
+        started_at=row.started_at,
+        completed_at=row.completed_at,
+        error_message=getattr(row, 'error_message', None),
     )
 
 
@@ -835,24 +934,52 @@ async def get_monte_carlo_status(
     simulation_id: str,
     job_id: str,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
 ) -> MonteCarloStatusResponse:
     """Get Monte Carlo job status and results.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idmonte-carlojob_id
     """
     _get_state_or_404(orchestrator, simulation_id)
     job = _monte_carlo_jobs.get(job_id)
-    if job is None:
-        raise HTTPException(
-            status_code=404,
-            detail=ErrorResponse(
-                type="https://prophet.io/errors/not-found",
-                title="Monte Carlo Job Not Found",
-                status=404,
-                detail=f"Job uuid={job_id} does not exist",
-                instance=f"/api/v1/simulations/{simulation_id}/monte-carlo/{job_id}",
-            ).model_dump(),
+    if job is not None:
+        return MonteCarloStatusResponse(**job)
+
+    # Fallback: check PostgreSQL (NF07)
+    from app.models.propagation import MonteCarloRun
+    from sqlalchemy import select
+    try:
+        result = await session.execute(
+            select(MonteCarloRun).where(MonteCarloRun.job_id == uuid.UUID(job_id))
         )
-    return MonteCarloStatusResponse(**job)
+        row = result.scalar_one_or_none()
+        if row is not None:
+            return MonteCarloStatusResponse(
+                job_id=str(row.job_id),
+                status=row.status,
+                n_runs=row.n_runs,
+                viral_probability=row.viral_probability,
+                expected_reach=row.expected_reach,
+                p5_reach=row.p5_reach,
+                p50_reach=row.p50_reach,
+                p95_reach=row.p95_reach,
+                community_adoption=row.community_adoption,
+                started_at=row.started_at,
+                completed_at=row.completed_at,
+                error_message=getattr(row, 'error_message', None),
+            )
+    except Exception:
+        pass
+
+    raise HTTPException(
+        status_code=404,
+        detail=ErrorResponse(
+            type="https://prophet.io/errors/not-found",
+            title="Monte Carlo Job Not Found",
+            status=404,
+            detail=f"Job uuid={job_id} does not exist",
+            instance=f"/api/v1/simulations/{simulation_id}/monte-carlo/{job_id}",
+        ).model_dump(),
+    )
 
 
 @router.post("/{simulation_id}/engine-control", response_model=EngineControlResponse)
