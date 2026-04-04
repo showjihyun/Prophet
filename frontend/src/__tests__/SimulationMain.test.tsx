@@ -18,7 +18,8 @@ vi.mock('@/hooks/useSimulationSocket', () => ({
 vi.mock('cytoscape', () => ({
   default: vi.fn(() => ({
     on: vi.fn(),
-    nodes: () => ({ length: 0, forEach: vi.fn(), toArray: () => [], removeClass: vi.fn() }),
+    batch: vi.fn((cb: () => void) => cb()),
+    nodes: () => ({ length: 0, forEach: vi.fn(), toArray: () => [], removeClass: vi.fn(), style: vi.fn() }),
     edges: () => ({ length: 0, forEach: vi.fn(), removeStyle: vi.fn(), style: vi.fn() }),
     zoom: vi.fn(() => 1),
     width: vi.fn(() => 800),

@@ -20,6 +20,7 @@ from app.llm.schema import (
 from app.llm.adapter import LLMAdapter
 from app.llm.ollama_client import OllamaAdapter
 from app.llm.claude_client import ClaudeAdapter
+from app.llm.gemini_client import GeminiAdapter
 from app.llm.openai_client import OpenAIAdapter
 from app.llm.vllm_client import VLLMAdapter
 from app.llm.slm_batch import SLMBatchInferencer
@@ -52,6 +53,7 @@ __all__ = [
     "LLMAdapter",
     "OllamaAdapter",
     "ClaudeAdapter",
+    "GeminiAdapter",
     "OpenAIAdapter",
     "VLLMAdapter",
     "SLMBatchInferencer",

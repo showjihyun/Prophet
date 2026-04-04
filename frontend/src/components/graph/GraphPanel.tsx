@@ -5,6 +5,13 @@
  *
  * Cytoscape.js canvas renderer with force-directed layout,
  * community-colored nodes, and interactive selection.
+ *
+ * Performance optimizations (GAP-5, 10K agent target):
+ *  - textureOnViewport, hideEdgesOnViewport, motionBlur, pixelRatio:1
+ *  - LOD zoom-based label/edge visibility
+ *  - cy.batch() for step-result updates
+ *  - Edge opacity reduction + non-bridge hiding at node count > 2000
+ *  - Real FPS counter via requestAnimationFrame
  */
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +19,30 @@ import cytoscape, { type Core, type EventObject } from "cytoscape";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { apiClient, type CytoscapeGraph } from "../../api/client";
 import { useSimulationStore } from "../../store/simulationStore";
+
+// ---------------------------------------------------------------------------
+// Cascade shader animation CSS (injected once at module load).
+// GAP-6: pulse/ripple/glow effects for viral cascade events.
+// Cytoscape canvas does not support CSS on canvas nodes, so node/edge
+// animation uses Cytoscape's animate() API; CSS keyframes only affect DOM
+// overlay elements (the cascade badge glow ring).
+// ---------------------------------------------------------------------------
+const CASCADE_STYLE_ID = "mcasp-cascade-style";
+if (typeof document !== "undefined" && !document.getElementById(CASCADE_STYLE_ID)) {
+  const _cascadeStyleEl = document.createElement("style");
+  _cascadeStyleEl.id = CASCADE_STYLE_ID;
+  _cascadeStyleEl.textContent = `
+    @keyframes cascade-badge-glow {
+      0%,100% { box-shadow: 0 0 0 0 rgba(250,204,21,0); }
+      50%      { box-shadow: 0 0 20px 8px rgba(250,204,21,0.55); }
+    }
+    .cascade-badge-active { animation: cascade-badge-glow 1.6s ease-in-out infinite; }
+  `;
+  document.head.appendChild(_cascadeStyleEl);
+}
+
+/** How long (ms) cascade highlights stay active after a new cascade event. */
+const CASCADE_TTL_MS = 8000;
 
 // ---------------------------------------------------------------------------
 // Community palette (must match CSS vars & DESIGN.md §5)
@@ -230,6 +261,41 @@ const CY_STYLE: cytoscape.Stylesheet[] = [
       height: 8,
     },
   },
+  // -- Cascade: nodes involved in viral cascade (pulsing golden border) --
+  {
+    selector: ".cascade-node",
+    style: {
+      "border-width": 2,
+      "border-color": "#facc15",
+      "underlay-color": "#facc15",
+      "underlay-padding": 3,
+      "underlay-opacity": 0.2,
+      "underlay-shape": "ellipse",
+    },
+  },
+  // -- Cascade: origin node (larger + bright golden glow) --
+  {
+    selector: ".cascade-origin",
+    style: {
+      width: 14,
+      height: 14,
+      "border-width": 3,
+      "border-color": "#facc15",
+      "underlay-color": "#facc15",
+      "underlay-padding": 6,
+      "underlay-opacity": 0.45,
+      "underlay-shape": "ellipse",
+    },
+  },
+  // -- Cascade: edges with active propagation --
+  {
+    selector: ".cascade-edge",
+    style: {
+      width: 1.5,
+      "line-color": "#facc15",
+      opacity: 0.6,
+    },
+  },
   // -- Default edge (intra-community) --
   {
     selector: "edge",
@@ -282,6 +348,12 @@ export default function GraphPanel() {
   const [nodeCount, setNodeCount] = useState(0);
   const [edgeCount, setEdgeCount] = useState(0);
   const [legendItems, setLegendItems] = useState(LEGEND_ITEMS);
+  const [fps, setFps] = useState(60);
+  const fpsFramesRef = useRef<number[]>([]);
+  const fpsRafRef = useRef<number | null>(null);
+  // Track how many cascade events we've already animated to detect new ones
+  const lastCascadeCountRef = useRef(0);
+  const cascadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const emergentEvents = useSimulationStore((s) => s.emergentEvents);
@@ -351,19 +423,56 @@ export default function GraphPanel() {
         animate: false,
       } as cytoscape.CoseLayoutOptions,
 
-      // Performance options (DESIGN.md §5)
+      // Performance options (GAP-5: 10K agent target)
       textureOnViewport: true,
       hideEdgesOnViewport: true,
+      motionBlur: true,
       pixelRatio: 1,
 
-      // Interaction
-      minZoom: 0.2,
-      maxZoom: 5,
+      // Viewport culling limits
+      minZoom: 0.05,
+      maxZoom: 3.0,
       // wheelSensitivity removed — Cytoscape default (1.0) used
     });
 
-    setNodeCount(cy.nodes().length);
-    setEdgeCount(cy.edges().length);
+    const totalNodes = cy.nodes().length;
+    const totalEdges = cy.edges().length;
+    setNodeCount(totalNodes);
+    setEdgeCount(totalEdges);
+
+    // --- Edge bundling for large graphs (>2000 nodes) ---
+    if (totalNodes > 2000) {
+      cy.batch(() => {
+        cy.edges().style("opacity", 0.05);
+        cy.edges('[edge_type != "bridge"]').style("display", "none");
+      });
+    }
+
+    // --- LOD: zoom-dependent label & edge visibility ---
+    function applyLOD() {
+      const z = cy.zoom();
+      cy.batch(() => {
+        if (z < 0.3) {
+          // Far out: no labels, straight-line edges
+          cy.nodes().style("label", "");
+          cy.edges().style("curve-style", "haystack");
+        } else if (z < 0.7) {
+          // Mid: labels only for high-influence nodes
+          cy.nodes().forEach((node) => {
+            const score = node.data("influence_score") as number;
+            node.style("label", score > 0.8 ? "data(label)" : "");
+          });
+          cy.edges().style("curve-style", "haystack");
+        } else {
+          // Close: all labels, full detail
+          cy.nodes().style("label", "data(label)");
+          cy.edges().style("curve-style", "bezier");
+        }
+      });
+    }
+    cy.on("zoom", applyLOD);
+    // Apply initial LOD state
+    applyLOD();
 
     // --- Edge coloring by source community ---
     cy.edges().forEach((edge) => {
@@ -427,7 +536,34 @@ export default function GraphPanel() {
     };
   }, [simulationId]);
 
+  // --- FPS counter via requestAnimationFrame ---
+  useEffect(() => {
+    let running = true;
+
+    function tick(now: number) {
+      if (!running) return;
+      const frames = fpsFramesRef.current;
+      frames.push(now);
+      // Keep only the last 60 timestamps (one second window at 60fps)
+      while (frames.length > 0 && now - frames[0] > 1000) {
+        frames.shift();
+      }
+      setFps(frames.length);
+      fpsRafRef.current = requestAnimationFrame(tick);
+    }
+
+    fpsRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      running = false;
+      if (fpsRafRef.current !== null) {
+        cancelAnimationFrame(fpsRafRef.current);
+        fpsRafRef.current = null;
+      }
+    };
+  }, []);
+
   // --- Update node adoption state on each new simulation step ---
+  // Uses cy.batch() to coalesce all DOM/style mutations into one repaint (GAP-5)
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || steps.length === 0) return;
@@ -438,15 +574,21 @@ export default function GraphPanel() {
     const total = nodes.length;
     const adoptCount = Math.floor(total * adoptionRate);
 
-    // Reset live adopted class from all nodes
-    nodes.removeClass("adopted-live");
-
-    // Mark top-N nodes (sorted by influence_score desc) as adopted
+    // Pre-sort outside batch to keep batch closure lightweight
     const sorted = nodes.toArray().sort(
       (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
     );
-    sorted.slice(0, adoptCount).forEach((node) => {
-      node.addClass("adopted-live");
+    const adoptedSet = new Set(sorted.slice(0, adoptCount).map((n) => n.id()));
+
+    // Single batched mutation — one repaint instead of N individual updates
+    cy.batch(() => {
+      nodes.forEach((node) => {
+        if (adoptedSet.has(node.id())) {
+          node.addClass("adopted-live");
+        } else {
+          node.removeClass("adopted-live");
+        }
+      });
     });
   }, [steps]);
 
@@ -466,6 +608,129 @@ export default function GraphPanel() {
     cy.edges().style("opacity", 0.05);
   }, [highlightedCommunity]);
 
+  // --- GAP-6: Cascade shader animations via Cytoscape animate() API ---
+  // Triggered when a new cascade event appears in emergentEvents.
+  // - Cascade origin node: larger size + golden glow (cascade-origin class)
+  // - Nodes in cascade: pulsing golden border (cascade-node class)
+  // - Cascade edges: animate opacity 0.3 → 1.0 → 0.3 (cascade-edge class)
+  // All effects auto-clear after CASCADE_TTL_MS.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || emergentEvents.length === 0) return;
+
+    // Only fire when the event count has grown (new event arrived)
+    if (emergentEvents.length <= lastCascadeCountRef.current) return;
+    lastCascadeCountRef.current = emergentEvents.length;
+
+    const latestEvent = emergentEvents[emergentEvents.length - 1];
+    const isCascadeEvent =
+      latestEvent.event_type.toLowerCase().includes("cascade") ||
+      latestEvent.event_type.toLowerCase().includes("viral");
+
+    if (!isCascadeEvent) return;
+
+    // Clear any previous cascade highlight timeout
+    if (cascadeTimeoutRef.current !== null) {
+      clearTimeout(cascadeTimeoutRef.current);
+      cascadeTimeoutRef.current = null;
+    }
+
+    // Remove stale cascade classes before applying new ones
+    cy.batch(() => {
+      cy.elements().removeClass("cascade-node cascade-origin cascade-edge");
+    });
+
+    // Pick origin node: highest-influence node in the graph
+    const nodes = cy.nodes();
+    const originNode = nodes.max((node) => (node.data("influence_score") as number) || 0).ele;
+
+    // Pick cascade participant nodes: top ~15% by influence score
+    const sortedNodes = nodes.toArray().sort(
+      (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
+    );
+    const cascadeCount = Math.max(1, Math.floor(sortedNodes.length * 0.15));
+    const cascadeNodes = sortedNodes.slice(0, cascadeCount);
+
+    // Apply classes (triggers CY_STYLE rules defined above)
+    cy.batch(() => {
+      cascadeNodes.forEach((node) => node.addClass("cascade-node"));
+      originNode.addClass("cascade-origin");
+
+      // Mark edges connected to cascade nodes
+      cascadeNodes.forEach((node) => {
+        node.connectedEdges().addClass("cascade-edge");
+      });
+    });
+
+    // Animate origin node: scale border-width 2 → 5 → 2 repeating (pulse effect)
+    // Cytoscape animate() does not support looping natively; we chain two animations.
+    function pulseBorder(node: cytoscape.NodeSingular, iteration: number) {
+      if (iteration > 4 || !cyRef.current) return; // stop after ~8s
+      node.animate(
+        { style: { "border-width": 5 } },
+        {
+          duration: 700,
+          easing: "ease-in-out",
+          complete: () => {
+            node.animate(
+              { style: { "border-width": 2 } },
+              {
+                duration: 700,
+                easing: "ease-in-out",
+                complete: () => pulseBorder(node, iteration + 1),
+              },
+            );
+          },
+        },
+      );
+    }
+    pulseBorder(originNode as cytoscape.NodeSingular, 0);
+
+    // Animate cascade edges: opacity 0.15 → 0.8 → 0.15 (2s cycle × 4)
+    function pulseEdgeOpacity(edges: cytoscape.EdgeCollection, iteration: number) {
+      if (iteration > 3 || !cyRef.current) return;
+      edges.animate(
+        { style: { opacity: 0.8 } },
+        {
+          duration: 1000,
+          easing: "ease-in-out",
+          complete: () => {
+            edges.animate(
+              { style: { opacity: 0.15 } },
+              {
+                duration: 1000,
+                easing: "ease-in-out",
+                complete: () => pulseEdgeOpacity(edges, iteration + 1),
+              },
+            );
+          },
+        },
+      );
+    }
+    const cascadeEdges = cy.edges(".cascade-edge");
+    if (cascadeEdges.length > 0) {
+      pulseEdgeOpacity(cascadeEdges, 0);
+    }
+
+    // Auto-clear after TTL
+    cascadeTimeoutRef.current = setTimeout(() => {
+      if (!cyRef.current) return;
+      cy.batch(() => {
+        cy.elements().removeClass("cascade-node cascade-origin cascade-edge");
+      });
+      cascadeTimeoutRef.current = null;
+    }, CASCADE_TTL_MS);
+  }, [emergentEvents]);
+
+  // Cleanup cascade timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (cascadeTimeoutRef.current !== null) {
+        clearTimeout(cascadeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // --- Zoom controls ---
   const handleZoomIn = useCallback(() => {
     const cy = cyRef.current;
@@ -482,6 +747,11 @@ export default function GraphPanel() {
   const handleFit = useCallback(() => {
     cyRef.current?.fit(undefined, 40);
   }, []);
+
+  // Determine if a cascade is currently active (for badge glow)
+  const cascadeActive = emergentEvents.length > 0 &&
+    (emergentEvents[emergentEvents.length - 1].event_type.toLowerCase().includes("cascade") ||
+     emergentEvents[emergentEvents.length - 1].event_type.toLowerCase().includes("viral"));
 
   return (
     <div
@@ -526,10 +796,12 @@ export default function GraphPanel() {
         />
       </div>
 
-      {/* Cascade Badge */}
+      {/* Cascade Badge — glows golden when a cascade/viral event is active */}
       <div data-testid="cascade-badge" className="absolute bottom-20 left-6 z-10 pointer-events-none">
         {emergentEvents.length > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--sentiment-positive)] bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)]">
+          <span
+            className={`inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--sentiment-positive)] bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)] ${cascadeActive ? "cascade-badge-active" : ""}`}
+          >
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--sentiment-positive)] animate-pulse-dot" />
             {emergentEvents[emergentEvents.length - 1].event_type.replace("_", " ")} detected
           </span>
@@ -598,10 +870,10 @@ export default function GraphPanel() {
         </div>
       </div>
 
-      {/* Status Bar — bottom-right */}
-      <div data-testid="status-overlay" className="absolute bottom-4 right-4 z-10 pointer-events-none">
-        <span className="text-[11px] font-mono text-white/40">
-          60 FPS · {nodeCount} nodes · {edgeCount} edges · WebGL
+      {/* Performance Indicator — bottom-right (GAP-5) */}
+      <div data-testid="status-overlay" className="absolute bottom-2 right-2 z-10 pointer-events-none">
+        <span className="text-[10px] font-mono text-[var(--muted-foreground,rgba(255,255,255,0.4))]">
+          {nodeCount} nodes · {edgeCount} edges · {fps} FPS
         </span>
       </div>
     </div>

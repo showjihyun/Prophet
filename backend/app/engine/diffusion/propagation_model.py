@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 from app.engine.agent.schema import AgentAction, AgentState
 from app.engine.network.schema import SocialNetwork
-from app.engine.diffusion.schema import PropagationEvent
+from app.engine.diffusion.schema import ContextualPacket, PropagationEvent
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ class PropagationModel:
         message_id: UUID,
         step: int,
         seed: int | None = None,
+        campaign_message: str = "",
     ) -> list[PropagationEvent]:
         """Generate propagation events based on agent action.
 
@@ -50,6 +51,10 @@ class PropagationModel:
 
         Only COMMENT/SHARE/REPOST/ADOPT generate events.
         Returns empty list for other actions.
+
+        A ``ContextualPacket`` is attached to each event when ``campaign_message``
+        is provided (non-empty). The packet captures the sender's emotional state
+        and reasoning so downstream agents can model emergent text mutation.
         """
         if action not in _PROPAGATION_ACTIONS:
             return []
@@ -95,6 +100,26 @@ class PropagationModel:
             AgentAction.ADOPT: 1.0,
         }.get(action, 0.5)
 
+        # Build contextual packet once for all events from this source agent.
+        # Only attached when a campaign_message is available.
+        contextual_packet: ContextualPacket | None = None
+        if campaign_message:
+            emotion_summary = (
+                f"interest={source_agent.emotion.interest:.1f}, "
+                f"trust={source_agent.emotion.trust:.1f}, "
+                f"excitement={source_agent.emotion.excitement:.1f}"
+            )
+            reasoning = (
+                f"Shared because belief={source_agent.belief:.2f}, "
+                f"action={action.value}"
+            )
+            contextual_packet = ContextualPacket(
+                original_content=campaign_message,
+                sender_emotion_summary=emotion_summary,
+                sender_reasoning=reasoning,
+                mutation_depth=0,
+            )
+
         for target_node in targets:
             edge_data = nx_graph[source_node][target_node]
             trust = edge_data.get("weight", 0.5)
@@ -138,6 +163,7 @@ class PropagationModel:
                             probability=prob,
                             step=step,
                             message_id=message_id,
+                            contextual_packet=contextual_packet,
                         )
                     )
 

@@ -295,7 +295,8 @@ class BridgePropagator:
         if not all_outbound:
             return []
 
-        # Apply bridge trust factor to reduce probability
+        # Apply bridge trust factor to reduce probability.
+        # Forward contextual_packet unchanged so text context survives cross-community hops.
         cross_events: list[PropagationEvent] = []
         for event in all_outbound:
             adjusted = PropagationEvent(
@@ -305,6 +306,7 @@ class BridgePropagator:
                 probability=event.probability * self.BRIDGE_TRUST_FACTOR,
                 step=event.step,
                 message_id=event.message_id,
+                contextual_packet=event.contextual_packet,
             )
             cross_events.append(adjusted)
 

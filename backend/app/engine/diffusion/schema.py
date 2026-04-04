@@ -90,6 +90,21 @@ class ExposureResult:
 
 
 @dataclass
+class ContextualPacket:
+    """Text context passed between agents during propagation.
+
+    SPEC: docs/spec/03_DIFFUSION_SPEC.md#contextual-packet
+
+    Enables emergent text mutation as messages spread through the network.
+    Each agent adds their emotional interpretation before forwarding.
+    """
+    original_content: str         # Original campaign/event message
+    sender_emotion_summary: str   # e.g., "interest=0.8, trust=0.6"
+    sender_reasoning: str         # SLM-generated 1-line summary of why they shared
+    mutation_depth: int = 0       # How many agents the packet has passed through
+
+
+@dataclass
 class PropagationEvent:
     """A propagation event between two agents.
 
@@ -101,6 +116,7 @@ class PropagationEvent:
     probability: float
     step: int
     message_id: UUID
+    contextual_packet: "ContextualPacket | None" = None
 
 
 @dataclass
@@ -231,6 +247,7 @@ __all__ = [
     "FeedItem",
     "CampaignEvent",
     "ExposureResult",
+    "ContextualPacket",
     "PropagationEvent",
     "CascadeConfig",
     "EmergentEvent",

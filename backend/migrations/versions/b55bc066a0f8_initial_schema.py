@@ -330,9 +330,21 @@ def upgrade() -> None:
     )
     op.create_index('idx_monte_carlo_sim', 'monte_carlo_runs', ['simulation_id'])
 
+    # --- 17. users (RBAC — no FK dependencies) ---
+    op.create_table(
+        'users',
+        sa.Column('user_id', UUID(as_uuid=True), primary_key=True, server_default=sa.text('gen_random_uuid()')),
+        sa.Column('username', sa.String(100), nullable=False, unique=True),
+        sa.Column('password_hash', sa.String(255), nullable=False),
+        sa.Column('role', sa.String(20), nullable=False, server_default='viewer'),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+    )
+    op.create_index('idx_users_username', 'users', ['username'], unique=True)
+
 
 def downgrade() -> None:
     # Drop in reverse dependency order
+    op.drop_table('users')
     op.drop_table('monte_carlo_runs')
     op.drop_table('propagation_events')
     op.drop_table('expert_opinions')
