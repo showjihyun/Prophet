@@ -2,7 +2,7 @@
  * InfluencersFilter — Filter popover for the Top Influencers page.
  * @spec docs/spec/ui/UI_09_INFLUENCERS_FILTER.md
  */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { type FilterState, DEFAULT_FILTERS } from "./influencersFilterTypes";
 
 interface InfluencersFilterProps {
@@ -38,15 +38,28 @@ export default function InfluencersFilter({
     }
   }, [isOpen, currentFilters]);
 
+  // Auto-focus first interactive element on open
+  useEffect(() => {
+    if (!isOpen || !panelRef.current) return;
+    const firstFocusable = panelRef.current.querySelector<HTMLElement>(
+      'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    firstFocusable?.focus();
+  }, [isOpen]);
+
   // Close on Escape
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    },
+    [onClose],
+  );
+
   useEffect(() => {
     if (!isOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [isOpen, onClose]);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, handleKeyDown]);
 
   if (!isOpen) return null;
 
@@ -80,6 +93,9 @@ export default function InfluencersFilter({
       {/* Popover panel */}
       <div
         ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Filter Influencers"
         className="absolute z-50 mt-2 rounded-lg border shadow-lg"
         style={{
           width: 600,

@@ -2,12 +2,14 @@
  * ScenarioOpinionsPage — Scenario-wide opinion landscape (UI-13).
  * @spec docs/spec/ui/UI_13_SCENARIO_OPINIONS.md
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
 import { apiClient } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";
+
+const FactionMapView = lazy(() => import("../components/graph/FactionMapView"));
 
 /* ------------------------------------------------------------------ */
 /* Mock Data                                                           */
@@ -169,7 +171,8 @@ function CommunityOpinionCard({ c, onView }: { c: CommunityOpinion; onView: () =
       {/* Action */}
       <button
         onClick={onView}
-        className="text-sm text-[var(--community-alpha)] hover:underline self-start mt-1"
+        className="text-sm hover:underline self-start mt-1"
+        style={{ color: c.color }}
       >
         View Community
       </button>
@@ -194,6 +197,7 @@ export default function ScenarioOpinionsPage() {
   const simulation = useSimulationStore((st) => st.simulation);
   const steps = useSimulationStore((st) => st.steps);
   const simId = simulation?.simulation_id ?? null;
+  const [viewMode, setViewMode] = useState<"data" | "faction">("data");
 
   // Fetch steps from API if store is empty
   useEffect(() => {
@@ -253,13 +257,14 @@ export default function ScenarioOpinionsPage() {
   }, [steps, simulation]);
 
   const s = derivedSummary ?? MOCK_SUMMARY;
+  const isDemo = derivedCommunities.length === 0;
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
       {/* Nav */}
       <PageNav
         breadcrumbs={[
-          { label: "Korea Election 2026", href: "/projects/p1" },
+          { label: simulation?.name ?? "Simulation", href: "/projects/p1" },
           { label: "Agent Opinion" },
         ]}
         actions={
@@ -286,8 +291,7 @@ export default function ScenarioOpinionsPage() {
         {/* Header */}
         <div className="mb-6">
           <h1
-            className="text-2xl font-semibold text-[var(--foreground)] mb-1"
-            style={{ fontFamily: "'Instrument Serif', serif" }}
+            className="text-2xl font-semibold font-display text-[var(--foreground)] mb-1"
           >
             Scenario Opinion Landscape
           </h1>
@@ -296,6 +300,13 @@ export default function ScenarioOpinionsPage() {
             {s.community_count} communities
           </p>
         </div>
+
+        {/* Demo data banner */}
+        {isDemo && (
+          <div className="mb-4 px-4 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 text-sm">
+            Showing demo data. Run a simulation to see real results.
+          </div>
+        )}
 
         {/* 4 Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -330,21 +341,33 @@ export default function ScenarioOpinionsPage() {
           <h2 className="text-lg font-semibold text-[var(--foreground)]">
             Community Opinion Breakdown
           </h2>
-          <button className="text-sm px-3 py-1.5 rounded-md border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors">
-            Data-driven Map vs Faction
+          <button
+            onClick={() => setViewMode(viewMode === "data" ? "faction" : "data")}
+            className="text-sm px-3 py-1.5 rounded-md border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors"
+          >
+            {viewMode === "data" ? "Switch to Faction View" : "Switch to Data-driven Map"}
           </button>
         </div>
 
-        {/* Community cards grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {communities.map((c) => (
-            <CommunityOpinionCard
-              key={c.community_id}
-              c={c}
-              onView={() => navigate(`/opinions/${c.community_id}`)}
+        {/* View: Data-driven Map (cards) or Faction View (graph) */}
+        {viewMode === "data" ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {communities.map((c) => (
+              <CommunityOpinionCard
+                key={c.community_id}
+                c={c}
+                onView={() => navigate(`/opinions/${c.community_id}`)}
+              />
+            ))}
+          </div>
+        ) : (
+          <Suspense fallback={<div className="flex items-center justify-center h-[500px] text-sm text-[var(--muted-foreground)]">Loading Faction View...</div>}>
+            <FactionMapView
+              communities={communities}
+              onCommunityClick={(cid) => navigate(`/opinions/${cid}`)}
             />
-          ))}
-        </div>
+          </Suspense>
+        )}
       </div>
     </div>
   );

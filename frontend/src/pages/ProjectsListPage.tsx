@@ -3,8 +3,8 @@
  * @spec docs/spec/ui/UI_06_PROJECTS_LIST.md
  */
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { Plus, Layers, Clock } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Plus, Layers, Clock, X } from "lucide-react";
 import { apiClient } from "../api/client";
 import type { ProjectSummary } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";
@@ -36,6 +36,11 @@ export default function ProjectsListPage() {
   const setCurrentProject = useSimulationStore((s) => s.setCurrentProject);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showNewDialog, setShowNewDialog] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const addToast = useSimulationStore((s) => s.addToast);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     apiClient.projects.list()
@@ -44,13 +49,25 @@ export default function ProjectsListPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleNewProject = async () => {
-    const name = window.prompt("New project name:");
-    if (!name?.trim()) return;
+  const handleNewProject = () => {
+    setNewName("");
+    setShowNewDialog(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleCreateConfirm = async () => {
+    if (!newName.trim()) return;
+    setCreating(true);
     try {
-      const project = await apiClient.projects.create({ name: name.trim() });
+      const project = await apiClient.projects.create({ name: newName.trim() });
       setProjects((prev) => [...prev, project]);
-    } catch { /* ignore */ }
+      setShowNewDialog(false);
+      addToast({ type: "info", message: `Project "${project.name}" created.` });
+    } catch (err) {
+      addToast({ type: "error", message: `Failed to create project: ${err instanceof Error ? err.message : "Unknown error"}` });
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleOpen = (project: ProjectSummary) => {
@@ -159,6 +176,45 @@ export default function ProjectsListPage() {
           ))}
         </div>
       </main>
+
+      {/* New Project Dialog */}
+      {showNewDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowNewDialog(false)} />
+          <div className="relative w-[400px] bg-[var(--card)] rounded-xl shadow-2xl p-6" role="dialog" aria-modal="true" aria-label="Create new project">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-[var(--foreground)]">New Project</h2>
+              <button onClick={() => setShowNewDialog(false)} className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]" aria-label="Close">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <label htmlFor="new-project-name" className="text-sm font-medium text-[var(--foreground)]">Project Name</label>
+            <input
+              ref={inputRef}
+              id="new-project-name"
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateConfirm()}
+              placeholder="e.g., Q2 Smartphone Launch"
+              className="w-full mt-1.5 h-10 rounded-md border px-3 text-sm bg-[var(--card)]"
+              style={{ borderColor: "var(--input)" }}
+            />
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setShowNewDialog(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--secondary)]">
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateConfirm}
+                disabled={!newName.trim() || creating}
+                className="h-9 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)]/90 disabled:opacity-50"
+              >
+                {creating ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

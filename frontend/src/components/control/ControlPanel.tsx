@@ -7,7 +7,7 @@
  * Right: Play/Pause/Step/Reset/Replay + Settings + Avatar
  */
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Brain,
   Play,
@@ -65,6 +65,12 @@ export default function ControlPanel() {
 
   // Previous simulations list for the "Load Previous" dropdown
   const [prevSimulations, setPrevSimulations] = useState<SimulationRun[]>([]);
+  const [prevSimSearch, setPrevSimSearch] = useState("");
+  const filteredPrevSimulations = useMemo(() => {
+    if (!prevSimSearch.trim()) return prevSimulations.slice(0, 20);
+    const q = prevSimSearch.toLowerCase();
+    return prevSimulations.filter((s) => s.name.toLowerCase().includes(q) || s.simulation_id.includes(q)).slice(0, 20);
+  }, [prevSimulations, prevSimSearch]);
   const [prevSimOpen, setPrevSimOpen] = useState(false);
   const setSteps = useSimulationStore((s) => s.appendStep);
 
@@ -248,6 +254,7 @@ export default function ControlPanel() {
   };
 
   const handleReset = async () => {
+    if (!window.confirm("Reset simulation? This will stop the current run.")) return;
     try {
       if (simulation?.simulation_id) {
         await apiClient.simulations.stop(simulation.simulation_id);
@@ -412,23 +419,35 @@ export default function ControlPanel() {
             Load Previous
           </button>
           {prevSimOpen && (
-            <div className="absolute left-0 top-9 z-50 w-64 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg overflow-hidden">
-              {prevSimulations.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-[var(--muted-foreground)]">No simulations found</div>
-              ) : (
-                prevSimulations.slice(0, 10).map((sim) => (
-                  <button
-                    key={sim.simulation_id}
-                    onClick={() => handleLoadPrevSimulation(sim.simulation_id)}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--secondary)] transition-colors border-b border-[var(--border)] last:border-0"
-                  >
-                    <span className="font-medium text-[var(--foreground)] block truncate">{sim.name}</span>
-                    <span className="text-[var(--muted-foreground)]">
-                      {sim.status} · Step {sim.current_step}/{sim.max_steps}
-                    </span>
-                  </button>
-                ))
-              )}
+            <div className="absolute left-0 top-9 z-50 w-72 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg overflow-hidden">
+              <div className="px-2 py-1.5 border-b border-[var(--border)]">
+                <input
+                  type="text"
+                  placeholder="Search simulations..."
+                  value={prevSimSearch}
+                  onChange={(e) => setPrevSimSearch(e.target.value)}
+                  className="w-full h-7 px-2 text-xs rounded border border-[var(--border)] bg-[var(--background)]"
+                  autoFocus
+                />
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                {filteredPrevSimulations.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-[var(--muted-foreground)]">No simulations found</div>
+                ) : (
+                  filteredPrevSimulations.map((sim) => (
+                    <button
+                      key={sim.simulation_id}
+                      onClick={() => handleLoadPrevSimulation(sim.simulation_id)}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--secondary)] transition-colors border-b border-[var(--border)] last:border-0"
+                    >
+                      <span className="font-medium text-[var(--foreground)] block truncate">{sim.name}</span>
+                      <span className="text-[var(--muted-foreground)]">
+                        {sim.status} · Step {sim.current_step}/{sim.max_steps}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </div>

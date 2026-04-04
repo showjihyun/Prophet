@@ -62,6 +62,10 @@ export default function SettingsPage() {
   const [platform, setPlatform] = useState("default");
   const [recsys, setRecsys] = useState("weighted");
 
+  // API key visibility toggles
+  const [showAnthropicKey, setShowAnthropicKey] = useState(false);
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+
   // Test connection
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<OllamaTestResult | null>(null);
@@ -292,16 +296,29 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-4 mb-5">
             <div>
               <label htmlFor="anthropic-api-key" className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
-              <input
-                id="anthropic-api-key"
-                data-testid="anthropic-api-key"
-                type="password"
-                autoComplete="off"
-                value={anthropicApiKey}
-                onChange={(e) => setAnthropicApiKey(e.target.value)}
-                placeholder={anthropicKeySet ? "sk-ant-*******" : "Not set"}
-                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-              />
+              <div className="relative">
+                <input
+                  id="anthropic-api-key"
+                  data-testid="anthropic-api-key"
+                  type={showAnthropicKey ? "text" : "password"}
+                  autoComplete="off"
+                  value={anthropicApiKey}
+                  onChange={(e) => setAnthropicApiKey(e.target.value)}
+                  placeholder={anthropicKeySet ? "sk-ant-*******" : "Not set"}
+                  className="w-full h-9 rounded-md border border-[var(--border)] px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAnthropicKey((v) => !v)}
+                  aria-label={showAnthropicKey ? "Hide API key" : "Show API key"}
+                  className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                >
+                  {showAnthropicKey ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                API key is sent only when saving. Stored keys are not retrievable.
+              </p>
             </div>
             <div>
               <label htmlFor="anthropic-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
@@ -328,16 +345,29 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="openai-api-key" className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
-              <input
-                id="openai-api-key"
-                data-testid="openai-api-key"
-                type="password"
-                autoComplete="off"
-                value={openaiApiKey}
-                onChange={(e) => setOpenaiApiKey(e.target.value)}
-                placeholder={openaiKeySet ? "sk-*******" : "Not set"}
-                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-              />
+              <div className="relative">
+                <input
+                  id="openai-api-key"
+                  data-testid="openai-api-key"
+                  type={showOpenaiKey ? "text" : "password"}
+                  autoComplete="off"
+                  value={openaiApiKey}
+                  onChange={(e) => setOpenaiApiKey(e.target.value)}
+                  placeholder={openaiKeySet ? "sk-*******" : "Not set"}
+                  className="w-full h-9 rounded-md border border-[var(--border)] px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowOpenaiKey((v) => !v)}
+                  aria-label={showOpenaiKey ? "Hide API key" : "Show API key"}
+                  className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                >
+                  {showOpenaiKey ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                API key is sent only when saving. Stored keys are not retrievable.
+              </p>
             </div>
             <div>
               <label htmlFor="openai-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
@@ -484,5 +514,25 @@ export default function SettingsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+/* Inline eye icons for API key visibility toggles */
+function EyeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
   );
 }

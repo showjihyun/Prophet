@@ -81,6 +81,8 @@ export default function MonteCarloModal({ isOpen, onClose }: MonteCarloModalProp
           if (res.status === "completed") {
             setPhase("completed");
             if (pollRef.current) clearInterval(pollRef.current);
+            // Persist MC results for Analytics page
+            try { localStorage.setItem(`prophet-mc-${simulationId}`, JSON.stringify(res)); } catch { /* ignore */ }
           } else if (res.status === "failed") {
             setPhase("failed");
             setError(res.error_message || "Job failed");

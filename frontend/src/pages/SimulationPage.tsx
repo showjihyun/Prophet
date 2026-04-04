@@ -43,13 +43,16 @@ export default function SimulationPage() {
 
   const [reportOpen, setReportOpen] = useState(false);
 
-  // G-10: Parametric route — load simulation from URL param if different from store.
+  // Restore simulation from URL param or localStorage on mount.
   // @spec docs/spec/06_API_SPEC.md#get-simulationssimulation_id
   useEffect(() => {
-    if (urlSimId && urlSimId !== simulation?.simulation_id) {
-      apiClient.simulations.get(urlSimId).then((sim) => {
+    const targetId = urlSimId || (!simulation ? localStorage.getItem("prophet-simulation-id") : null);
+    if (targetId && targetId !== simulation?.simulation_id) {
+      apiClient.simulations.get(targetId).then((sim) => {
         setSimulation(sim);
-      }).catch(() => {});
+      }).catch(() => {
+        localStorage.removeItem("prophet-simulation-id");
+      });
     }
   }, [urlSimId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -103,6 +106,13 @@ export default function SimulationPage() {
             >
               <FolderOpen className="w-4 h-4" />
               Go to Projects
+            </button>
+            <button
+              onClick={() => navigate("/setup")}
+              className="h-10 px-6 text-sm font-medium rounded-md border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex items-center gap-2"
+            >
+              <Brain className="w-4 h-4" />
+              Create Simulation
             </button>
           </div>
         </div>

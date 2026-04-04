@@ -122,7 +122,10 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   setProjects: (projects) => set({ projects }),
   setScenarios: (scenarios) => set({ scenarios }),
 
-  setSimulation: (sim) => set({ simulation: sim, status: sim.status }),
+  setSimulation: (sim) => {
+    try { localStorage.setItem("prophet-simulation-id", sim.simulation_id); } catch { /* quota exceeded */ }
+    set({ simulation: sim, status: sim.status });
+  },
   appendStep: (step) =>
     set((state) => ({
       steps: [...state.steps, step],

@@ -496,20 +496,12 @@ export default function AnalyticsPage() {
             )}
           </Section>
 
-          {/* Monte Carlo placeholder — shown when simulation has mc data */}
+          {/* Monte Carlo Results */}
           <Section
             title="Monte Carlo Results"
             icon={<Zap className="w-4 h-4 text-[var(--community-bridge)]" />}
           >
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-6 text-center">
-              <Zap className="w-8 h-8 text-[var(--muted-foreground)] mx-auto mb-2" />
-              <p className="text-sm text-[var(--muted-foreground)]">
-                No Monte Carlo results for this simulation.
-              </p>
-              <p className="text-xs text-[var(--muted-foreground)] mt-1">
-                Run a Monte Carlo analysis from the simulation control panel to see results here.
-              </p>
-            </div>
+            <MonteCarloSection simulationId={simulation?.simulation_id ?? null} />
           </Section>
         </main>
       )}
@@ -541,6 +533,70 @@ function SummaryCard({
         {label}
       </p>
       <p className={`text-xl font-bold ${valueClass}`}>{value}</p>
+    </div>
+  );
+}
+
+function MonteCarloSection({ simulationId }: { simulationId: string | null }) {
+  const [mcData, setMcData] = useState<Record<string, unknown> | null>(null);
+
+  // Load MC results from localStorage (persisted by MonteCarloModal on completion)
+  useEffect(() => {
+    if (!simulationId) return;
+    try {
+      const stored = localStorage.getItem(`prophet-mc-${simulationId}`);
+      if (stored) queueMicrotask(() => setMcData(JSON.parse(stored)));
+    } catch { /* ignore */ }
+  }, [simulationId]);
+
+  if (!mcData || mcData.status !== "completed") {
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-6 text-center">
+        <Zap className="w-8 h-8 text-[var(--muted-foreground)] mx-auto mb-2" />
+        <p className="text-sm text-[var(--muted-foreground)]">
+          No Monte Carlo results for this simulation.
+        </p>
+        <p className="text-xs text-[var(--muted-foreground)] mt-1">
+          Run a Monte Carlo analysis from the simulation control panel to see results here.
+        </p>
+      </div>
+    );
+  }
+
+  const vp = typeof mcData.viral_probability === "number" ? mcData.viral_probability : 0;
+  const reach = typeof mcData.expected_reach === "number" ? mcData.expected_reach : 0;
+  const p5 = typeof mcData.p5_reach === "number" ? mcData.p5_reach : 0;
+  const p50 = typeof mcData.p50_reach === "number" ? mcData.p50_reach : 0;
+  const p95 = typeof mcData.p95_reach === "number" ? mcData.p95_reach : 0;
+  const communityAdoption = (mcData.community_adoption ?? {}) as Record<string, number>;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <SummaryCard label="Viral Probability" value={`${(vp * 100).toFixed(1)}%`} accent={vp > 0.5 ? "positive" : "warning"} />
+        <SummaryCard label="Expected Reach" value={String(Math.round(reach))} />
+        <SummaryCard label="P5 (pessimistic)" value={String(Math.round(p5))} accent="negative" />
+        <SummaryCard label="P50 (median)" value={String(Math.round(p50))} />
+        <SummaryCard label="P95 (optimistic)" value={String(Math.round(p95))} accent="positive" />
+      </div>
+      {Object.keys(communityAdoption).length > 0 && (
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
+          <h4 className="text-sm font-medium text-[var(--foreground)] mb-3">Community Adoption</h4>
+          <div className="space-y-2">
+            {Object.entries(communityAdoption).map(([cid, rate]) => (
+              <div key={cid} className="flex items-center gap-3">
+                <span className="text-xs text-[var(--muted-foreground)] w-24 truncate">{cid}</span>
+                <div className="flex-1 h-2 bg-[var(--secondary)] rounded-full overflow-hidden">
+                  <div className="h-full bg-[var(--primary)] rounded-full" style={{ width: `${(rate as number) * 100}%` }} />
+                </div>
+                <span className="text-xs font-medium text-[var(--foreground)] w-12 text-right">
+                  {((rate as number) * 100).toFixed(0)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 # UI-13 — Scenario Opinions Overview SPEC
-Version: 0.1.0 | Status: DRAFT
+Version: 0.2.0 | Status: REVIEW
 Source: pencil-shadcn.pen > Frame: Scenario Opinions Overview (ID: dAnYu)
 
 ---
@@ -135,7 +135,7 @@ Navigation hierarchy:
 | INT-01 | Page load | Fetch scenario opinion data from API |
 | INT-02 | Click "View Community" on card | Navigate to `/opinions/:communityId` (UI-14) |
 | INT-03 | Click breadcrumb "Korea Election 2026" | Navigate back to project scenarios page |
-| INT-04 | Click "Data-driven Map vs Faction" | Toggle between card grid and map visualization (future) |
+| INT-04 | Click "Data-driven Map vs Faction" | Toggle between card grid view and Faction Map View (Cytoscape.js force-directed graph). In Faction View: communities positioned on horizontal belief axis (negative left, positive right). Node size = agent count. Node border color = stance (green/gray/red). Edges connect communities with shared opinion flow (weight = belief similarity). Click node → navigate to `/opinions/:communityId`. Lazy-loaded via `React.lazy()`. |
 | INT-05 | Hover community card | Subtle scale transform (1.02) |
 | INT-06 | Click back button | Navigate to previous page |
 

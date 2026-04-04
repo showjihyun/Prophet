@@ -1,5 +1,5 @@
 # UI-01 — AI Social World Engine (Main Simulation Screen) SPEC
-Version: 0.1.0 | Status: DRAFT
+Version: 0.2.0 | Status: REVIEW
 Source: pencil-shadcn.pen > Frame: AI Social World Engine (ID: FuHqi)
 
 ---
@@ -50,11 +50,12 @@ The screen is divided into 4 horizontal zones stacked vertically:
 When no simulation is loaded, the page shows:
 - ControlPanel (top bar) with "New Simulation" button visible
 - Centered empty state: icon + title + description + "Create New Simulation" CTA
-- CTA navigates to /setup (Campaign Setup page)
+- CTA navigates to /projects (project selection is required before creating a simulation)
 - /setup is NOT a separate sidebar menu item — it is only accessible from:
   1. SimulationPage empty state CTA
   2. ControlPanel "New Simulation" button (when simulation is null)
   3. Direct URL navigation
+- **Note:** Alternatively, the inline New Simulation flow in ControlPanel creates a simulation without page navigation
 
 ---
 
@@ -81,6 +82,14 @@ When no simulation is loaded, the page shows:
 | `ib0Jy/replayBtn` | `Button` | Replay from beginning, icon=Rewind | `ib0Jy` |
 | `ib0Jy/settingsBtn` | `Button` | Open settings modal, icon=Settings, variant=ghost | `ib0Jy` |
 | `ib0Jy/avatar` | `Avatar` | Current user avatar, top-right corner | `ib0Jy` |
+| `ib0Jy/loadPrev` | `Button` | "Load Previous" dropdown with search — loads previously saved simulations | `ib0Jy` |
+| `ib0Jy/compare` | `Button` | "Compare" dropdown — select another simulation for side-by-side comparison (navigates to /compare/:id) | `ib0Jy` |
+| `ib0Jy/clone` | `Button` | "Clone" — copies current simulation config to setup page for re-run | `ib0Jy` |
+| `ib0Jy/injectEvent` | `Button` | "Inject Event" — opens InjectEventModal for mid-simulation event injection | `ib0Jy` |
+| `ib0Jy/monteCarlo` | `Button` | "Monte Carlo" — opens MonteCarloModal for multi-run analysis | `ib0Jy` |
+| `ib0Jy/engineControl` | `Button` | "Engine Control" — toggles EngineControlPanel dropdown for SLM/LLM ratio adjustment | `ib0Jy` |
+| `ib0Jy/llmDashboard` | `Button` | "LLM Dashboard" toggle — shows/hides collapsible LLM stats overlay at bottom | `ib0Jy` |
+| `ib0Jy/runAll` | `Button` | "Run All" — runs all remaining steps to completion, shows report on finish | `ib0Jy` |
 
 ### Zone 2: Left -- Community Panel
 
@@ -214,10 +223,14 @@ When no simulation is loaded, the page shows:
 | Play | Click `playBtn` | Starts/resumes simulation step loop. Button toggles to Pause. Status badge updates to "Running". |
 | Pause | Click `pauseBtn` | Pauses simulation. Status badge updates to "Paused". |
 | Step | Click `stepBtn` | Advances simulation by exactly 1 step (day). Timeline indicator moves forward by 1. |
-| Reset | Click `resetBtn` | Resets simulation to Day 0. Confirmation dialog shown first. All metrics reset. |
+| Reset | Click `resetBtn` | Shows confirmation dialog ('Reset simulation? This cannot be undone.'). On confirm: POST /simulations/{id}/stop, status → 'created'. All metrics reset. |
 | Replay | Click `replayBtn` | Replays from Day 0 at current speed setting, re-animating the graph and metrics. |
 | Speed change | Click speed button (1x/2x/5x/10x) | Changes simulation tick interval. Active button gets highlighted state. |
 | Scenario change | Select from `scenarioSelect` | Loads different scenario config. May trigger simulation reset with confirmation. |
+| Run All | Click `runAllBtn` | POST /simulations/{id}/run-all. Runs all remaining steps. On completion: SimulationReportModal auto-opens. |
+| Clone | Click `cloneBtn` | Copies simulation config to store.cloneConfig, navigates to /setup for re-run with pre-filled form. |
+| Load Previous | Click `loadPrevBtn` | Opens searchable dropdown of past simulations. Click to load: GET /simulations/{id} + GET /simulations/{id}/steps. |
+| Compare | Click `compareBtn` | Opens dropdown of other simulations. Click to navigate to /compare/:otherId. |
 
 ### Graph Interactions
 
@@ -261,6 +274,34 @@ When no simulation is loaded, the page shows:
 | New message | WebSocket push | New conversation card prepended to feed with slide-in animation. Old cards shift down. Max 20 visible. |
 | Card click | Click conversation card | Navigates to Agent Detail (UI-04) for the speaking agent. |
 | Expert update | Step completion | Expert agent analysis text updates with fade transition. "Analyzing" badge pulses during computation. |
+
+### 5.5 Keyboard Shortcuts
+
+#### Keyboard Shortcuts (ControlPanel)
+
+Active when no input/textarea is focused:
+
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle Play/Pause |
+| `ArrowRight` | Step forward one tick |
+| `Escape` | Reset simulation (with confirmation) |
+
+### 5.6 Overlay Components
+
+#### Overlay Components
+
+These components render as overlays/drawers within the SimulationPage:
+
+| Component | Trigger | Position | Description |
+|-----------|---------|----------|-------------|
+| AgentInspector | Graph node click | Right drawer (360px) | Full agent detail + edit panel (when paused) |
+| SimulationReportModal | status === 'completed' | Center modal | Auto-shown on completion. Export JSON/CSV, Run Again. |
+| LLMDashboard | LLM Dashboard toggle | Bottom overlay | Provider stats, call counts, cache hit rate |
+| InjectEventModal | Inject Event button | Center modal | Event type, content, controversy, target communities |
+| ReplayModal | Replay button | Center modal | Target step slider |
+| MonteCarloModal | Monte Carlo button | Center modal | Config → Running (polling) → Completed (results) |
+| EngineControlPanel | Engine Control button | Dropdown below button | SLM/LLM ratio slider + 4 impact indicators |
 
 ---
 

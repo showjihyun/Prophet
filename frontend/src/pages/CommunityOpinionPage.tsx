@@ -2,7 +2,7 @@
  * CommunityOpinionPage — Community-level opinion clusters + conversations (UI-14).
  * @spec docs/spec/ui/UI_14_COMMUNITY_OPINION.md
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import { apiClient } from "../api/client";
@@ -112,11 +112,22 @@ function StanceBar({ stances }: { stances: { support: number; neutral: number; o
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
+const COMMUNITY_COLORS_MAP: Record<number, string> = {
+  0: "var(--community-alpha)",
+  1: "var(--community-beta)",
+  2: "var(--community-gamma)",
+  3: "var(--community-delta)",
+  4: "var(--community-bridge)",
+};
+
+type SortMode = "mentioned" | "contested" | "newest";
+
 export default function CommunityOpinionPage() {
   const { communityId } = useParams<{ communityId: string }>();
   const navigate = useNavigate();
   const simulation = useSimulationStore((st) => st.simulation);
   const steps = useSimulationStore((st) => st.steps);
+  const [sortMode, setSortMode] = useState<SortMode>("mentioned");
   const simId = simulation?.simulation_id ?? null;
 
   // Fetch steps from API if store is empty
@@ -136,9 +147,11 @@ export default function CommunityOpinionPage() {
     const cm = latestStep.community_metrics?.[communityId];
     if (!cm) return null;
     const totalAgents = cm.adoption_count > 0 ? Math.round(cm.adoption_count / Math.max(0.001, cm.adoption_rate)) : 0;
+    const communityKeys = Object.keys(latestStep.community_metrics ?? {});
+    const colorIdx = communityKeys.indexOf(communityId);
     return {
       name: `Community ${communityId}`,
-      color: "var(--community-alpha)",
+      color: COMMUNITY_COLORS_MAP[colorIdx >= 0 ? colorIdx % 5 : 0] ?? "var(--muted-foreground)",
       agents: totalAgents,
       sentiment: cm.mean_belief,
       conversations: cm.new_propagation_count,
@@ -178,8 +191,17 @@ export default function CommunityOpinionPage() {
   }, [steps]);
 
   const meta = derivedMeta ?? COMMUNITY_META[communityId ?? "alpha"] ?? COMMUNITY_META.alpha;
-  const clusters = derivedClusters.length > 0 ? derivedClusters : MOCK_CLUSTERS;
+  const sortedClusters = useMemo(() => {
+    const src = derivedClusters.length > 0 ? derivedClusters : MOCK_CLUSTERS;
+    const copy = [...src];
+    if (sortMode === "contested") copy.sort((a, b) => Math.abs(a.stances.support - a.stances.oppose) - Math.abs(b.stances.support - b.stances.oppose));
+    else if (sortMode === "newest") copy.reverse();
+    else copy.sort((a, b) => b.agent_count - a.agent_count);
+    return copy;
+  }, [derivedClusters, sortMode]);
+  const clusters = sortedClusters;
   const conversations = derivedConversations.length > 0 ? derivedConversations : MOCK_CONVERSATIONS;
+  const isDemo = derivedClusters.length === 0;
 
   const sentColor = meta.sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : meta.sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";
 
@@ -188,13 +210,20 @@ export default function CommunityOpinionPage() {
       {/* Nav */}
       <PageNav
         breadcrumbs={[
-          { label: "Korea Election 2026", href: "/projects/p1" },
+          { label: simulation?.name ?? "Simulation", href: "/projects/p1" },
           { label: meta.name.replace("Community ", ""), href: `/opinions` },
           { label: "Opinion" },
         ]}
         actions={
           <div className="flex items-center gap-2">
-            <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--community-alpha)]/20 text-[var(--community-alpha)] border border-[var(--community-alpha)]/30">
+            <span
+              className="text-xs px-2 py-0.5 rounded-full border"
+              style={{
+                backgroundColor: `${meta.color}33`,
+                color: meta.color,
+                borderColor: `${meta.color}4d`,
+              }}
+            >
               Level 2 Community
             </span>
             <button
@@ -215,8 +244,7 @@ export default function CommunityOpinionPage() {
         <div className="flex items-center gap-3 mb-2">
           <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: meta.color }} />
           <h1
-            className="text-2xl font-semibold text-[var(--foreground)]"
-            style={{ fontFamily: "'Instrument Serif', serif" }}
+            className="text-2xl font-semibold font-display text-[var(--foreground)]"
           >
             {meta.name}
           </h1>
@@ -234,16 +262,27 @@ export default function CommunityOpinionPage() {
         </div>
       </div>
 
+      {/* Demo data banner */}
+      {isDemo && (
+        <div className="mx-8 mt-4 px-4 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 text-sm">
+          Showing demo data. Run a simulation to see real results.
+        </div>
+      )}
+
       {/* Body: 2 columns */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left: Opinion Clusters */}
         <div className="flex-1 overflow-y-auto px-8 py-5 border-r border-[var(--border)]">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-[var(--foreground)]">Opinion Clusters</h2>
-            <select className="text-xs bg-[var(--secondary)] text-[var(--foreground)] border border-[var(--border)] rounded-md px-2 py-1">
-              <option>Top Mentioned Topics</option>
-              <option>Most Contested</option>
-              <option>Newest</option>
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              className="text-xs bg-[var(--secondary)] text-[var(--foreground)] border border-[var(--border)] rounded-md px-2 py-1"
+            >
+              <option value="mentioned">Top Mentioned Topics</option>
+              <option value="contested">Most Contested</option>
+              <option value="newest">Newest</option>
             </select>
           </div>
 

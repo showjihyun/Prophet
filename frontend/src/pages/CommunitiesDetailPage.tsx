@@ -256,7 +256,8 @@ export default function CommunitiesDetailPage() {
                           e.stopPropagation();
                           navigate(`/agents/${inf.id}`);
                         }}
-                        className="text-[var(--community-alpha)] hover:underline"
+                        className="hover:underline"
+                        style={{ color: community.color }}
                       >
                         {inf.id}
                       </button>

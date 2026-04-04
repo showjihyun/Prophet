@@ -1,6 +1,11 @@
 /**
  * Data fetching hooks using TanStack Query.
  * @spec docs/spec/07_FRONTEND_SPEC.md#data-fetching
+ *
+ * NOTE: Currently unused. All pages use direct apiClient calls.
+ * These hooks are retained for future migration to TanStack Query.
+ * When migrating a page, import the relevant hook from here
+ * instead of calling apiClient directly.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';

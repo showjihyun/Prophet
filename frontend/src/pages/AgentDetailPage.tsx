@@ -632,6 +632,11 @@ export default function AgentDetailPage() {
 
           {activeTab === "Messages" && (
             <div className="flex flex-col gap-4">
+              {/* Demo data notice */}
+              <div className="px-4 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 text-sm">
+                Showing sample messages. Real agent messages will appear during simulation.
+              </div>
+
               {/* Header with stats */}
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-[var(--foreground)]">Message History</h3>

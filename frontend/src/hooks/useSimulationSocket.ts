@@ -31,12 +31,21 @@ export function useSimulationSocket(simulationId: string | null) {
       const ws = new WebSocket(`${WS_BASE}/ws/${simulationId}`);
       wsRef.current = ws;
 
+      let heartbeatInterval: ReturnType<typeof setInterval>;
+
       ws.onopen = () => {
         setConnected(true);
         retryCount = 0;
+        // Heartbeat ping every 30s to keep connection alive
+        heartbeatInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 30000);
       };
 
       ws.onclose = () => {
+        clearInterval(heartbeatInterval);
         setConnected(false);
         if (retryCount < MAX_RETRIES) {
           const delay = Math.min(BASE_DELAY * Math.pow(2, retryCount), 30000);
