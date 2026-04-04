@@ -128,6 +128,7 @@ LLM calls are abstracted behind `LLMAdapter` interface — provider is swappable
 | UI-13 | [UI_13_SCENARIO_OPINIONS.md](./ui/UI_13_SCENARIO_OPINIONS.md) | Scenario opinions overview (Pencil sync) | DRAFT |
 | UI-14 | [UI_14_COMMUNITY_OPINION.md](./ui/UI_14_COMMUNITY_OPINION.md) | Community opinion detail (Pencil sync) | DRAFT |
 | UI-15 | [UI_15_CONVERSATION_THREAD.md](./ui/UI_15_CONVERSATION_THREAD.md) | Conversation thread view (Pencil sync) | DRAFT |
+| UI-16 | [UI_16_CAMPAIGN_SETUP.md](./ui/UI_16_CAMPAIGN_SETUP.md) | Campaign setup wizard (community config, LLM provider) | DRAFT |
 
 ---
 
