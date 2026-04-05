@@ -248,3 +248,135 @@ async def get_community_thread(
             )
 
     raise HTTPException(status_code=404, detail=f"Thread {thread_id!r} not found in community {community_id!r}")
+
+
+# ---------------------------------------------------------------------------
+# Community Management Endpoints (CRUD)
+# SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel, Field
+
+
+class UpdateCommunityRequest(BaseModel):
+    name: str | None = None
+    personality_profile: dict[str, float] | None = None
+
+
+class CreateCommunityRequest(BaseModel):
+    name: str
+    agent_type: str = "consumer"
+    size: int = Field(ge=1, le=10000)
+    personality_profile: dict[str, float] = {}
+
+
+class ReassignAgentsRequest(BaseModel):
+    agent_ids: list[str]
+    target_community_id: str
+
+
+@router.patch("/{community_id}")
+async def update_community(
+    simulation_id: str,
+    community_id: str,
+    body: UpdateCommunityRequest,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Update community properties (name, personality).
+    SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-1
+    """
+    from uuid import UUID
+    from app.engine.simulation.exceptions import InvalidStateError
+
+    _get_state_or_404(orchestrator, simulation_id)
+    try:
+        result = await orchestrator.update_community(
+            UUID(simulation_id),
+            community_id,
+            name=body.name,
+            personality_profile=body.personality_profile,
+        )
+        return result
+    except InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/", status_code=201)
+async def add_community(
+    simulation_id: str,
+    body: CreateCommunityRequest,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Add a new community with agents to the simulation.
+    SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-2
+    """
+    from uuid import UUID
+    from app.engine.simulation.exceptions import InvalidStateError
+
+    _get_state_or_404(orchestrator, simulation_id)
+    try:
+        result = await orchestrator.add_community(
+            UUID(simulation_id),
+            name=body.name,
+            agent_type=body.agent_type,
+            size=body.size,
+            personality_profile=body.personality_profile or {
+                "openness": 0.5, "skepticism": 0.5, "trend_following": 0.5,
+                "brand_loyalty": 0.5, "social_influence": 0.4,
+            },
+        )
+        return result
+    except InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.delete("/{community_id}")
+async def delete_community(
+    simulation_id: str,
+    community_id: str,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Remove a community and its agents from the simulation.
+    SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-3
+    """
+    from uuid import UUID
+    from app.engine.simulation.exceptions import InvalidStateError
+
+    _get_state_or_404(orchestrator, simulation_id)
+    try:
+        result = await orchestrator.remove_community(UUID(simulation_id), community_id)
+        return result
+    except InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{community_id}/reassign")
+async def reassign_agents(
+    simulation_id: str,
+    community_id: str,
+    body: ReassignAgentsRequest,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Reassign agents from this community to another.
+    SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-4
+    """
+    from uuid import UUID
+    from app.engine.simulation.exceptions import InvalidStateError
+
+    _get_state_or_404(orchestrator, simulation_id)
+    try:
+        result = await orchestrator.reassign_agents(
+            UUID(simulation_id),
+            community_id,
+            agent_ids=[UUID(aid) for aid in body.agent_ids],
+            target_community_id=body.target_community_id,
+        )
+        return result
+    except InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
