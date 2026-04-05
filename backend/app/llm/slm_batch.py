@@ -33,14 +33,15 @@ class SLMBatchInferencer:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:11434",
-        model: str = "phi4",
-        batch_size: int = 32,
+        base_url: str | None = None,
+        model: str | None = None,
+        batch_size: int | None = None,
     ) -> None:
         """SPEC: docs/spec/05_LLM_SPEC.md#3-provider-implementations"""
-        self._base_url = base_url
-        self._model = model
-        self._batch_size = batch_size
+        from app.config import settings
+        self._base_url = base_url or settings.ollama_base_url
+        self._model = model or settings.slm_model
+        self._batch_size = batch_size if batch_size is not None else settings.slm_batch_size
 
     async def _single_complete(
         self,

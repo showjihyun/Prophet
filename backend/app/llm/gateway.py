@@ -14,6 +14,7 @@ from uuid import UUID
 
 from sqlalchemy import text
 
+from app.config import settings as _settings
 from app.llm.schema import LLMPrompt, LLMOptions, LLMResponse
 from app.llm.registry import LLMAdapterRegistry
 
@@ -29,7 +30,8 @@ class InMemoryLLMCache:
 
     SPEC: docs/spec/platform/14_LLM_GATEWAY_SPEC.md#inmemory-cache
     """
-    MAX_SIZE = 1000
+
+    MAX_SIZE = _settings.llm_inmemory_cache_max_size
 
     def __init__(self) -> None:
         self._cache: OrderedDict[str, LLMResponse] = OrderedDict()
@@ -70,7 +72,7 @@ class VectorLLMCache:
 
     SPEC: docs/spec/platform/14_LLM_GATEWAY_SPEC.md#vector-cache
     """
-    SIMILARITY_THRESHOLD = 0.92
+    SIMILARITY_THRESHOLD = _settings.llm_vector_similarity_threshold
 
     def __init__(self, session_factory: Any | None = None) -> None:
         self._session_factory = session_factory
@@ -254,14 +256,14 @@ class LLMGateway:
     SPEC: docs/spec/platform/14_LLM_GATEWAY_SPEC.md
     """
 
-    BATCH_SIZE: int = 32
-    MAX_WAIT_MS: int = 100
-    VECTOR_SIMILARITY_THRESHOLD: float = 0.95
+    BATCH_SIZE: int = _settings.llm_gateway_batch_size
+    MAX_WAIT_MS: int = _settings.llm_gateway_max_wait_ms
+    VECTOR_SIMILARITY_THRESHOLD: float = _settings.llm_vector_similarity_threshold
 
     # Model tier downgrade order for budget-aware routing
     _TIER_DOWNGRADE: dict[int, int] = {3: 2, 2: 1, 1: 1}
     # Budget threshold — downgrade if remaining < this fraction of initial
-    _BUDGET_DOWNGRADE_THRESHOLD: float = 0.20
+    _BUDGET_DOWNGRADE_THRESHOLD: float = _settings.llm_budget_downgrade_threshold
 
     def __init__(
         self,

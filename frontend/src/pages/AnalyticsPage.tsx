@@ -20,6 +20,7 @@ import {
 import { ArrowLeft, TrendingUp, AlertTriangle, BarChart3, Zap } from "lucide-react";
 import { useSimulationStore } from "../store/simulationStore";
 import { apiClient } from "../api/client";
+import { LS_KEY_MC_PREFIX } from "@/config/constants";
 import type { StepResult, EmergentEvent } from "../types/simulation";
 
 // ----- Colour palette for communities -----
@@ -475,7 +476,7 @@ export default function AnalyticsPage() {
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-medium text-[var(--foreground)] capitalize">
-                          {e.event_type.replace(/_/g, " ")}
+                          {(e.event_type ?? "event").replace(/_/g, " ")}
                         </span>
                         {e.community_id && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)]">
@@ -550,7 +551,7 @@ function MonteCarloSection({ simulationId }: { simulationId: string | null }) {
         if (!cancelled && res) { queueMicrotask(() => setMcData(res)); return; }
       } catch { /* API unavailable, try localStorage */ }
       try {
-        const stored = localStorage.getItem(`prophet-mc-${simulationId}`);
+        const stored = localStorage.getItem(`${LS_KEY_MC_PREFIX}${simulationId}`);
         if (!cancelled && stored) queueMicrotask(() => setMcData(JSON.parse(stored)));
       } catch { /* ignore */ }
     })();

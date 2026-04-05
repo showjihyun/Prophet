@@ -30,10 +30,12 @@ except ImportError:
     genai = None  # type: ignore[assignment]
     _GENAI_AVAILABLE = False
 
+from app.config import settings as _settings
+
 # Gemini embedding output dimension
-_GEMINI_EMBED_DIM = 768
+_GEMINI_EMBED_DIM = _settings.embedding_dim
 # Target dimension expected by the platform
-_TARGET_EMBED_DIM = 768
+_TARGET_EMBED_DIM = _settings.embedding_dim
 
 
 class GeminiAdapter(LLMAdapter):
@@ -50,11 +52,11 @@ class GeminiAdapter(LLMAdapter):
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-2.0-flash",
+        model: str | None = None,
     ) -> None:
         """SPEC: docs/spec/05_LLM_SPEC.md#3-provider-implementations"""
         self._api_key = api_key
-        self._model = model
+        self._model = model or _settings.gemini_default_model
         if _GENAI_AVAILABLE:
             genai.configure(api_key=api_key)
 
@@ -166,7 +168,7 @@ class GeminiAdapter(LLMAdapter):
         try:
             result = await asyncio.to_thread(
                 genai.embed_content,
-                model="models/text-embedding-004",
+                model=_settings.gemini_embed_model,
                 content=text,
                 task_type="retrieval_document",
             )

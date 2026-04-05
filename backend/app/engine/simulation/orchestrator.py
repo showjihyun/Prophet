@@ -58,7 +58,9 @@ _VALID_TRANSITIONS: dict[str, set[str]] = {
     SimulationStatus.FAILED.value: set(),
 }
 
-_MAX_CONCURRENT = 3
+from app.config import settings as _settings
+
+_MAX_CONCURRENT = _settings.sim_max_concurrent
 
 # Allowed event types for inject_event
 # SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idinject-event
@@ -95,8 +97,8 @@ class SimulationOrchestrator:
     for simulations. Uses in-memory state for Phase 6.
     """
 
-    MAX_SIMULATIONS = 50
-    SIMULATION_TTL_SECONDS = 86400  # 24 hours
+    MAX_SIMULATIONS = _settings.sim_max_simulations
+    SIMULATION_TTL_SECONDS = _settings.sim_ttl_seconds
 
     def __init__(self, llm_adapter=None, slm_adapter=None) -> None:
         """Initialize the orchestrator.
@@ -1199,6 +1201,227 @@ class SimulationOrchestrator:
         del self._simulations[simulation_id]
         if simulation_id in self._locks:
             del self._locks[simulation_id]
+
+
+    # ------------------------------------------------------------------ #
+    # Community Management (Runtime CRUD)
+    # SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md
+    # ------------------------------------------------------------------ #
+
+    def _require_mutable(self, state: SimulationState) -> None:
+        """Raise 409 if simulation is not in a mutable state (paused/configured)."""
+        if state.status not in (
+            SimulationStatus.PAUSED.value,
+            SimulationStatus.CONFIGURED.value,
+            "created",
+        ):
+            raise InvalidStateError(
+                "Community changes only allowed when paused or configured"
+            )
+
+    async def update_community(
+        self,
+        simulation_id: UUID,
+        community_id: str,
+        name: str | None = None,
+        personality_profile: dict[str, float] | None = None,
+    ) -> dict:
+        """Update community properties. Requires PAUSED/CONFIGURED state.
+
+        SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-1
+        """
+        import random
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            self._require_mutable(state)
+
+            # Find agents in this community
+            members = [a for a in state.agents if str(a.community_id) == community_id]
+            if not members:
+                raise ValueError(f"Community {community_id!r} not found")
+
+            agents_updated = 0
+            if personality_profile:
+                for i, agent in enumerate(state.agents):
+                    if str(agent.community_id) != community_id:
+                        continue
+                    from dataclasses import replace as dc_replace
+                    new_p = AgentPersonality(
+                        openness=max(0, min(1, personality_profile.get("openness", agent.personality.openness) + random.uniform(-0.1, 0.1))),
+                        skepticism=max(0, min(1, personality_profile.get("skepticism", agent.personality.skepticism) + random.uniform(-0.1, 0.1))),
+                        trend_following=max(0, min(1, personality_profile.get("trend_following", agent.personality.trend_following) + random.uniform(-0.1, 0.1))),
+                        brand_loyalty=max(0, min(1, personality_profile.get("brand_loyalty", agent.personality.brand_loyalty) + random.uniform(-0.1, 0.1))),
+                        social_influence=max(0, min(1, personality_profile.get("social_influence", agent.personality.social_influence) + random.uniform(-0.1, 0.1))),
+                    )
+                    state.agents[i] = dc_replace(agent, personality=new_p)
+                    agents_updated += 1
+
+            return {
+                "community_id": community_id,
+                "name": name or community_id,
+                "size": len(members),
+                "agents_updated": agents_updated,
+            }
+
+    async def add_community(
+        self,
+        simulation_id: UUID,
+        name: str,
+        agent_type: str,
+        size: int,
+        personality_profile: dict[str, float],
+    ) -> dict:
+        """Add a new community with agents and edges.
+
+        SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-2
+        """
+        import random
+        from uuid import uuid4
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            self._require_mutable(state)
+
+            new_community_id = uuid4()
+            new_agents = []
+            for _ in range(size):
+                agent = AgentState(
+                    agent_id=uuid4(),
+                    simulation_id=simulation_id,
+                    agent_type=AgentType(agent_type) if agent_type in [t.value for t in AgentType] else AgentType.CONSUMER,
+                    step=state.current_step,
+                    personality=AgentPersonality(
+                        openness=max(0, min(1, personality_profile.get("openness", 0.5) + random.uniform(-0.1, 0.1))),
+                        skepticism=max(0, min(1, personality_profile.get("skepticism", 0.5) + random.uniform(-0.1, 0.1))),
+                        trend_following=max(0, min(1, personality_profile.get("trend_following", 0.5) + random.uniform(-0.1, 0.1))),
+                        brand_loyalty=max(0, min(1, personality_profile.get("brand_loyalty", 0.5) + random.uniform(-0.1, 0.1))),
+                        social_influence=max(0, min(1, personality_profile.get("social_influence", 0.4) + random.uniform(-0.1, 0.1))),
+                    ),
+                    emotion=AgentEmotion(interest=0.5, trust=0.5, skepticism=0.3, excitement=0.5),
+                    belief=0.0,
+                    action=AgentAction.IGNORE,
+                    exposure_count=0,
+                    adopted=False,
+                    community_id=new_community_id,
+                    influence_score=random.uniform(0.1, 0.9),
+                )
+                new_agents.append(agent)
+
+            state.agents.extend(new_agents)
+
+            # Add edges to network
+            edges_created = 0
+            if state.network and state.network.graph:
+                g = state.network.graph
+                base_node = max(g.nodes()) + 1 if g.nodes() else 0
+                for i, agent in enumerate(new_agents):
+                    nid = base_node + i
+                    g.add_node(nid, agent_id=agent.agent_id, community_id=str(new_community_id))
+                # Intra-community edges (ring + random shortcuts)
+                new_nodes = list(range(base_node, base_node + size))
+                for i, n in enumerate(new_nodes):
+                    for j in range(1, min(4, size)):
+                        neighbor = new_nodes[(i + j) % size]
+                        if not g.has_edge(n, neighbor):
+                            g.add_edge(n, neighbor, weight=random.uniform(0.5, 1.0))
+                            edges_created += 1
+                # Cross-community edges
+                existing_nodes = [n for n in g.nodes() if n < base_node]
+                cross_count = max(1, int(len(existing_nodes) * 0.02))
+                for n in new_nodes[:cross_count]:
+                    if existing_nodes:
+                        target = random.choice(existing_nodes)
+                        g.add_edge(n, target, weight=random.uniform(0.1, 0.4))
+                        edges_created += 1
+
+            return {
+                "community_id": str(new_community_id),
+                "name": name,
+                "size": size,
+                "agents_created": size,
+                "edges_created": edges_created,
+            }
+
+    async def remove_community(
+        self,
+        simulation_id: UUID,
+        community_id: str,
+    ) -> dict:
+        """Remove community and its agents/edges.
+
+        SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-3
+        """
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            self._require_mutable(state)
+
+            # Check not last community
+            community_ids = {str(a.community_id) for a in state.agents}
+            if len(community_ids) <= 1:
+                raise ValueError("Cannot delete last community")
+
+            # Remove agents
+            removed_agents = [a for a in state.agents if str(a.community_id) == community_id]
+            if not removed_agents:
+                raise ValueError(f"Community {community_id!r} not found")
+            removed_ids = {a.agent_id for a in removed_agents}
+            state.agents = [a for a in state.agents if str(a.community_id) != community_id]
+
+            # Remove edges from network
+            edges_removed = 0
+            if state.network and state.network.graph:
+                g = state.network.graph
+                nodes_to_remove = [
+                    n for n, d in g.nodes(data=True)
+                    if d.get("agent_id") in removed_ids
+                ]
+                edges_removed = sum(g.degree(n) for n in nodes_to_remove)
+                g.remove_nodes_from(nodes_to_remove)
+
+            return {
+                "community_id": community_id,
+                "agents_removed": len(removed_agents),
+                "edges_removed": edges_removed,
+            }
+
+    async def reassign_agents(
+        self,
+        simulation_id: UUID,
+        community_id: str,
+        agent_ids: list[UUID],
+        target_community_id: str,
+    ) -> dict:
+        """Move agents to a different community.
+
+        SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-4
+        """
+        from dataclasses import replace as dc_replace
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            self._require_mutable(state)
+
+            # Verify target community exists
+            target_exists = any(str(a.community_id) == target_community_id for a in state.agents)
+            if not target_exists:
+                raise ValueError(f"Target community {target_community_id!r} not found")
+
+            target_uuid = UUID(target_community_id)
+            reassigned = 0
+            for i, agent in enumerate(state.agents):
+                if agent.agent_id in agent_ids and str(agent.community_id) == community_id:
+                    state.agents[i] = dc_replace(agent, community_id=target_uuid)
+                    # Update network node data
+                    if state.network and state.network.graph:
+                        for n, d in state.network.graph.nodes(data=True):
+                            if d.get("agent_id") == agent.agent_id:
+                                d["community_id"] = target_community_id
+                                break
+                    reassigned += 1
+
+            return {
+                "reassigned_count": reassigned,
+                "source_community_id": community_id,
+                "target_community_id": target_community_id,
+            }
 
 
 __all__ = ["SimulationOrchestrator", "SimulationState"]

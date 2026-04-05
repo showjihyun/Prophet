@@ -32,7 +32,7 @@ class MonteCarloRunner:
     async def run(
         self,
         simulation_config: SimulationConfig,
-        n_runs: int = 100,
+        n_runs: int | None = None,
         parallel: bool = True,
     ) -> MonteCarloResult:
         """Run Monte Carlo simulation.
@@ -49,7 +49,10 @@ class MonteCarloRunner:
             - expected_reach: mean final adoption across runs
             - p5/p50/p95: percentiles of final adoption
         """
-        base_seed = simulation_config.random_seed or 42
+        from app.config import settings
+        if n_runs is None:
+            n_runs = settings.monte_carlo_default_runs
+        base_seed = simulation_config.random_seed or settings.sim_default_random_seed
         summaries: list[RunSummary] = []
 
         for run_id in range(n_runs):

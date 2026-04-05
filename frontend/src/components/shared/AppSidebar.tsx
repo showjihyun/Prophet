@@ -20,6 +20,7 @@ import {
   LogOut,
 } from "lucide-react";
 import ThemeToggle from './ThemeToggle';
+import { LS_KEY_TOKEN, LS_KEY_USERNAME } from "@/config/constants";
 
 interface AppSidebarProps {
   activePath?: string;
@@ -52,11 +53,11 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
-  const [username, setUsername] = useState<string | null>(() => localStorage.getItem("prophet-username"));
+  const [username, setUsername] = useState<string | null>(() => localStorage.getItem(LS_KEY_USERNAME));
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem("prophet-token");
-    localStorage.removeItem("prophet-username");
+    localStorage.removeItem(LS_KEY_TOKEN);
+    localStorage.removeItem(LS_KEY_USERNAME);
     setUsername(null);
     navigate("/login");
   }, [navigate]);

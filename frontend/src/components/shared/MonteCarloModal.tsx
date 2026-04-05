@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { X, BarChart3, Loader2 } from "lucide-react";
 import { apiClient } from "../../api/client";
 import { useSimulationStore } from "../../store/simulationStore";
+import { LS_KEY_MC_PREFIX, DEFAULT_MONTE_CARLO_RUNS, MONTE_CARLO_MIN_RUNS, MONTE_CARLO_MAX_RUNS, MONTE_CARLO_STEP } from "@/config/constants";
 
 export interface MonteCarloModalProps {
   isOpen: boolean;
@@ -31,7 +32,7 @@ type Phase = "config" | "running" | "completed" | "failed";
 
 export default function MonteCarloModal({ isOpen, onClose }: MonteCarloModalProps) {
   const simulation = useSimulationStore((s) => s.simulation);
-  const [nRuns, setNRuns] = useState(100);
+  const [nRuns, setNRuns] = useState(DEFAULT_MONTE_CARLO_RUNS);
   const [llmEnabled, setLlmEnabled] = useState(false);
   const [phase, setPhase] = useState<Phase>("config");
   const [result, setResult] = useState<MonteCarloResult | null>(null);
@@ -45,7 +46,7 @@ export default function MonteCarloModal({ isOpen, onClose }: MonteCarloModalProp
       // Defer setState calls out of the synchronous effect body
       // (react-hooks/set-state-in-effect).
       queueMicrotask(() => {
-        setNRuns(100);
+        setNRuns(DEFAULT_MONTE_CARLO_RUNS);
         setLlmEnabled(false);
         setPhase("config");
         setResult(null);
@@ -82,7 +83,7 @@ export default function MonteCarloModal({ isOpen, onClose }: MonteCarloModalProp
             setPhase("completed");
             if (pollRef.current) clearInterval(pollRef.current);
             // Persist MC results for Analytics page
-            try { localStorage.setItem(`prophet-mc-${simulationId}`, JSON.stringify(res)); } catch { /* ignore */ }
+            try { localStorage.setItem(`${LS_KEY_MC_PREFIX}${simulationId}`, JSON.stringify(res)); } catch { /* ignore */ }
           } else if (res.status === "failed") {
             setPhase("failed");
             setError(res.error_message || "Job failed");
@@ -148,9 +149,9 @@ export default function MonteCarloModal({ isOpen, onClose }: MonteCarloModalProp
                 </div>
                 <input
                   type="range"
-                  min={10}
-                  max={500}
-                  step={10}
+                  min={MONTE_CARLO_MIN_RUNS}
+                  max={MONTE_CARLO_MAX_RUNS}
+                  step={MONTE_CARLO_STEP}
                   value={nRuns}
                   onChange={(e) => setNRuns(parseInt(e.target.value))}
                   className="w-full accent-[var(--community-delta)]"

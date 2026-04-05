@@ -3,16 +3,17 @@ SPEC: docs/spec/05_LLM_SPEC.md#71-user-engine-control-slmllm-ratio
 """
 from __future__ import annotations
 
+from app.config import settings as _settings
 from app.llm.schema import TierDistribution, EngineImpactReport
 
 # Average cost per Tier 3 LLM call (USD)
-_AVG_COST_PER_TIER3_CALL = 0.003
+_AVG_COST_PER_TIER3_CALL = _settings.llm_avg_cost_per_tier3_call
 
 # Tier 1 SLM latency per agent (ms)
-_TIER1_LATENCY_MS = 5.0
+_TIER1_LATENCY_MS = _settings.llm_tier1_latency_ms
 
 # Tier 3 LLM latency per agent (ms)
-_TIER3_LATENCY_MS = 500.0
+_TIER3_LATENCY_MS = _settings.llm_tier3_latency_ms
 
 
 def _lerp(a: float, b: float, t: float) -> float:
@@ -67,8 +68,8 @@ class EngineController:
         total_agents: int,
         slm_llm_ratio: float,
         budget_usd: float | None = None,
-        tier1_model: str = "phi4",
-        tier3_model: str = "claude-sonnet-4-6",
+        tier1_model: str | None = None,
+        tier3_model: str | None = None,
     ) -> TierDistribution:
         """Map user preference to concrete tier assignment.
 
@@ -110,8 +111,8 @@ class EngineController:
             tier1_count=tier1_count,
             tier2_count=tier2_count,
             tier3_count=tier3_count,
-            tier1_model=tier1_model,
-            tier3_model=tier3_model,
+            tier1_model=tier1_model or _settings.slm_model,
+            tier3_model=tier3_model or _settings.anthropic_default_model,
             estimated_cost_per_step=round(estimated_cost, 4),
             estimated_latency_ms=round(estimated_latency, 1),
         )

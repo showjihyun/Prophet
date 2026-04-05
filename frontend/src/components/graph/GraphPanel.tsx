@@ -19,6 +19,7 @@ import cytoscape, { type Core, type EventObject } from "cytoscape";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { apiClient, type CytoscapeGraph } from "../../api/client";
 import { useSimulationStore } from "../../store/simulationStore";
+import { COMMUNITIES } from "@/config/constants";
 
 // ---------------------------------------------------------------------------
 // Cascade shader animation CSS (injected once at module load).
@@ -43,17 +44,6 @@ if (typeof document !== "undefined" && !document.getElementById(CASCADE_STYLE_ID
 
 /** How long (ms) cascade highlights stay active after a new cascade event. */
 const CASCADE_TTL_MS = 8000;
-
-// ---------------------------------------------------------------------------
-// Community palette (must match CSS vars & DESIGN.md §5)
-// ---------------------------------------------------------------------------
-const COMMUNITIES = [
-  { id: "A", name: "Alpha", color: "#3b82f6", size: 50 },
-  { id: "B", name: "Beta", color: "#22c55e", size: 40 },
-  { id: "C", name: "Gamma", color: "#f97316", size: 35 },
-  { id: "D", name: "Delta", color: "#a855f7", size: 25 },
-  { id: "E", name: "Bridge", color: "#ef4444", size: 10 },
-] as const;
 
 const COMMUNITY_COLOR: Record<string, string> = Object.fromEntries(
   COMMUNITIES.map((c) => [c.id, c.color]),
@@ -803,7 +793,7 @@ export default function GraphPanel() {
             className={`inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--sentiment-positive)] bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)] ${cascadeActive ? "cascade-badge-active" : ""}`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--sentiment-positive)] animate-pulse-dot" />
-            {emergentEvents[emergentEvents.length - 1].event_type.replace("_", " ")} detected
+            {(emergentEvents[emergentEvents.length - 1]?.event_type ?? "event").replace("_", " ")} detected
           </span>
         )}
       </div>

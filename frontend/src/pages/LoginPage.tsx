@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Brain, LogIn, UserPlus } from "lucide-react";
 import { apiClient } from "../api/client";
+import { LS_KEY_TOKEN, LS_KEY_USERNAME } from "@/config/constants";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -19,8 +20,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await apiClient.auth.login(username, password);
-      localStorage.setItem("prophet-token", res.token);
-      localStorage.setItem("prophet-username", res.username);
+      localStorage.setItem(LS_KEY_TOKEN, res.token);
+      localStorage.setItem(LS_KEY_USERNAME, res.username);
       navigate("/projects");
     } catch {
       setError("Invalid username or password.");
@@ -36,8 +37,8 @@ export default function LoginPage() {
       await apiClient.auth.register(username, password);
       // Auto-login after register
       const res = await apiClient.auth.login(username, password);
-      localStorage.setItem("prophet-token", res.token);
-      localStorage.setItem("prophet-username", res.username);
+      localStorage.setItem(LS_KEY_TOKEN, res.token);
+      localStorage.setItem(LS_KEY_USERNAME, res.username);
       navigate("/projects");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);

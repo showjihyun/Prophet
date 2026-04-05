@@ -19,8 +19,8 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 # Keys: username → {password_hash, user_id, role, created_at}
 _users: dict[str, dict[str, Any]] = {}
 
-_JWT_ALGORITHM = "HS256"
-_TOKEN_EXPIRE_HOURS = 24
+_JWT_ALGORITHM = settings.jwt_algorithm
+_TOKEN_EXPIRE_HOURS = settings.jwt_token_expire_hours
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────

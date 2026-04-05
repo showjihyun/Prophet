@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
+import { LS_KEY_SIMULATION_ID } from "@/config/constants";
 import { FolderOpen, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
 import CommunityPanel from "../components/graph/CommunityPanel";
@@ -46,18 +47,18 @@ export default function SimulationPage() {
   // Restore simulation from URL param or localStorage on mount.
   // @spec docs/spec/06_API_SPEC.md#get-simulationssimulation_id
   useEffect(() => {
-    const targetId = urlSimId || (!simulation ? localStorage.getItem("prophet-simulation-id") : null);
+    const targetId = urlSimId || (!simulation ? localStorage.getItem(LS_KEY_SIMULATION_ID) : null);
     if (targetId && targetId !== simulation?.simulation_id) {
       apiClient.simulations.get(targetId).then((sim) => {
         setSimulation(sim);
       }).catch(() => {
-        localStorage.removeItem("prophet-simulation-id");
+        localStorage.removeItem(LS_KEY_SIMULATION_ID);
       });
     }
   }, [urlSimId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const simulationId = simulation?.simulation_id ?? null;
-  const { lastMessage } = useSimulationSocket(simulationId);
+  const { lastMessage, retryExhausted, reconnect } = useSimulationSocket(simulationId);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -70,7 +71,7 @@ export default function SimulationPage() {
         appendEmergentEvent(event);
         addToast({
           type: 'warning',
-          message: `${event.event_type.replace(/_/g, ' ')} detected at step ${event.step}`,
+          message: `${(event.event_type ?? "event").replace(/_/g, ' ')} detected at step ${event.step ?? 0}`,
         });
         break;
       }
@@ -128,6 +129,19 @@ export default function SimulationPage() {
     >
       {/* Zone 1: Simulation Control Bar — 56px */}
       <ControlPanel />
+
+      {/* WebSocket retry exhausted banner */}
+      {retryExhausted && (
+        <div className="flex items-center justify-center gap-3 px-4 py-2 bg-amber-900/80 text-amber-200 text-sm">
+          <span>WebSocket connection lost after {5} retries.</span>
+          <button
+            onClick={reconnect}
+            className="px-3 py-1 rounded bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium transition-colors"
+          >
+            Click to retry
+          </button>
+        </div>
+      )}
 
       {/* Zone 2: Middle Content — fills available space; stacks vertically on tablet/mobile */}
       <div className="flex flex-1 min-h-0 zone2-panels">

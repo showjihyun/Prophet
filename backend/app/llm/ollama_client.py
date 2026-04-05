@@ -36,14 +36,15 @@ class OllamaAdapter(LLMAdapter):
 
     def __init__(
         self,
-        base_url: str = "http://localhost:11434",
-        default_model: str = "llama3.2",
+        base_url: str | None = None,
+        default_model: str | None = None,
         embed_model: str | None = None,  # defaults to default_model if not set
     ) -> None:
         """SPEC: docs/spec/05_LLM_SPEC.md#3-provider-implementations"""
-        self._base_url = base_url
-        self._default_model = default_model
-        self._embed_model = embed_model or default_model
+        from app.config import settings
+        self._base_url = base_url or settings.ollama_base_url
+        self._default_model = default_model or settings.ollama_default_model
+        self._embed_model = embed_model or self._default_model
 
     async def complete(
         self,
@@ -143,7 +144,9 @@ class OllamaAdapter(LLMAdapter):
                 prompt=text,
             )
             embedding = response["embedding"]
-            return embedding[:768] if len(embedding) > 768 else embedding
+            from app.config import settings
+            dim = settings.embedding_dim
+            return embedding[:dim] if len(embedding) > dim else embedding
         except Exception as exc:
             raise OllamaConnectionError(
                 f"Ollama embedding failed: {exc}"

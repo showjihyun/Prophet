@@ -38,13 +38,14 @@ class OpenAIAdapter(LLMAdapter):
     def __init__(
         self,
         api_key: str,
-        default_model: str = "gpt-4o",
-        embed_model: str = "text-embedding-3-small",
+        default_model: str | None = None,
+        embed_model: str | None = None,
     ) -> None:
         """SPEC: docs/spec/05_LLM_SPEC.md#3-provider-implementations"""
+        from app.config import settings
         self._api_key = api_key
-        self._default_model = default_model
-        self._embed_model = embed_model
+        self._default_model = default_model or settings.openai_default_model
+        self._embed_model = embed_model or settings.openai_embed_model
 
     async def complete(
         self,
@@ -148,8 +149,10 @@ class OpenAIAdapter(LLMAdapter):
                 input=text,
             )
             embedding = response.data[0].embedding
-            # Truncate from 1536-dim to 768-dim for pgvector schema
-            return embedding[:768]
+            # Truncate from 1536-dim to target dim for pgvector schema
+            from app.config import settings
+            dim = settings.embedding_dim
+            return embedding[:dim]
         except Exception as exc:
             raise LLMProviderError(f"OpenAI embedding failed: {exc}") from exc
 

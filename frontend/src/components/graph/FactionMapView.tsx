@@ -10,6 +10,7 @@
  */
 import { useEffect, useRef, useMemo } from "react";
 import cytoscape, { type Core } from "cytoscape";
+import { CSS_VAR_TO_HEX as CONST_CSS_VAR_TO_HEX } from "@/config/constants";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,14 +36,7 @@ interface FactionMapViewProps {
 // Color helpers
 // ---------------------------------------------------------------------------
 
-const CSS_VAR_TO_HEX: Record<string, string> = {
-  "var(--community-alpha)": "#3b82f6",
-  "var(--community-beta)": "#22c55e",
-  "var(--community-gamma)": "#f97316",
-  "var(--community-delta)": "#a855f7",
-  "var(--community-bridge)": "#ef4444",
-  "var(--muted-foreground)": "#94a3b8",
-};
+const CSS_VAR_TO_HEX = CONST_CSS_VAR_TO_HEX;
 
 function resolveColor(cssVar: string): string {
   return CSS_VAR_TO_HEX[cssVar] ?? cssVar;
@@ -77,7 +71,7 @@ export default function FactionMapView({ communities, onCommunityClick }: Factio
       return {
         data: {
           id: c.community_id,
-          label: c.community_name.replace("Community ", ""),
+          label: (c.community_name ?? "").replace("Community ", ""),
           agentCount: c.agent_count,
           sentiment: c.avg_sentiment,
           stance: c.dominant_stance,

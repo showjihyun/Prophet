@@ -3,6 +3,7 @@
  * @spec docs/spec/07_FRONTEND_SPEC.md#state-management
  */
 import { create } from "zustand";
+import { LS_KEY_THEME, LS_KEY_SIMULATION_ID, LS_KEY_PROJECT_ID, DEFAULT_SLM_LLM_RATIO, DEFAULT_SIMULATION_SPEED } from "@/config/constants";
 import type {
   SimulationRun,
   SimulationStatus,
@@ -89,10 +90,10 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   highlightedCommunity: null,
   isAgentInspectorOpen: false,
   isLLMDashboardOpen: false,
-  slmLlmRatio: 0.5,
+  slmLlmRatio: DEFAULT_SLM_LLM_RATIO,
   tierDistribution: null,
   impactAssessment: null,
-  speed: 2,
+  speed: DEFAULT_SIMULATION_SPEED,
   toasts: [],
   addToast: (toast) =>
     set((state) => ({
@@ -103,7 +104,7 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   cloneConfig: null,
   setCloneConfig: (config) => set({ cloneConfig: config }),
   theme: 'dark',
-  currentProjectId: null,
+  currentProjectId: localStorage.getItem(LS_KEY_PROJECT_ID) || null,
   projects: [],
   scenarios: [],
   toggleTheme: () => set((state) => {
@@ -114,16 +115,23 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
     } else {
       document.documentElement.classList.remove('light');
     }
-    localStorage.setItem('prophet-theme', next);
+    localStorage.setItem(LS_KEY_THEME, next);
     return { theme: next };
   }),
 
-  setCurrentProject: (projectId) => set({ currentProjectId: projectId }),
+  setCurrentProject: (projectId) => {
+    if (projectId) {
+      try { localStorage.setItem(LS_KEY_PROJECT_ID, projectId); } catch { /* quota */ }
+    } else {
+      localStorage.removeItem(LS_KEY_PROJECT_ID);
+    }
+    set({ currentProjectId: projectId });
+  },
   setProjects: (projects) => set({ projects }),
   setScenarios: (scenarios) => set({ scenarios }),
 
   setSimulation: (sim) => {
-    try { localStorage.setItem("prophet-simulation-id", sim.simulation_id); } catch { /* quota exceeded */ }
+    try { localStorage.setItem(LS_KEY_SIMULATION_ID, sim.simulation_id); } catch { /* quota exceeded */ }
     set({ simulation: sim, status: sim.status });
   },
   appendStep: (step) =>

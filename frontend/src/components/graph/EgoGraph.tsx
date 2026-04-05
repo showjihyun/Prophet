@@ -9,17 +9,12 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import cytoscape, { type Core, type EventObject } from "cytoscape";
 import { ZoomIn, ZoomOut, Maximize2, Filter, X } from "lucide-react";
+import { COMMUNITY_PALETTE } from "@/config/constants";
 
 // ---------------------------------------------------------------------------
 // Community palette (must match GraphPanel & DESIGN.md)
 // ---------------------------------------------------------------------------
-const COMMUNITY_COLOR: Record<string, string> = {
-  Alpha: "#3b82f6",
-  Beta: "#22c55e",
-  Gamma: "#f97316",
-  Delta: "#a855f7",
-  Bridge: "#ef4444",
-};
+const COMMUNITY_COLOR: Record<string, string> = { ...COMMUNITY_PALETTE };
 
 // ---------------------------------------------------------------------------
 // Mock ego-network data
