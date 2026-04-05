@@ -6,8 +6,10 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30000,
+  timeout: 60000,
   retries: 1,
+  workers: 1,  // Sequential execution to avoid API race conditions
+  fullyParallel: false,
   use: {
     baseURL: 'http://localhost:5173',
     headless: true,

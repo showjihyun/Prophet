@@ -631,17 +631,17 @@ AppSidebar → Analytics → /analytics
 
 | 항목 | 현재 상태 | 영향 |
 |------|----------|------|
-| WebSocket heartbeat (30s ping) | 미구현 | 서버가 idle 연결 끊을 수 있음 |
-| "Click to retry" 배너 (5회 재연결 실패 후) | 미구현 | 연결 실패 시 사용자 알림 없음 |
-| ProjectScenarios Stop 버튼 | onClick 핸들러 없음 | 클릭해도 동작 안함 |
-| ProjectScenarios More(⋯) 버튼 | onClick 핸들러 없음 | 클릭해도 동작 안함 |
-| AgentDetail Messages 탭 | Mock 데이터 전용 | 실제 메시지 없음 |
-| ConversationThread reaction 버튼 | onClick 없음 (표시만) | 클릭해도 동작 안함 |
-| ScenarioOpinions "Map vs Faction" 토글 | 핸들러 없음 | 클릭해도 동작 안함 |
-| CommunityOpinion Sort 드롭다운 | 핸들러 없음 | 선택해도 정렬 안됨 |
+| WebSocket heartbeat (30s ping) | ✅ 구현됨 | — |
+| "Click to retry" 배너 (5회 재연결 실패 후) | ✅ 구현됨 | `retryExhausted` + amber 배너 |
+| ProjectScenarios Stop 버튼 | ✅ 구현됨 | `handleStop` + API 호출 |
+| ProjectScenarios More(⋯) 버튼 | ✅ 구현됨 | Duplicate/Delete 드롭다운 |
+| AgentDetail Messages 탭 | ✅ API 연동됨 | `getMemory` → Messages, Mock fallback |
+| ConversationThread reaction 버튼 | ✅ 로컬 토글 | `useReactions` hook |
+| ScenarioOpinions "Map vs Faction" 토글 | ✅ 구현됨 | `viewMode` state + FactionMapView |
+| CommunityOpinion Sort 드롭다운 | ✅ 구현됨 | `sortMode` + 3가지 정렬 |
 | TanStack Query hooks (useSimulationData) | 정의만 존재, 미사용 | 페이지들이 직접 apiClient 호출 |
-| Monte Carlo in Analytics | Placeholder만 | 결과 표시 안됨 |
-| `llm.getCalls` API client 메서드 | SPEC에만 존재, 미구현 | LLM prompt log 불가 |
+| Monte Carlo in Analytics | ✅ 구현됨 | API + localStorage fallback |
+| `llm.getCalls` API client 메서드 | ✅ 구현됨 | `apiClient.llm.getCalls()` |
 
 ---
 

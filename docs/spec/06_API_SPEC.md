@@ -146,7 +146,18 @@ Get step history.
       "emergent_events": [],
       "total_adoption": 30,
       "sentiment_variance": 0.08,
-      "community_metrics": {},
+      "community_metrics": {
+        "<community_id>": {
+          "community_id": "uuid",
+          "adoption_count": 15,
+          "adoption_rate": 0.03,
+          "mean_belief": 0.21,
+          "dominant_action": "share",
+          "new_propagation_count": 8,
+          "sentiment_variance": 0.05,
+          "active_agents": 500
+        }
+      },
       "action_distribution": {},
       "llm_calls_this_step": 5,
       "step_duration_ms": 287

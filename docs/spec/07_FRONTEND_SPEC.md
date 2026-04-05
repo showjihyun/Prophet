@@ -541,6 +541,39 @@ export interface CommunityTemplate { ... }
 | Cytoscape render crash | React ErrorBoundary → fallback UI | "Graph too large. Apply filters." |
 | Invalid form submit | Block submit, highlight fields | Inline field-level error messages |
 | Agent inspector stale data | Auto-refetch on panel open | Spinner while loading |
+| List/data loading | Show spinner during fetch | Spinner overlay on list containers |
+
+### 10.1 API Response Null Safety (필수)
+
+모든 컴포넌트는 API 응답의 선택적 필드에 대해 **null/undefined guard**를 적용해야 한다.
+
+```typescript
+// BAD — API 응답에 event_type이 없으면 크래시
+event.event_type.replace(/_/g, " ")
+
+// GOOD — null safety
+(event.event_type ?? "event").replace(/_/g, " ")
+```
+
+**특히 주의할 패턴:**
+- `.replace()`, `.toLocaleString()`, `.toFixed()`, `.map()` — undefined 호출 시 크래시
+- `community_metrics[key].adoption_count` — API serializer가 필드를 누락할 수 있음
+- `emergentEvents[idx].event_type` — 배열이 비어있을 수 있음
+
+**규칙:** API 응답에서 가져온 모든 값은 `??` 또는 `?.` 로 guard한다.
+
+### 10.2 Loading States (필수)
+
+데이터를 비동기로 가져오는 모든 컴포넌트는 로딩 상태를 표시해야 한다.
+
+| 컴포넌트 | 로딩 시점 | 표시 방식 |
+|----------|----------|----------|
+| CommunityPanel | 시뮬레이션 로드 시 | Skeleton shimmer |
+| TopInfluencersPage | 에이전트 목록 fetch | Spinner + "Loading agents..." |
+| AgentDetailPage | 에이전트 상세 fetch | Spinner 오버레이 |
+| GlobalMetricsPage | steps fetch | Skeleton cards |
+| ControlPanel 시나리오 | 프로젝트 변경 시 | Spinner in dropdown |
+| CommunitiesDetailPage | 커뮤니티 fetch | Spinner + skeleton cards |
 
 ---
 
