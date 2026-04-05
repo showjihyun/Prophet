@@ -279,7 +279,8 @@ class TestReplayStep:
         orch.start(state.simulation_id)
         original = await orch.run_step(state.simulation_id)
         replayed = orch.replay_step(state.simulation_id, target_step=0)
-        assert replayed.step == original.step
+        assert replayed["from_step"] == original.step
+        assert "replay_id" in replayed
 
     async def test_replay_beyond_current_raises(self):
         orch = SimulationOrchestrator()

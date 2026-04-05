@@ -86,15 +86,22 @@ def _generate_thread_messages(
     community_id: str,
     thread_index: int,
     n_messages: int,
+    mean_belief: float = 0.0,
+    adoption_rate: float = 0.0,
 ) -> list[ThreadMessage]:
-    """Generate deterministic conversation messages for a thread."""
+    """Generate conversation messages reflecting actual community state.
+
+    Uses mean_belief from simulation data to bias stance distribution,
+    making threads more representative of actual agent behavior.
+    """
     msgs: list[ThreadMessage] = []
     for i in range(n_messages):
         seed = hash((community_id, thread_index, i)) & 0xFFFF
         agent_idx = seed % 12
         agent_id = _agent_label(agent_idx, community_id)
-        # Deterministic stance
-        belief_proxy = (seed % 200 - 100) / 100.0
+        # Stance biased by actual community mean_belief (not pure random)
+        belief_noise = (seed % 60 - 30) / 100.0  # ±0.3 variation
+        belief_proxy = max(-1.0, min(1.0, mean_belief + belief_noise))
         stance = _stance_from_belief(belief_proxy)
         # Content
         if i > 0 and (seed % 3) == 0:
@@ -171,7 +178,10 @@ def _build_threads(
         elif t_idx == 2:
             topic = f"Sentiment analysis: mean belief {mean_belief:+.2f} in community {community_id}"
         n_messages = 4 + (seed % 5)
-        msgs = _generate_thread_messages(community_id, t_idx, n_messages)
+        msgs = _generate_thread_messages(
+            community_id, t_idx, n_messages,
+            mean_belief=mean_belief, adoption_rate=adoption_rate,
+        )
         avg_sentiment = round(mean_belief + (seed % 20 - 10) / 100.0, 2)
         summary = ThreadSummary(
             thread_id=f"{community_id}-thread-{t_idx}",

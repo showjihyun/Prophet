@@ -100,15 +100,16 @@ class SimulationOrchestrator:
     MAX_SIMULATIONS = _settings.sim_max_simulations
     SIMULATION_TTL_SECONDS = _settings.sim_ttl_seconds
 
-    def __init__(self, llm_adapter=None, slm_adapter=None) -> None:
+    def __init__(self, llm_adapter=None, slm_adapter=None, gateway=None) -> None:
         """Initialize the orchestrator.
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
         """
         self._simulations: dict[UUID, SimulationState] = {}
         self._locks: dict[UUID, asyncio.Lock] = {}
-        self._step_runner = StepRunner(llm_adapter=llm_adapter)
+        self._step_runner = StepRunner(llm_adapter=llm_adapter, gateway=gateway)
         self._llm_adapter = llm_adapter
         self._slm_adapter = slm_adapter
+        self._gateway = gateway
 
     def _get_lock(self, simulation_id: UUID) -> asyncio.Lock:
         """Get or create a per-simulation asyncio lock."""
@@ -514,18 +515,21 @@ class SimulationOrchestrator:
         self,
         simulation_id: UUID,
         target_step: int,
-    ) -> StepResult:
-        """Replay from a specific step.
+    ) -> dict:
+        """Replay from a specific step, creating a branch.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
 
-        Finds the step in history, then resets current_step to target_step so
-        the simulation can be re-run from that point forward.
+        Finds the step in history, creates a replay branch with unique replay_id,
+        then resets current_step to target_step so the simulation can be re-run
+        from that point forward. Original history before target_step is preserved.
 
         Raises:
             ValueError: target_step > current_step
             StepNotFoundError: step not in history
         """
+        from uuid import uuid4
+
         state = self._get_state(simulation_id)
 
         if target_step > state.current_step:
@@ -545,15 +549,27 @@ class SimulationOrchestrator:
                 f"Step {target_step} not found in history for simulation {simulation_id}"
             )
 
+        # Generate replay branch ID
+        replay_id = uuid4()
+
+        # Store original history length before truncation
+        original_steps = state.current_step
+
         # Reset current_step to target so simulation can be re-run from this point.
         # Trim history to only include steps up to and including target_step.
         state.current_step = target_step
         state.step_history = [sr for sr in state.step_history if sr.step <= target_step]
+
         # Re-enable running from this branch point
         if state.status == SimulationStatus.COMPLETED.value:
             state.status = SimulationStatus.PAUSED.value
 
-        return step_result
+        return {
+            "replay_id": str(replay_id),
+            "from_step": target_step,
+            "original_steps": original_steps,
+            "status": state.status,
+        }
 
     # ------------------------------------------------------------------ #
     # Helpers

@@ -186,9 +186,9 @@ class StepRunner:
         9. Increment current_step, return StepResult
     """
 
-    def __init__(self, llm_adapter=None) -> None:
+    def __init__(self, llm_adapter=None, gateway=None) -> None:
         """SPEC: docs/spec/04_SIMULATION_SPEC.md"""
-        self._agent_tick = AgentTick(llm_adapter=llm_adapter)
+        self._agent_tick = AgentTick(llm_adapter=llm_adapter, gateway=gateway)
         self._tier_selector = TierSelector()
         self._exposure_model = ExposureModel()
         self._sentiment_model = SentimentModel()

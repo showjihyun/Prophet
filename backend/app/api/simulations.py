@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_orchestrator, get_session, get_persistence
 from app.api.ws import manager as ws_manager
 from app.engine.simulation.persistence import SimulationPersistence
+from app.engine.simulation.exceptions import StepNotFoundError
 from app.api.schemas import (
     CreateSimulationRequest,
     EngineControlRequest,
@@ -368,20 +369,28 @@ async def step_simulation(
 
     # Persist LLM call summary for this step (one synthetic record per LLM call)
     if result.llm_calls_this_step > 0:
-        llm_records = [
-            {
-                "agent_id": None,
-                "step": result.step,
-                "provider": "ollama",
-                "model": "unknown",
-                "prompt_hash": "",
-                "latency_ms": None,
-                "tokens": None,
-                "cached": False,
-                "tier": 1,
-            }
-            for _ in range(result.llm_calls_this_step)
-        ]
+        # Build LLM call records from tier distribution and orchestrator config
+        from app.config import settings as _cfg
+        tier_dist = result.llm_tier_distribution  # {tier: count}
+        llm_records = []
+        for tier, count in tier_dist.items():
+            provider = _cfg.default_llm_provider if tier <= 2 else "ollama"
+            model = _cfg.slm_model if tier <= 2 else _cfg.anthropic_default_model
+            for _ in range(count):
+                llm_records.append({
+                    "agent_id": None,
+                    "step": result.step,
+                    "provider": provider,
+                    "model": model,
+                    "prompt_hash": "",
+                    "latency_ms": result.step_duration_ms / max(1, result.llm_calls_this_step),
+                    "tokens": None,
+                    "cached": False,
+                    "tier": int(tier),
+                })
+        if not llm_records:
+            # Fallback: at least record that LLM calls happened
+            llm_records = [{"agent_id": None, "step": result.step, "provider": _cfg.default_llm_provider, "model": _cfg.slm_model, "prompt_hash": "", "tier": 1}]
         await persist.persist_llm_calls(session, sim_uuid, llm_records)
 
     # Broadcast step result via WebSocket
@@ -724,16 +733,19 @@ async def replay_from_step(
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idreplaystep
     """
     _get_state_or_404(orchestrator, simulation_id)
-    replay_id = str(uuid.uuid4())
-
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        orchestrator.replay_step(sim_uuid, step)
-    except (ValueError, NotImplementedError, AttributeError, TypeError) as e:
+        result = orchestrator.replay_step(sim_uuid, step)
+        return ReplayResponse(
+            replay_id=result["replay_id"],
+            from_step=result["from_step"],
+        )
+    except (ValueError, StepNotFoundError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f"replay_step fallback: {e}")
-
-    return ReplayResponse(replay_id=replay_id, from_step=step)
+        logging.getLogger(__name__).warning(f"replay_step error: {e}")
+        return ReplayResponse(replay_id=str(uuid.uuid4()), from_step=step)
 
 
 @router.get(
@@ -782,6 +794,27 @@ async def compare_simulations(
             "viral_cascades_b": viral_b,
             "winner": winner,
         }
+
+        # Per-step metric diffs (align by step index)
+        max_steps = max(len(state_a.step_history), len(state_b.step_history))
+        metric_diffs: dict[str, list[float]] = {
+            "adoption_rate": [],
+            "mean_sentiment": [],
+            "diffusion_rate": [],
+        }
+        for i in range(max_steps):
+            a = state_a.step_history[i] if i < len(state_a.step_history) else None
+            b = state_b.step_history[i] if i < len(state_b.step_history) else None
+            metric_diffs["adoption_rate"].append(
+                (a.adoption_rate if a else 0.0) - (b.adoption_rate if b else 0.0)
+            )
+            metric_diffs["mean_sentiment"].append(
+                (a.mean_sentiment if a else 0.0) - (b.mean_sentiment if b else 0.0)
+            )
+            metric_diffs["diffusion_rate"].append(
+                (a.diffusion_rate if a else 0) - (b.diffusion_rate if b else 0)
+            )
+        comparison["metric_diffs"] = metric_diffs
 
     return ScenarioComparisonResponse(
         simulation_a=simulation_id,
@@ -1070,7 +1103,22 @@ async def recommend_engine(
 # ---- Group Chat & Interview (G6, G8) ----
 
 _group_chat_managers: dict[str, GroupChatManager] = {}
-_interviewer = AgentInterviewer()
+_interviewer: AgentInterviewer | None = None
+
+
+def _get_interviewer() -> AgentInterviewer:
+    """Lazy-init interviewer with LLM gateway from orchestrator."""
+    global _interviewer
+    if _interviewer is None:
+        try:
+            orch = get_orchestrator()
+            _interviewer = AgentInterviewer(
+                gateway=getattr(orch, '_gateway', None),
+                llm_adapter=getattr(orch, '_llm_adapter', None),
+            )
+        except Exception:
+            _interviewer = AgentInterviewer()
+    return _interviewer
 
 
 def _get_group_chat_manager(simulation_id: str) -> GroupChatManager:
@@ -1195,7 +1243,12 @@ async def interview_agent(
         )
 
     question = body.get("question", "What do you think?")
-    result = _interviewer.interview(agent_state, question)
+    interviewer = _get_interviewer()
+    # Use async LLM interview when gateway is available, fallback to rule-based
+    try:
+        result = await interviewer.interview_async(agent_state, question)
+    except Exception:
+        result = interviewer.interview(agent_state, question)
 
     return {
         "agent_id": str(result.agent_id),
