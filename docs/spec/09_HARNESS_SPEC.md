@@ -535,6 +535,107 @@ def diffusion_harness():
 
 ---
 
+## 13. F30 — Hybrid Execution Mode
+
+**Phase 3** — Per-step LLM provider selection for A/B testing and cost optimization.
+
+### 13.1 Overview
+
+The Hybrid Execution Router allows simulations to use **different LLM providers
+at different simulation steps**.  Use cases:
+
+- **A/B testing**: run steps 1–10 with Ollama (SLM), steps 11–20 with Claude, compare quality.
+- **Cost scheduling**: use cheap SLM for early exploration, switch to expensive LLM for critical steps.
+- **Resilience**: if one provider fails, schedule switches to a fallback automatically.
+
+### 13.2 Interface
+
+```python
+from dataclasses import dataclass, field
+from typing import Callable, Literal
+from uuid import UUID
+
+ProviderName = Literal["ollama", "claude", "openai", "gemini", "vllm", "mock"]
+
+
+@dataclass
+class HybridSchedule:
+    """Per-step provider assignment policy.
+
+    SPEC: docs/spec/09_HARNESS_SPEC.md#13-f30
+    """
+    # Static mapping: step number → provider name
+    step_provider_map: dict[int, ProviderName] = field(default_factory=dict)
+
+    # Default provider when no mapping exists for the current step
+    default_provider: ProviderName = "ollama"
+
+    # Optional dynamic selector (step, agent_count) → provider
+    # Takes precedence over step_provider_map if set.
+    dynamic_selector: Callable[[int, int], ProviderName] | None = None
+
+
+@dataclass
+class HybridStepResult:
+    """Result of a hybrid-routed step."""
+    step: int
+    provider_used: ProviderName
+    was_fallback: bool = False
+    fallback_reason: str | None = None
+
+
+class HybridExecRouter:
+    """Per-step LLM provider routing for simulations.
+
+    SPEC: docs/spec/09_HARNESS_SPEC.md#13-f30
+
+    Integrates with LLMAdapterRegistry.evaluate(adapter_name=...)
+    to route each step's Tier 3 calls to the scheduled provider.
+    """
+
+    def __init__(self, schedule: HybridSchedule) -> None: ...
+
+    def select_provider(self, step: int, agent_count: int = 0) -> ProviderName:
+        """Return provider for the given step.
+
+        Priority: dynamic_selector > step_provider_map > default_provider.
+        """
+
+    async def execute_step(
+        self,
+        step: int,
+        agent_count: int,
+        registry: "LLMAdapterRegistry",
+    ) -> HybridStepResult:
+        """Select provider for this step and validate it's available.
+
+        If selected provider is not healthy, fall back to default_provider.
+        Returns HybridStepResult with provider_used and fallback info.
+        """
+
+    def execution_log(self) -> list[HybridStepResult]:
+        """Return all step results logged so far."""
+```
+
+### 13.3 Error Specification
+
+| Condition | Behavior |
+|-----------|----------|
+| `step_provider_map` contains unknown provider | `ValueError` at `__init__` |
+| `default_provider` is unknown | `ValueError` at `__init__` |
+| Selected provider not healthy at runtime | Fall back to `default_provider`, set `was_fallback=True` |
+| No providers healthy | Raise `LLMProviderError` |
+
+### 13.4 Acceptance Criteria
+
+- **F30-01**: `select_provider` returns correct provider per step_provider_map.
+- **F30-02**: `dynamic_selector` overrides `step_provider_map`.
+- **F30-03**: `default_provider` is used when no mapping exists.
+- **F30-04**: Unhealthy provider triggers fallback with `was_fallback=True`.
+- **F30-05**: `execution_log` records every step in order.
+
+---
+
 ## 14. Running Harness
 
 ```bash

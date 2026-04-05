@@ -128,6 +128,23 @@ _register(2, "F28:FailureRecoveryManager", _check_f28_recovery)
 _register(3, "F25:AgentDecisionDebugger", _check_f25_debug_viz)
 
 
+def _check_f30_hybrid_exec() -> bool:
+    """F30: Hybrid Execution Mode — HybridExecRouter importable and functional."""
+    from harness.hybrid_exec import HybridExecRouter, HybridSchedule, HybridStepResult
+    schedule = HybridSchedule(
+        step_provider_map={1: "mock"},
+        default_provider="ollama",
+    )
+    router = HybridExecRouter(schedule)
+    assert router.select_provider(1) == "mock"
+    assert router.select_provider(99) == "ollama"
+    assert router.execution_log() == []
+    return True
+
+
+_register(3, "F30:HybridExecRouter", _check_f30_hybrid_exec)
+
+
 # ---------------------------------------------------------------------------
 # HarnessRunner
 # ---------------------------------------------------------------------------
