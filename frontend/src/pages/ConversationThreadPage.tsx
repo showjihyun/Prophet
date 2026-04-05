@@ -215,7 +215,7 @@ export default function ConversationThreadPage() {
         stance,
         relative_time: `Step ${step.step}`,
         content: event
-          ? `[${event.event_type.replace(/_/g, " ").toUpperCase()}] ${event.description} — ${step.llm_calls_this_step} LLM calls, ${adoptPct}% adoption rate.`
+          ? `[${(event.event_type ?? "event").replace(/_/g, " ").toUpperCase()}] ${event.description ?? ""} — ${step.llm_calls_this_step} LLM calls, ${adoptPct}% adoption rate.`
           : `${step.llm_calls_this_step} LLM calls this step. Dominant action: ${actionName} (${adoptPct}% adoption). Sentiment: ${sentiment > 0 ? "+" : ""}${sentiment.toFixed(2)}.`,
         reactions: {
           agree: Math.round(step.adoption_rate * 20),

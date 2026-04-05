@@ -41,7 +41,10 @@ vi.mock('../api/client', () => ({
       reset: vi.fn().mockRejectedValue(new Error('no sim')),
       step: vi.fn().mockRejectedValue(new Error('no sim')),
     },
-    projects: { list: vi.fn().mockResolvedValue([]) },
+    projects: {
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue({ scenarios: [] }),
+    },
     scenarios: { list: vi.fn().mockResolvedValue([]) },
   },
 }));

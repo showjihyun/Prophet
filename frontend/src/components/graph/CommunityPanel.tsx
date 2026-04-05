@@ -9,6 +9,7 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
+import { SkeletonList } from "../shared/LoadingSpinner";
 
 interface CommunityItem {
   id: string;
@@ -70,23 +71,29 @@ export default function CommunityPanel() {
   const highlightedCommunity = useSimulationStore(
     (s) => s.highlightedCommunity,
   );
+  const simulation = useSimulationStore((s) => s.simulation);
+  const status = useSimulationStore((s) => s.status);
   const steps = useSimulationStore((s) => s.steps);
   const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
+  const isLoading = simulation != null && status === "running" && steps.length === 0;
 
   // Build communities from live data or fall back to mock
   const communities = useMemo<CommunityItem[]>(() => {
     if (!latestStep?.community_metrics) return MOCK_COMMUNITIES;
 
     return Object.entries(latestStep.community_metrics).map(([id, metrics]) => {
-      const belief = metrics.mean_belief;
+      const belief = metrics.mean_belief ?? 0;
       const positive = Math.round(Math.max(0, belief) * 100);
       const negative = Math.round(Math.max(0, -belief) * 100);
-      const neutral = 100 - positive - negative;
+      const neutral = Math.max(0, 100 - positive - negative);
+      // adoption_count may not exist in API response; derive from adoption_rate
+      const agentCount = metrics.adoption_count
+        ?? (metrics.size != null ? metrics.size : Math.round((metrics.adoption_rate ?? 0) * 1000));
       return {
-        id: metrics.community_id,
+        id: metrics.community_id ?? id,
         name: `${id.charAt(0).toUpperCase()}${id.slice(1)} Community`,
         color: COMMUNITY_COLOR_MAP[id.toLowerCase()] ?? "var(--community-alpha)",
-        agents: metrics.adoption_count,
+        agents: agentCount,
         sentiment: { positive, neutral, negative },
       };
     });
@@ -96,7 +103,7 @@ export default function CommunityPanel() {
     c.name.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const totalAgents = communities.reduce((sum, c) => sum + c.agents, 0);
+  const totalAgents = communities.reduce((sum, c) => sum + (c.agents ?? 0), 0);
 
   return (
     <div
@@ -130,7 +137,8 @@ export default function CommunityPanel() {
 
       {/* Community List */}
       <div className="flex-1 overflow-y-auto">
-        {filtered.map((community) => (
+        {isLoading && <SkeletonList rows={5} />}
+        {!isLoading && filtered.map((community) => (
           <CommunityRow
             key={community.id}
             community={community}
@@ -179,7 +187,7 @@ function CommunityRow({
           {community.name}
         </div>
         <div className="text-[11px] text-[var(--muted-foreground)]">
-          {community.agents.toLocaleString()} agents
+          {(community.agents ?? 0).toLocaleString()} agents
         </div>
       </div>
 

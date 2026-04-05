@@ -53,7 +53,10 @@ vi.mock('@/api/client', () => ({
     network: { get: vi.fn().mockRejectedValue(new Error('no network')) },
     agents: { list: vi.fn().mockResolvedValue({ items: [] }) },
     simulations: { getSteps: vi.fn().mockResolvedValue([]) },
-    projects: { list: vi.fn().mockResolvedValue([]) },
+    projects: {
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue({ scenarios: [] }),
+    },
     scenarios: { list: vi.fn().mockResolvedValue([]) },
   },
 }));

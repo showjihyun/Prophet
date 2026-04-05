@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
 import { apiClient, type CommunityInfo } from "../api/client";
+import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { useSimulationStore } from "../store/simulationStore";
 
 const COMMUNITIES = [
@@ -133,14 +134,70 @@ export default function CommunitiesDetailPage() {
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const latestStep = useSimulationStore((s) => s.steps.length > 0 ? s.steps[s.steps.length - 1] : null);
   const [communities, setCommunities] = useState(COMMUNITIES);
+  const [loading, setLoading] = useState(false);
+  const simStatus = useSimulationStore((s) => s.status);
+  const canEdit = simulationId != null && (simStatus === "paused" || simStatus === "configured" || simStatus === "created");
+  const addToast = useSimulationStore((s) => s.addToast);
+
+  const handleAddCommunity = async () => {
+    if (!simulationId) return;
+    const name = window.prompt("New community name:");
+    if (!name?.trim()) return;
+    const sizeStr = window.prompt("Number of agents (10-5000):", "100");
+    const size = parseInt(sizeStr ?? "100", 10);
+    if (isNaN(size) || size < 10 || size > 5000) return;
+    try {
+      await apiClient.communities.create(simulationId, { name: name.trim(), size });
+      addToast({ type: "success", message: `Community "${name.trim()}" added with ${size} agents` });
+      // Refresh
+      const res = await apiClient.communities.list(simulationId);
+      if (res.communities.length > 0) setCommunities(res.communities.map(apiToLocal));
+    } catch (e) {
+      addToast({ type: "error", message: `Failed to add community: ${e}` });
+    }
+  };
+
+  const handleDeleteCommunity = async (communityId: string, communityName: string) => {
+    if (!simulationId) return;
+    if (!window.confirm(`Delete community "${communityName}"? All its agents will be removed.`)) return;
+    try {
+      const result = await apiClient.communities.remove(simulationId, communityId) as { agents_removed: number };
+      addToast({ type: "success", message: `Removed "${communityName}" (${result.agents_removed} agents)` });
+      const res = await apiClient.communities.list(simulationId);
+      if (res.communities.length > 0) setCommunities(res.communities.map(apiToLocal));
+    } catch (e) {
+      addToast({ type: "error", message: `Failed to delete: ${e}` });
+    }
+  };
+
+  const handleEditCommunity = async (communityId: string) => {
+    if (!simulationId) return;
+    const name = window.prompt("New community name:");
+    if (!name?.trim()) return;
+    try {
+      await apiClient.communities.update(simulationId, communityId, { name: name.trim() });
+      addToast({ type: "success", message: `Community renamed to "${name.trim()}"` });
+      const res = await apiClient.communities.list(simulationId);
+      if (res.communities.length > 0) setCommunities(res.communities.map(apiToLocal));
+    } catch (e) {
+      addToast({ type: "error", message: `Failed to update: ${e}` });
+    }
+  };
 
   useEffect(() => {
     if (!simulationId) return;
-    apiClient.communities.list(simulationId).then((res) => {
-      if (res.communities.length > 0) {
-        setCommunities(res.communities.map(apiToLocal));
-      }
-    }).catch(() => { /* keep mock */ });
+    let cancelled = false;
+    const fetchCommunities = async () => {
+      try {
+        const res = await apiClient.communities.list(simulationId);
+        if (!cancelled && res.communities.length > 0) {
+          setCommunities(res.communities.map(apiToLocal));
+        }
+      } catch { /* keep mock */ }
+      if (!cancelled) setLoading(false);
+    };
+    fetchCommunities();
+    return () => { cancelled = true; };
   }, [simulationId, latestStep?.step]);
 
   const totalAgents = communities.reduce((s, c) => s + c.agents, 0);
@@ -159,6 +216,13 @@ export default function CommunitiesDetailPage() {
         actions={
           <div className="flex items-center gap-3">
             <span className="font-semibold text-sm text-[var(--foreground)]">MCASP Prophet Engine</span>
+            <button
+              onClick={handleAddCommunity}
+              disabled={!canEdit}
+              className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              + Add Community
+            </button>
             <button
               onClick={() => navigate("/communities/manage")}
               className="px-3 py-1.5 text-xs font-medium border border-[var(--border)] rounded-md text-[var(--foreground)] hover:bg-[var(--secondary)]"
@@ -195,7 +259,12 @@ export default function CommunitiesDetailPage() {
         </div>
 
         {/* Community Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {loading && (
+          <div className="flex items-center justify-center py-16">
+            <LoadingSpinner size="lg" label="Loading communities..." />
+          </div>
+        )}
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 transition-opacity duration-300 ${loading ? "opacity-0" : "opacity-100"}`}>
           {communities.map((community) => (
             <div
               key={community.id}
@@ -209,12 +278,32 @@ export default function CommunitiesDetailPage() {
                 <h3 className="text-base font-semibold text-[var(--foreground)]">
                   {community.name}
                 </h3>
-                <span
-                  className="text-xs font-medium px-2 py-0.5 rounded-full text-white"
-                  style={{ backgroundColor: community.color }}
-                >
-                  {community.agents.toLocaleString()} agents
-                </span>
+                <div className="flex items-center gap-2">
+                  {canEdit && (
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleEditCommunity(community.id); }}
+                        className="p-1 rounded hover:bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                        title="Edit community"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteCommunity(community.id, community.name); }}
+                        className="p-1 rounded hover:bg-red-900/30 text-[var(--muted-foreground)] hover:text-red-400 transition-colors"
+                        title="Delete community"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
+                    </>
+                  )}
+                  <span
+                    className="text-xs font-medium px-2 py-0.5 rounded-full text-white"
+                    style={{ backgroundColor: community.color }}
+                  >
+                    {community.agents.toLocaleString()} agents
+                  </span>
+                </div>
               </div>
 
               {/* Sentiment Bar */}

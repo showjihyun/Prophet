@@ -7,6 +7,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient, type AgentSummary } from "../api/client";
+import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { useSimulationStore } from "../store/simulationStore";
 import {
   BarChart,
@@ -125,11 +126,14 @@ export default function TopInfluencersPage() {
   const [influencers, setInfluencers] = useState<Influencer[]>(MOCK_INFLUENCERS);
   const [distributionData, setDistributionData] = useState(DISTRIBUTION_DATA);
   const [stats, setStats] = useState({ total: 120, avg: 72.4, active: 98, bridges: 23 });
+  const [loading, setLoading] = useState(false);
 
   // Fetch real agents from API
   useEffect(() => {
     if (!simulationId) return;
+    let cancelled = false;
     apiClient.agents.list(simulationId, { limit: 200 }).then((res) => {
+      if (cancelled) return;
       const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score);
       setInfluencers(sorted.map((a, i) => agentToInfluencer(a, i + 1)));
 
@@ -157,7 +161,8 @@ export default function TopInfluencersPage() {
         active: activeCount,
         bridges: bridgeCount,
       });
-    }).catch(() => { /* keep mock */ });
+    }).catch(() => { /* keep mock */ }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [simulationId]);
 
   // Sort state (A1)
@@ -401,7 +406,14 @@ export default function TopInfluencersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedData.map((inf) => (
+                  {loading && (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center">
+                        <LoadingSpinner label="Loading agents..." />
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && paginatedData.map((inf) => (
                     <tr
                       key={inf.agentId}
                       className="interactive border-b border-[var(--border)] hover:bg-[var(--accent)] transition-colors cursor-pointer"

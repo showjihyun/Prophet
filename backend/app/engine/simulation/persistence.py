@@ -22,7 +22,8 @@ from app.models.agent import Agent
 from app.models.community import Community
 from app.models.campaign import Campaign
 from app.models.network import NetworkEdge
-from app.models.propagation import EmergentEvent as EmergentEventORM, LLMCall, MonteCarloRun
+from app.models.propagation import EmergentEvent as EmergentEventORM, LLMCall, MonteCarloRun, PropagationEvent
+from app.models.agent import AgentState as AgentStateORM
 
 if TYPE_CHECKING:
     from app.engine.simulation.schema import SimulationConfig, StepResult
@@ -162,8 +163,19 @@ class SimulationPersistence:
         session: AsyncSession,
         sim_id: uuid.UUID,
         result: StepResult,
+        agents: list[Any] | None = None,
+        propagation_pairs: list[tuple[Any, Any, str, float]] | None = None,
     ) -> None:
-        """Persist a step result and agent states snapshot."""
+        """Persist a step result, agent state snapshots, and propagation events.
+
+        SPEC: docs/spec/08_DB_SPEC.md
+
+        Args:
+            agents: list of AgentState dataclass instances (from orchestrator).
+                    Each agent snapshot is written to the ``agent_states`` table.
+            propagation_pairs: list of (source_agent_id, target_agent_id,
+                    action_type, probability) tuples from this step's diffusion.
+        """
         try:
             step_row = SimStep(
                 step_id=uuid.uuid4(),
@@ -193,6 +205,52 @@ class SimulationPersistence:
                     description=event.description,
                 )
                 session.add(ev_row)
+
+            # C-1: Persist agent state snapshots
+            if agents:
+                for agent in agents:
+                    try:
+                        state_row = AgentStateORM(
+                            state_id=uuid.uuid4(),
+                            simulation_id=sim_id,
+                            agent_id=agent.agent_id,
+                            step=result.step,
+                            openness=agent.personality.openness,
+                            skepticism=agent.personality.skepticism,
+                            trend_following=agent.personality.trend_following,
+                            brand_loyalty=agent.personality.brand_loyalty,
+                            social_influence=agent.personality.social_influence,
+                            emotion_interest=agent.emotion.interest,
+                            emotion_trust=agent.emotion.trust,
+                            emotion_skepticism=agent.emotion.skepticism,
+                            emotion_excitement=agent.emotion.excitement,
+                            community_id=agent.community_id,
+                            belief=agent.belief,
+                            action=agent.action.value if hasattr(agent.action, 'value') else str(agent.action),
+                            adopted=agent.adopted,
+                            exposure_count=agent.exposure_count,
+                            llm_tier_used=agent.llm_tier_used,
+                        )
+                        session.add(state_row)
+                    except Exception:
+                        pass  # skip individual agent on error, continue batch
+
+            # C-2: Persist propagation events
+            if propagation_pairs:
+                for src_id, tgt_id, action, prob in propagation_pairs:
+                    try:
+                        prop_row = PropagationEvent(
+                            propagation_id=uuid.uuid4(),
+                            simulation_id=sim_id,
+                            step=result.step,
+                            source_agent_id=src_id,
+                            target_agent_id=tgt_id,
+                            action_type=action,
+                            probability=prob,
+                        )
+                        session.add(prop_row)
+                    except Exception:
+                        pass  # skip individual event on error
 
             await session.commit()
             logger.debug("Persisted step %d for simulation %s", result.step, sim_id)

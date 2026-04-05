@@ -184,7 +184,7 @@ export default function SimulationReportModal({ onClose }: Props) {
                       Step {e.step}
                     </span>
                     <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--secondary)] text-[var(--foreground)] uppercase">
-                      {e.type.replace(/_/g, " ")}
+                      {(e.type ?? "event").replace(/_/g, " ")}
                     </span>
                     <span className="text-[var(--muted-foreground)] line-clamp-1">
                       {e.description}

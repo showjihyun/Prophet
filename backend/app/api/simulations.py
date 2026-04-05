@@ -74,8 +74,9 @@ def _community_metric_dict(metric: Any) -> dict:
         return metric
     # Dataclass / object with attributes
     result: dict = {}
-    for attr in ("community_id", "adoption_rate", "mean_belief", "sentiment_variance",
-                 "active_agents", "dominant_action"):
+    for attr in ("community_id", "adoption_count", "adoption_rate", "mean_belief",
+                 "sentiment_variance", "active_agents", "dominant_action",
+                 "new_propagation_count"):
         val = getattr(metric, attr, None)
         if val is not None:
             result[attr] = str(val) if attr == "community_id" else val
@@ -361,8 +362,8 @@ async def step_simulation(
     sim_uuid = _sim_id_to_uuid(simulation_id)
     result = await orchestrator.run_step(sim_uuid)
 
-    # Persist step result + status update
-    await persist.persist_step(session, sim_uuid, result)
+    # Persist step result + agent snapshots + status update
+    await persist.persist_step(session, sim_uuid, result, agents=state.agents)
     await persist.persist_status(session, sim_uuid, state.status, state.current_step)
 
     # Persist LLM call summary for this step (one synthetic record per LLM call)
@@ -426,6 +427,28 @@ async def step_simulation(
                 "description": event.description,
             },
         }))
+
+    # C-4: Broadcast agent_update for subscribed agents
+    agent_state_map: dict[str, dict] = {}
+    for agent in state.agents:
+        aid = str(agent.agent_id)
+        agent_state_map[aid] = {
+            "agent_id": aid,
+            "step": result.step,
+            "belief": agent.belief,
+            "action": agent.action.value if hasattr(agent.action, 'value') else str(agent.action),
+            "adopted": agent.adopted,
+            "exposure_count": agent.exposure_count,
+            "emotion": {
+                "interest": agent.emotion.interest,
+                "trust": agent.emotion.trust,
+                "skepticism": agent.emotion.skepticism,
+                "excitement": agent.emotion.excitement,
+            },
+        }
+    asyncio.create_task(
+        ws_manager.broadcast_agent_updates(str(sim_uuid), agent_state_map)
+    )
 
     # Broadcast status change if simulation completed
     if state.status == "completed":

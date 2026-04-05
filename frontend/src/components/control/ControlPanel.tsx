@@ -115,6 +115,24 @@ export default function ControlPanel() {
     apiClient.projects.list().then((res) => setProjects(Array.isArray(res) ? res : [])).catch(() => {});
   }, [setProjects]);
 
+  // Auto-restore project from simulation and load scenarios on mount
+  useEffect(() => {
+    // If simulation has a project_id but currentProjectId is empty, restore it
+    const simProjectId = (simulation as Record<string, unknown>)?.project_id as string | undefined;
+    const effectiveProjectId = currentProjectId || simProjectId;
+    if (!effectiveProjectId) return;
+    if (!currentProjectId && simProjectId) {
+      setCurrentProject(simProjectId);
+    }
+    // Load scenarios if empty
+    if (scenarios.length === 0) {
+      apiClient.projects.get(effectiveProjectId).then((detail) => {
+        setScenarios(detail.scenarios ?? []);
+      }).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId, simulation]);
+
   // When project changes, load its scenarios
   const handleProjectChange = async (projectId: string) => {
     setCurrentProject(projectId || null);

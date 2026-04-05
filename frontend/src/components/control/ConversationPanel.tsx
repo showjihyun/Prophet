@@ -85,7 +85,7 @@ export default function ConversationPanel() {
 
       // Walk steps in reverse to produce most-recent-first messages
       const recentSteps = steps.slice(-6).reverse();
-      for (const stepData of recentSteps) {
+      for (const [si, stepData] of recentSteps.entries()) {
         const prevStep = steps[stepData.step - 1] ?? null;
 
         // Adoption delta message
@@ -94,7 +94,7 @@ export default function ConversationPanel() {
           ? ((stepData.adoption_rate - prevStep.adoption_rate) * 100).toFixed(1)
           : null;
         insightItems.push({
-          id: `step-${stepData.step}-adopt`,
+          id: `step-${stepData.step}-${si}-adopt`,
           agentId: `Step ${stepData.step}`,
           community: "System",
           communityColor: "var(--community-alpha)",
@@ -109,7 +109,7 @@ export default function ConversationPanel() {
         const sentimentPct = (stepData.mean_sentiment * 100).toFixed(0);
         const sentimentDir = stepData.mean_sentiment >= 0 ? "positive" : "negative";
         insightItems.push({
-          id: `step-${stepData.step}-sentiment`,
+          id: `step-${stepData.step}-${si}-sentiment`,
           agentId: `Step ${stepData.step}`,
           community: "Sentiment",
           communityColor: stepData.mean_sentiment >= 0 ? "var(--sentiment-positive)" : "var(--destructive)",
@@ -123,7 +123,7 @@ export default function ConversationPanel() {
         const topAction = Object.entries(actionDist).sort((a, b) => b[1] - a[1])[0];
         if (topAction) {
           insightItems.push({
-            id: `step-${stepData.step}-action`,
+            id: `step-${stepData.step}-${si}-action`,
             agentId: `Step ${stepData.step}`,
             community: "Actions",
             communityColor: "var(--community-delta)",
@@ -136,11 +136,11 @@ export default function ConversationPanel() {
         // Emergent events from this step
         for (const event of stepData.emergent_events) {
           insightItems.push({
-            id: `step-${stepData.step}-event-${event.event_type}`,
+            id: `step-${stepData.step}-${si}-event-${event.event_type ?? "unknown"}`,
             agentId: event.community_id ?? "System",
             community: event.community_id ?? "Alert",
             communityColor: EVENT_COMMUNITY_COLORS[event.community_id?.toLowerCase() ?? ""] ?? "var(--destructive)",
-            message: `Alert: ${event.event_type.replace(/_/g, " ")} detected! ${event.description}`,
+            message: `Alert: ${(event.event_type ?? "unknown").replace(/_/g, " ")} detected! ${event.description ?? ""}`,
             sentiment: severityToSentiment(event.severity),
             time: `Step ${event.step}`,
           });
