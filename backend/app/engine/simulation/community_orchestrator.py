@@ -174,6 +174,7 @@ class CommunityOrchestrator:
                 if ce.start_step <= step <= ce.end_step
             ],
             step=step,
+            agent_node_map=self.agent_node_map,
         )
         exposure_scores = {
             aid: er.exposure_score for aid, er in _exposure_results.items()
@@ -240,9 +241,34 @@ class CommunityOrchestrator:
                 graph_context=graph_context,
             )
 
+        def _process_result(result: AgentTickResult) -> None:
+            """Apply a single AgentTickResult to the running accumulators."""
+            nonlocal llm_calls
+            new_agent = result.updated_state
+            updated.append(new_agent)
+            action_counter[result.action.value] += 1
+
+            if result.llm_call_log or result.llm_tier_used == 3:
+                llm_calls += 1
+
+            # Separate intra-community vs outbound propagation
+            for pe in result.propagation_events:
+                target_node = self.agent_node_map.get(pe.target_agent_id)
+                if target_node is not None and target_node in self._bridge_node_ids:
+                    outbound.append(pe)
+                elif pe.target_agent_id in agent_map:
+                    all_propagation.append(pe)
+                else:
+                    outbound.append(pe)  # target not in this community
+
         # Process agents in batches to yield to event loop between batches
         for i in range(0, len(self.agents), self.BATCH_SIZE):
             batch = self.agents[i:i + self.BATCH_SIZE]
+
+            # Separate active agents by tier for parallel vs sequential processing
+            tier3_tasks: list[tuple[AgentState, int]] = []
+            sync_agents: list[tuple[AgentState, int]] = []
+
             for agent in batch:
                 # Inactive agents keep their previous state (IGNORE action)
                 if agent.agent_id not in active_agent_ids:
@@ -252,24 +278,26 @@ class CommunityOrchestrator:
 
                 tier = tier_map.get(agent.agent_id, 1)
 
+                if tier == 3 and self._agent_tick._llm_adapter is not None:
+                    # Tier 3: I/O-bound LLM calls — gather concurrently
+                    tier3_tasks.append((agent, tier))
+                else:
+                    # Tier 1/2: fast CPU-bound — process sequentially
+                    sync_agents.append((agent, tier))
+
+            # Process Tier 1/2 agents sequentially (fast, CPU-bound)
+            for agent, tier in sync_agents:
                 result: AgentTickResult = await _run_agent_tick(agent, tier)
+                _process_result(result)
 
-                new_agent = result.updated_state
-                updated.append(new_agent)
-                action_counter[result.action.value] += 1
+            # Process Tier 3 agents concurrently (slow, I/O-bound LLM calls)
+            if tier3_tasks:
+                tier3_results = await asyncio.gather(
+                    *[_run_agent_tick(agent, tier) for agent, tier in tier3_tasks]
+                )
+                for result in tier3_results:
+                    _process_result(result)
 
-                if result.llm_call_log or result.llm_tier_used == 3:
-                    llm_calls += 1
-
-                # Separate intra-community vs outbound propagation
-                for pe in result.propagation_events:
-                    target_node = self.agent_node_map.get(pe.target_agent_id)
-                    if target_node is not None and target_node in self._bridge_node_ids:
-                        outbound.append(pe)
-                    elif pe.target_agent_id in agent_map:
-                        all_propagation.append(pe)
-                    else:
-                        outbound.append(pe)  # target not in this community
             # Yield to event loop between batches (allows other communities to progress)
             await asyncio.sleep(0)
 
@@ -331,11 +359,11 @@ class BridgePropagator:
             adjusted = PropagationEvent(
                 source_agent_id=event.source_agent_id,
                 target_agent_id=event.target_agent_id,
-                action_type=event.action_type,
+                action_type=getattr(event, "action_type", "share"),
                 probability=event.probability * self.BRIDGE_TRUST_FACTOR,
                 step=event.step,
-                message_id=event.message_id,
-                contextual_packet=event.contextual_packet,
+                message_id=getattr(event, "message_id", event.content_id if hasattr(event, "content_id") else __import__("uuid").uuid4()),
+                contextual_packet=getattr(event, "contextual_packet", None),
             )
             cross_events.append(adjusted)
 

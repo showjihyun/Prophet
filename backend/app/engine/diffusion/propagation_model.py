@@ -44,6 +44,7 @@ class PropagationModel:
         step: int,
         seed: int | None = None,
         campaign_message: str = "",
+        agent_node_map: dict[UUID, int] | None = None,
     ) -> list[PropagationEvent]:
         """Generate propagation events based on agent action.
 
@@ -55,6 +56,10 @@ class PropagationModel:
         A ``ContextualPacket`` is attached to each event when ``campaign_message``
         is provided (non-empty). The packet captures the sender's emotional state
         and reasoning so downstream agents can model emergent text mutation.
+
+        Args:
+            agent_node_map: Optional pre-built map of agent_id -> node id for O(1)
+                lookups (PERF-01). When provided, avoids O(N) linear node scan.
         """
         if action not in _PROPAGATION_ACTIONS:
             return []
@@ -62,7 +67,11 @@ class PropagationModel:
         rng = random.Random(seed)
         nx_graph = graph.graph
 
-        source_node = self._find_agent_node(source_agent, nx_graph)
+        # PERF-01: use pre-built map for O(1) lookup; fall back to O(N) scan
+        if agent_node_map is not None:
+            source_node = agent_node_map.get(source_agent.agent_id)
+        else:
+            source_node = self._find_agent_node(source_agent, nx_graph)
         if source_node is None:
             return []
 

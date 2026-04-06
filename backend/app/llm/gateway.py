@@ -196,14 +196,20 @@ class VectorLLMCache:
 
     @staticmethod
     def _cosine_similarity(a: list[float], b: list[float]) -> float:
+        """Compute cosine similarity between two vectors.
+
+        SPEC: docs/spec/05_LLM_SPEC.md#semantic-cache
+        """
+        import numpy as np
         if len(a) != len(b) or not a:
             return 0.0
-        dot = sum(x * y for x, y in zip(a, b))
-        norm_a = sum(x * x for x in a) ** 0.5
-        norm_b = sum(x * x for x in b) ** 0.5
+        a_arr = np.asarray(a, dtype=np.float64)
+        b_arr = np.asarray(b, dtype=np.float64)
+        norm_a = np.linalg.norm(a_arr)
+        norm_b = np.linalg.norm(b_arr)
         if norm_a == 0 or norm_b == 0:
             return 0.0
-        return dot / (norm_a * norm_b)
+        return float(np.dot(a_arr, b_arr) / (norm_a * norm_b))
 
     @property
     def size(self) -> int:

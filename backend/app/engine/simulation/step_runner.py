@@ -240,7 +240,7 @@ class StepRunner:
                 for a in agents
                 if a.agent_id in agent_to_node
             ]
-            subgraph = G.subgraph(node_ids).copy()
+            subgraph = G.subgraph(node_ids)
 
             # Agent-node map for this community only
             comm_agent_node_map = {
@@ -548,7 +548,7 @@ class StepRunner:
             {
                 "source": str(e.source_agent_id),
                 "target": str(e.target_agent_id),
-                "action": str(e.action_type),
+                "action": str(getattr(e, "action_type", "share")),
                 "probability": float(e.probability),
             }
             for e in sorted_events

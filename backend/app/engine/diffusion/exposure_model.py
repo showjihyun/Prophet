@@ -41,12 +41,17 @@ class ExposureModel:
         active_events: list[CampaignEvent],
         step: int,
         recsys_config: RecSysConfig | None = None,
+        agent_node_map: dict[UUID, int] | None = None,
     ) -> dict[UUID, ExposureResult]:
         """Compute exposure for all agents.
 
         SPEC: docs/spec/03_DIFFUSION_SPEC.md#exposuremodel-recsys-inspired-oasis-차용
 
         Returns dict of agent_id -> ExposureResult.
+
+        Args:
+            agent_node_map: Optional pre-built map of agent_id -> node id for O(1)
+                lookups (PERF-01). When provided, avoids O(N) linear node scans.
         """
         if not agents:
             raise ValueError("ExposureModel.compute_exposure: agents list must not be empty")
@@ -73,10 +78,12 @@ class ExposureModel:
 
         for agent in agents:
             # Phase 1: Candidate Generation
-            candidates = self._generate_candidates(agent, graph, active_events, step)
+            candidates = self._generate_candidates(
+                agent, graph, active_events, step, agent_node_map=agent_node_map
+            )
 
             # Phase 2: RecSys Feed Ranking
-            ranked = self._rank_feed(candidates, agent, graph, config)
+            ranked = self._rank_feed(candidates, agent, graph, config, agent_node_map=agent_node_map)
 
             # Top-K selection
             top_k = ranked[: config.feed_capacity]
@@ -126,10 +133,14 @@ class ExposureModel:
         graph: SocialNetwork,
         active_events: list[CampaignEvent],
         step: int,
+        agent_node_map: dict[UUID, int] | None = None,
     ) -> list[FeedItem]:
         """Phase 1: Generate all candidate feed items for an agent.
 
         SPEC: docs/spec/03_DIFFUSION_SPEC.md#exposuremodel-recsys-inspired-oasis-차용
+
+        Args:
+            agent_node_map: Optional pre-built map for O(1) node lookups (PERF-02).
         """
         candidates: list[FeedItem] = []
 
@@ -147,12 +158,27 @@ class ExposureModel:
 
         # Neighbor-shared content (simplified: each neighbor is a source)
         nx_graph = graph.graph
-        agent_node = self._find_agent_node(agent, nx_graph)
+        # PERF-02: use pre-built map for O(1) lookup; fall back to O(N) scan
+        if agent_node_map is not None:
+            agent_node = agent_node_map.get(agent.agent_id)
+        else:
+            agent_node = self._find_agent_node(agent, nx_graph)
+
         if agent_node is not None and nx_graph.has_node(agent_node):
+            # PERF-16: build reverse map once from agent_node_map to avoid O(N) per neighbor
+            if agent_node_map is not None:
+                node_to_agent = {v: k for k, v in agent_node_map.items()}
+            else:
+                node_to_agent = None
+
             for neighbor in nx_graph.neighbors(agent_node):
+                if node_to_agent is not None:
+                    source_id = node_to_agent.get(neighbor)
+                else:
+                    source_id = self._get_node_agent_id(neighbor, nx_graph)
                 candidates.append(
                     FeedItem(
-                        source_agent_id=self._get_node_agent_id(neighbor, nx_graph),
+                        source_agent_id=source_id,
                         campaign_id=None,
                         feed_rank_score=0.0,
                     )
@@ -166,6 +192,7 @@ class ExposureModel:
         agent: AgentState,
         graph: SocialNetwork,
         config: RecSysConfig,
+        agent_node_map: dict[UUID, int] | None = None,
     ) -> list[FeedItem]:
         """Phase 2: Rank feed items using RecSys weights.
 
@@ -173,9 +200,19 @@ class ExposureModel:
 
         feed_rank_score = w1*recency + w2*social_affinity + w3*interest_match
                         + w4*engagement_signal + w5*ad_boost
+
+        Args:
+            agent_node_map: Optional pre-built map for O(1) node lookups (PERF-03).
         """
         scored: list[FeedItem] = []
         seen_sources: dict[UUID | None, int] = {}
+
+        # PERF-03: resolve agent node once outside the per-item loop
+        nx_graph = graph.graph
+        if agent_node_map is not None:
+            agent_node = agent_node_map.get(agent.agent_id)
+        else:
+            agent_node = self._find_agent_node(agent, nx_graph)
 
         for item in candidates:
             # Recency: newer items score higher (simplified: all same step = 1.0)
@@ -184,9 +221,11 @@ class ExposureModel:
             # Social affinity: trust to content source
             social_affinity = 0.0
             if item.source_agent_id is not None:
-                nx_graph = graph.graph
-                agent_node = self._find_agent_node(agent, nx_graph)
-                source_node = self._find_agent_id_node(item.source_agent_id, nx_graph)
+                # PERF-03: use pre-built map for O(1) lookup; fall back to O(N) scan
+                if agent_node_map is not None:
+                    source_node = agent_node_map.get(item.source_agent_id)
+                else:
+                    source_node = self._find_agent_id_node(item.source_agent_id, nx_graph)
                 if (
                     agent_node is not None
                     and source_node is not None

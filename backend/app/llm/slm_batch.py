@@ -38,10 +38,12 @@ class SLMBatchInferencer:
         batch_size: int | None = None,
     ) -> None:
         """SPEC: docs/spec/05_LLM_SPEC.md#3-provider-implementations"""
+        import ollama as _ollama
         from app.config import settings
         self._base_url = base_url or settings.ollama_base_url
         self._model = model or settings.slm_model
         self._batch_size = batch_size if batch_size is not None else settings.slm_batch_size
+        self._client = _ollama.AsyncClient(host=self._base_url)
 
     async def _single_complete(
         self,
@@ -49,11 +51,9 @@ class SLMBatchInferencer:
         opts: LLMOptions,
     ) -> LLMResponse:
         """Complete a single prompt against Ollama."""
-        import ollama as _ollama
-
         try:
             start = time.perf_counter()
-            client = _ollama.AsyncClient(host=self._base_url)
+            client = self._client
 
             kwargs: dict[str, Any] = {
                 "model": self._model,
@@ -146,11 +146,8 @@ class SLMBatchInferencer:
 
         SPEC: docs/spec/05_LLM_SPEC.md#3-provider-implementations
         """
-        import ollama as _ollama
-
         try:
-            client = _ollama.AsyncClient(host=self._base_url)
-            models = await client.list()
+            models = await self._client.list()
             return {
                 "model": self._model,
                 "status": "ok",
