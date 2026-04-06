@@ -336,9 +336,9 @@ Prophet/
 | **H** | 09_HARNESS F18-F28 전체 구현 (+43 tests) | ✅ 완료 |
 | **G** | SPEC 정합성 (메서드 rename + Sidebar + AgentInspector + AnalyticsPage) | ✅ 완료 |
 
-> **총 테스트: 871+ GREEN** (Backend 629 + Frontend 242)
-> - Backend: `uv run pytest tests/` → 629 passed, 1 skipped
-> - Frontend: `npx vitest run` → 242 passed (18 test files)
+> **총 테스트: 1,165+ GREEN** (Backend 821 + Frontend 344)
+> - Backend: `uv run pytest tests/` → 821 passed, 2 skipped
+> - Frontend: `npx vitest run` → 344 passed (22 test files)
 > - ESLint: 0 errors, 0 warnings
 > - TypeScript: 0 errors
 > - Health Score: 10.0/10 | QA Score: 97/100
