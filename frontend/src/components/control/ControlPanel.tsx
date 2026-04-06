@@ -77,8 +77,9 @@ export default function ControlPanel() {
   const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auto-step loop: runs steps automatically while status is "running"
+  // Skip when runAll is active — the server handles all steps in that case.
   useEffect(() => {
-    if (status !== "running" || !simulation?.simulation_id) {
+    if (status !== "running" || !simulation?.simulation_id || runAllLoading) {
       if (stepIntervalRef.current) {
         clearInterval(stepIntervalRef.current);
         stepIntervalRef.current = null;
@@ -108,7 +109,7 @@ export default function ControlPanel() {
         stepIntervalRef.current = null;
       }
     };
-  }, [status, speed, simulation?.simulation_id, appendStep, setStatus, simulation?.max_steps]);
+  }, [status, speed, simulation?.simulation_id, appendStep, setStatus, simulation?.max_steps, runAllLoading]);
 
   // Load projects list on mount
   useEffect(() => {
@@ -284,9 +285,10 @@ export default function ControlPanel() {
   const handleRunAll = async () => {
     if (!simulation?.simulation_id || runAllLoading) return;
     setRunAllLoading(true);
+    setStatus('running');
     try {
       const report = await apiClient.simulations.runAll(simulation.simulation_id);
-      setStatus(report.status as 'completed' | 'failed');
+      setStatus(report.status as 'completed' | 'failed' | 'paused');
     } catch {
       // leave status unchanged on failure
     } finally {
