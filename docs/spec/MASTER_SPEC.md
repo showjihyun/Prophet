@@ -126,6 +126,7 @@ LLM calls are abstracted behind `LLMAdapter` interface — provider is swappable
 | 14 | [LLM_GATEWAY_SPEC.md](./platform/14_LLM_GATEWAY_SPEC.md) | LLM gateway + cache chain + quota | DRAFT |
 | 15 | [15_DEV_WORKFLOW_SPEC.md](./15_DEV_WORKFLOW_SPEC.md) | Development workflow & model selection strategy | DRAFT |
 | 16 | [16_COMMUNITY_MGMT_SPEC.md](./16_COMMUNITY_MGMT_SPEC.md) | Runtime community management (CRUD + reassign) | DRAFT |
+| 17 | [17_PERFORMANCE_SPEC.md](./17_PERFORMANCE_SPEC.md) | Performance optimization (19 findings, 3 priority tiers) | DRAFT |
 | UI-13 | [UI_13_SCENARIO_OPINIONS.md](./ui/UI_13_SCENARIO_OPINIONS.md) | Scenario opinions overview (Pencil sync) | DRAFT |
 | UI-14 | [UI_14_COMMUNITY_OPINION.md](./ui/UI_14_COMMUNITY_OPINION.md) | Community opinion detail (Pencil sync) | DRAFT |
 | UI-15 | [UI_15_CONVERSATION_THREAD.md](./ui/UI_15_CONVERSATION_THREAD.md) | Conversation thread view (Pencil sync) | DRAFT |
