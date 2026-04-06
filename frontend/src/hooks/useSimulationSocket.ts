@@ -64,6 +64,7 @@ export function useSimulationSocket(simulationId: string | null) {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as WSMessage;
+          if (msg.type === 'pong') return; // skip heartbeat responses
           setLastMessage(msg);
         } catch {
           /* non-JSON message, ignore */

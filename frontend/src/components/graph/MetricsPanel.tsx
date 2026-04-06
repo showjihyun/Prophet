@@ -43,15 +43,16 @@ const COMMUNITY_ID_TO_NAME: Record<string, string> = {
 
 export default function MetricsPanel() {
   const navigate = useNavigate();
-  const steps = useSimulationStore((s) => s.steps);
+  const latestStep = useSimulationStore((s) => s.latestStep);
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
-  const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
+  const stepNum = latestStep?.step ?? 0;
   const [topInfluencers, setTopInfluencers] = useState(MOCK_TOP_INFLUENCERS);
 
-  // Fetch top influencers from API
+  // Fetch top influencers from API — throttled to every 10 steps
   useEffect(() => {
     if (!simulationId) return;
-    apiClient.agents.list(simulationId, { limit: 200 }).then((res) => {
+    if (stepNum > 0 && stepNum % 10 !== 0) return; // throttle: skip non-multiples of 10
+    apiClient.agents.list(simulationId, { limit: 4 }).then((res) => {
       const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score).slice(0, 4);
       setTopInfluencers(
         sorted.map((a) => ({
@@ -61,7 +62,7 @@ export default function MetricsPanel() {
         })),
       );
     }).catch(() => { /* keep mock */ });
-  }, [simulationId, latestStep?.step]);
+  }, [simulationId, Math.floor(stepNum / 10)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive metrics from latest step or fall back to mock
   const activeAgents = latestStep?.total_adoption ?? MOCK_METRICS.activeAgents;

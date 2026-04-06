@@ -366,6 +366,8 @@ export default function GraphPanel() {
   const [fps, setFps] = useState(60);
   const fpsFramesRef = useRef<number[]>([]);
   const fpsRafRef = useRef<number | null>(null);
+  const lastFpsUpdateRef = useRef(0);
+  const lastAdoptCountRef = useRef(-1);
   // Track how many cascade events we've already animated to detect new ones
   const lastCascadeCountRef = useRef(0);
   const cascadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -570,7 +572,11 @@ export default function GraphPanel() {
       while (frames.length > 0 && now - frames[0] > 1000) {
         frames.shift();
       }
-      setFps(frames.length);
+      // Throttle state update to once per second to avoid 60 re-renders/s
+      if (now - lastFpsUpdateRef.current > 1000) {
+        setFps(frames.length);
+        lastFpsUpdateRef.current = now;
+      }
       fpsRafRef.current = requestAnimationFrame(tick);
     }
 
@@ -595,6 +601,10 @@ export default function GraphPanel() {
     const nodes = cy.nodes();
     const total = nodes.length;
     const adoptCount = Math.floor(total * adoptionRate);
+
+    // Skip expensive sort+batch when adoption count has not changed
+    if (adoptCount === lastAdoptCountRef.current) return;
+    lastAdoptCountRef.current = adoptCount;
 
     // Pre-sort outside batch to keep batch closure lightweight
     const sorted = nodes.toArray().sort(

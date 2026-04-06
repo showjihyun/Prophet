@@ -25,6 +25,7 @@ interface SimulationStore {
   status: SimulationStatus;
   currentStep: number;
   steps: StepResult[];
+  latestStep: StepResult | null;
   emergentEvents: EmergentEvent[];
 
   // WebSocket
@@ -87,6 +88,7 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   status: "created",
   currentStep: 0,
   steps: [],
+  latestStep: null,
   emergentEvents: [],
   wsConnected: false,
   lastStepReceived: 0,
@@ -141,6 +143,7 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   appendStep: (step) =>
     set((state) => ({
       steps: [...state.steps, step],
+      latestStep: step,
       currentStep: step.step,
       lastStepReceived: step.step,
     })),
