@@ -3,25 +3,30 @@
  * @spec docs/spec/07_FRONTEND_SPEC.md
  * @spec docs/spec/ui/UI_01_SIMULATION_MAIN.md
  */
-import { Component, type ReactNode } from 'react';
+import { Component, type ReactNode, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import AppSidebar from "./components/shared/AppSidebar";
+import { LoadingSpinner } from "./components/shared/LoadingSpinner";
+
+// Eager: most-used entry points loaded immediately
 import SimulationPage from "./pages/SimulationPage";
-import CommunitiesDetailPage from "./pages/CommunitiesDetailPage";
-import TopInfluencersPage from "./pages/TopInfluencersPage";
-import AgentDetailPage from "./pages/AgentDetailPage";
-import GlobalMetricsPage from "./pages/GlobalMetricsPage";
-import CampaignSetupPage from "./pages/CampaignSetupPage";
+import LoginPage from "./pages/LoginPage";
 import ProjectsListPage from "./pages/ProjectsListPage";
 import ProjectScenariosPage from "./pages/ProjectScenariosPage";
-import SettingsPage from "./pages/SettingsPage";
-import ScenarioOpinionsPage from "./pages/ScenarioOpinionsPage";
-import CommunityOpinionPage from "./pages/CommunityOpinionPage";
-import ConversationThreadPage from "./pages/ConversationThreadPage";
-import ComparisonPage from "./pages/ComparisonPage";
-import CommunityManagePage from "./pages/CommunityManagePage";
-import LoginPage from "./pages/LoginPage";
-import AnalyticsPage from "./pages/AnalyticsPage";
+
+// Lazy: all other pages code-split into separate chunks
+const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
+const ComparisonPage = lazy(() => import("./pages/ComparisonPage"));
+const GlobalMetricsPage = lazy(() => import("./pages/GlobalMetricsPage"));
+const AgentDetailPage = lazy(() => import("./pages/AgentDetailPage"));
+const CommunitiesDetailPage = lazy(() => import("./pages/CommunitiesDetailPage"));
+const CommunityManagePage = lazy(() => import("./pages/CommunityManagePage"));
+const TopInfluencersPage = lazy(() => import("./pages/TopInfluencersPage"));
+const ScenarioOpinionsPage = lazy(() => import("./pages/ScenarioOpinionsPage"));
+const CommunityOpinionPage = lazy(() => import("./pages/CommunityOpinionPage"));
+const ConversationThreadPage = lazy(() => import("./pages/ConversationThreadPage"));
+const CampaignSetupPage = lazy(() => import("./pages/CampaignSetupPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -66,42 +71,50 @@ function SidebarLayout() {
   );
 }
 
+const PAGE_FALLBACK = (
+  <div className="flex items-center justify-center h-screen">
+    <LoadingSpinner label="Loading..." />
+  </div>
+);
+
 function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary>
-        <Routes>
-          {/* Default: redirect to Projects */}
-          <Route path="/" element={<Navigate to="/projects" replace />} />
+        <Suspense fallback={PAGE_FALLBACK}>
+          <Routes>
+            {/* Default: redirect to Projects */}
+            <Route path="/" element={<Navigate to="/projects" replace />} />
 
-          {/* Simulation workspace — full screen, no sidebar */}
-          <Route path="/simulation" element={<SimulationPage />} />
-          {/* Parametric simulation route — loads sim from URL param */}
-          <Route path="/simulations/:simulationId" element={<SimulationPage />} />
+            {/* Simulation workspace — full screen, no sidebar */}
+            <Route path="/simulation" element={<SimulationPage />} />
+            {/* Parametric simulation route — loads sim from URL param */}
+            <Route path="/simulations/:simulationId" element={<SimulationPage />} />
 
-          {/* Login — no sidebar */}
-          <Route path="/login" element={<LoginPage />} />
+            {/* Login — no sidebar */}
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* All other pages get sidebar */}
-          <Route element={<SidebarLayout />}>
-            <Route path="/projects" element={<ProjectsListPage />} />
-            <Route path="/projects/:projectId" element={<ProjectScenariosPage />} />
-            <Route path="/projects/:projectId/new-scenario" element={<CampaignSetupPage />} />
-            <Route path="/setup" element={<CampaignSetupPage />} />
-            <Route path="/communities" element={<CommunitiesDetailPage />} />
-            <Route path="/communities/:communityId" element={<CommunitiesDetailPage />} />
-            <Route path="/communities/manage" element={<CommunityManagePage />} />
-            <Route path="/influencers" element={<TopInfluencersPage />} />
-            <Route path="/agents/:agentId" element={<AgentDetailPage />} />
-            <Route path="/metrics" element={<GlobalMetricsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/opinions" element={<ScenarioOpinionsPage />} />
-            <Route path="/opinions/:communityId" element={<CommunityOpinionPage />} />
-            <Route path="/opinions/:communityId/thread/:threadId" element={<ConversationThreadPage />} />
-            <Route path="/compare/:otherId" element={<ComparisonPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-          </Route>
-        </Routes>
+            {/* All other pages get sidebar */}
+            <Route element={<SidebarLayout />}>
+              <Route path="/projects" element={<ProjectsListPage />} />
+              <Route path="/projects/:projectId" element={<ProjectScenariosPage />} />
+              <Route path="/projects/:projectId/new-scenario" element={<CampaignSetupPage />} />
+              <Route path="/setup" element={<CampaignSetupPage />} />
+              <Route path="/communities" element={<CommunitiesDetailPage />} />
+              <Route path="/communities/:communityId" element={<CommunitiesDetailPage />} />
+              <Route path="/communities/manage" element={<CommunityManagePage />} />
+              <Route path="/influencers" element={<TopInfluencersPage />} />
+              <Route path="/agents/:agentId" element={<AgentDetailPage />} />
+              <Route path="/metrics" element={<GlobalMetricsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/opinions" element={<ScenarioOpinionsPage />} />
+              <Route path="/opinions/:communityId" element={<CommunityOpinionPage />} />
+              <Route path="/opinions/:communityId/thread/:threadId" element={<ConversationThreadPage />} />
+              <Route path="/compare/:otherId" element={<ComparisonPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+            </Route>
+          </Routes>
+        </Suspense>
       </ErrorBoundary>
     </BrowserRouter>
   );

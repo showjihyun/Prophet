@@ -29,6 +29,7 @@ import {
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
 import type { SimulationRun } from '../../types/simulation';
+import type { ScenarioInfo, CreateSimulationConfig } from '../../api/client';
 import ThemeToggle from '../shared/ThemeToggle';
 import InjectEventModal from '../shared/InjectEventModal';
 import ReplayModal from '../shared/ReplayModal';
@@ -39,24 +40,29 @@ const SPEEDS = [1, 2, 5, 10] as const;
 
 export default function ControlPanel() {
   const navigate = useNavigate();
+
+  // State selectors — values used in render output
   const simulation = useSimulationStore((s) => s.simulation);
   const status = useSimulationStore((s) => s.status);
   const currentStep = useSimulationStore((s) => s.currentStep);
-  const setStatus = useSimulationStore((s) => s.setStatus);
-  const appendStep = useSimulationStore((s) => s.appendStep);
-  const setSimulation = useSimulationStore((s) => s.setSimulation);
   const speed = useSimulationStore((s) => s.speed);
-  const setSpeed = useSimulationStore((s) => s.setSpeed);
   const currentProjectId = useSimulationStore((s) => s.currentProjectId);
   const propagationAnimEnabled = useSimulationStore((s) => s.propagationAnimationsEnabled);
-  const togglePropagationAnimations = useSimulationStore((s) => s.togglePropagationAnimations);
   const projects = useSimulationStore((s) => s.projects);
   const scenarios = useSimulationStore((s) => s.scenarios);
-  const setCurrentProject = useSimulationStore((s) => s.setCurrentProject);
-  const setProjects = useSimulationStore((s) => s.setProjects);
-  const setScenarios = useSimulationStore((s) => s.setScenarios);
 
-  const setCloneConfig = useSimulationStore((s) => s.setCloneConfig);
+  // Action selectors used inside effects (stable references needed for dep array)
+  const appendStep = useSimulationStore((s) => s.appendStep);
+  const setStatus = useSimulationStore((s) => s.setStatus);
+
+  // Action callbacks — use getState() inside handlers so these don't subscribe
+  // to the store and won't trigger re-renders when action references change.
+  const setSimulation = (sim: SimulationRun) => useSimulationStore.getState().setSimulation(sim);
+  const setSpeed = (s: number) => useSimulationStore.getState().setSpeed(s);
+  const setCurrentProject = (id: string | null) => useSimulationStore.getState().setCurrentProject(id);
+  const setScenarios = (s: ScenarioInfo[]) => useSimulationStore.getState().setScenarios(s);
+  const setCloneConfig = (c: CreateSimulationConfig | null) => useSimulationStore.getState().setCloneConfig(c);
+  const togglePropagationAnimations = () => useSimulationStore.getState().togglePropagationAnimations();
 
   const [injectOpen, setInjectOpen] = useState(false);
   const [replayOpen, setReplayOpen] = useState(false);
@@ -75,14 +81,26 @@ export default function ControlPanel() {
     return prevSimulations.filter((s) => s.name.toLowerCase().includes(q) || s.simulation_id.includes(q)).slice(0, 20);
   }, [prevSimulations, prevSimSearch]);
   const [prevSimOpen, setPrevSimOpen] = useState(false);
-  const setSteps = useSimulationStore((s) => s.appendStep);
+  // appendStep aliased for "load previous" handler readability
+  const setSteps = appendStep;
 
   const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Stable refs for simulation ID and max_steps — updated on every render so the
+  // interval callback always sees current values without being a dependency itself.
+  const simIdRef = useRef(simulation?.simulation_id);
+  const maxStepsRef = useRef(simulation?.max_steps ?? 365);
+  useEffect(() => {
+    simIdRef.current = simulation?.simulation_id;
+    maxStepsRef.current = simulation?.max_steps ?? 365;
+  });
+
   // Auto-step loop: runs steps automatically while status is "running"
   // Skip when runAll is active — the server handles all steps in that case.
+  // Uses refs for simulation ID and max_steps to avoid interval teardown on
+  // simulation object reference changes.
   useEffect(() => {
-    if (status !== "running" || !simulation?.simulation_id || runAllLoading) {
+    if (status !== "running" || !simIdRef.current || runAllLoading) {
       if (stepIntervalRef.current) {
         clearInterval(stepIntervalRef.current);
         stepIntervalRef.current = null;
@@ -91,11 +109,13 @@ export default function ControlPanel() {
     }
 
     const runStep = async () => {
+      const simId = simIdRef.current;
+      if (!simId) return;
       try {
-        const result = await apiClient.simulations.step(simulation.simulation_id);
+        const result = await apiClient.simulations.step(simId);
         appendStep(result);
         // Check completion
-        if (result.step + 1 >= (simulation.max_steps ?? 50)) {
+        if (result.step + 1 >= maxStepsRef.current) {
           setStatus("completed");
         }
       } catch {
@@ -112,12 +132,15 @@ export default function ControlPanel() {
         stepIntervalRef.current = null;
       }
     };
-  }, [status, speed, simulation?.simulation_id, appendStep, setStatus, simulation?.max_steps, runAllLoading]);
+  }, [status, speed, appendStep, setStatus, runAllLoading]);
 
   // Load projects list on mount
   useEffect(() => {
-    apiClient.projects.list().then((res) => setProjects(Array.isArray(res) ? res : [])).catch(() => {});
-  }, [setProjects]);
+    apiClient.projects.list()
+      .then((res) => useSimulationStore.getState().setProjects(Array.isArray(res) ? res : []))
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-restore project from simulation and load scenarios on mount
   useEffect(() => {

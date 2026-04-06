@@ -71,11 +71,12 @@ export default function CommunityPanel() {
   const highlightedCommunity = useSimulationStore(
     (s) => s.highlightedCommunity,
   );
-  const simulation = useSimulationStore((s) => s.simulation);
+  // Subscribe to boolean derived from simulation to avoid re-render on sim object change
+  const hasSimulation = useSimulationStore((s) => s.simulation !== null);
   const status = useSimulationStore((s) => s.status);
   const latestStep = useSimulationStore((s) => s.latestStep);
   const hasSteps = useSimulationStore((s) => s.steps.length > 0);
-  const isLoading = simulation != null && status === "running" && !hasSteps;
+  const isLoading = hasSimulation && status === "running" && !hasSteps;
 
   // Build communities from live data or fall back to mock
   const communities = useMemo<CommunityItem[]>(() => {

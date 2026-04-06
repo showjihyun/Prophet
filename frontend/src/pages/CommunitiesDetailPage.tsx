@@ -137,7 +137,8 @@ export default function CommunitiesDetailPage() {
   const [loading, setLoading] = useState(false);
   const simStatus = useSimulationStore((s) => s.status);
   const canEdit = simulationId != null && (simStatus === "paused" || simStatus === "configured" || simStatus === "created");
-  const addToast = useSimulationStore((s) => s.addToast);
+  // Use getState() so addToast subscription doesn't trigger re-renders
+  const addToast = (t: { type: 'info' | 'success' | 'warning' | 'error'; message: string }) => useSimulationStore.getState().addToast(t);
 
   const handleAddCommunity = async () => {
     if (!simulationId) return;
@@ -270,7 +271,7 @@ export default function CommunitiesDetailPage() {
               key={community.id}
               data-testid={`community-card-${community.id}`}
               className="interactive bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-shadow cursor-pointer"
-              style={{ borderTopColor: community.color, borderTopWidth: 3 }}
+              style={{ borderTopColor: community.color, borderTopWidth: 3, contentVisibility: "auto", containIntrinsicSize: "0 200px" }}
               onClick={() => navigate(`/communities/${community.id}`)}
             >
               {/* Header */}

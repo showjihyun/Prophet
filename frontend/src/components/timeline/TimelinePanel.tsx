@@ -29,11 +29,12 @@ export default function TimelinePanel() {
   const speed = useSimulationStore((s) => s.speed);
   const maxSteps = simulation?.max_steps ?? 365;
 
-  // Derive wave data from actual steps or use mock
+  // Derive wave data from actual steps or use mock (cap at last 100 steps for perf)
   const waveData = useMemo(() => {
     if (steps.length === 0) return MOCK_WAVE_DATA;
     // Use diffusion_rate from each step as bar height (scale to 0-100)
-    const rates = steps.map((s) => s.diffusion_rate * 100);
+    const recentSteps = steps.slice(-100);
+    const rates = recentSteps.map((s) => s.diffusion_rate * 100);
     const maxRate = Math.max(...rates, 1);
     return rates.map((r) => Math.round((r / maxRate) * 90));
   }, [steps]);

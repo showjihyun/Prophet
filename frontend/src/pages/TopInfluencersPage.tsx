@@ -153,13 +153,19 @@ export default function TopInfluencersPage() {
         })),
       );
 
-      // Compute stats
-      const scores = res.items.map((a) => a.influence_score * 100);
-      const activeCount = res.items.filter((a) => a.action !== "idle").length;
-      const bridgeCount = res.items.filter((a) => a.agent_type === "bridge").length;
+      // Compute stats in a single pass (combines .map + two .filter iterations)
+      let scoreSum = 0;
+      let activeCount = 0;
+      let bridgeCount = 0;
+      for (const a of res.items) {
+        scoreSum += a.influence_score * 100;
+        if (a.action !== "idle") activeCount++;
+        if (a.agent_type === "bridge") bridgeCount++;
+      }
+      const count = res.items.length;
       setStats({
         total: res.total,
-        avg: scores.length ? Math.round((scores.reduce((s, v) => s + v, 0) / scores.length) * 10) / 10 : 0,
+        avg: count ? Math.round((scoreSum / count) * 10) / 10 : 0,
         active: activeCount,
         bridges: bridgeCount,
       });
@@ -437,6 +443,7 @@ export default function TopInfluencersPage() {
                     <tr
                       key={inf.agentId}
                       className="interactive border-b border-[var(--border)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
+                      style={{ contentVisibility: "auto", containIntrinsicSize: "0 48px" }}
                       onClick={() => navigate(`/agents/${inf.agentId}`)}
                     >
                       <td className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)]">
