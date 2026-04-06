@@ -22,8 +22,9 @@ from app.models.agent import Agent
 from app.models.community import Community
 from app.models.campaign import Campaign
 from app.models.network import NetworkEdge
-from app.models.propagation import EmergentEvent as EmergentEventORM, LLMCall, MonteCarloRun, PropagationEvent
+from app.models.propagation import EmergentEvent as EmergentEventORM, ExpertOpinion, LLMCall, MonteCarloRun, PropagationEvent
 from app.models.agent import AgentState as AgentStateORM
+from app.models.memory import AgentMemory
 
 if TYPE_CHECKING:
     from app.engine.simulation.schema import SimulationConfig, StepResult
@@ -326,6 +327,90 @@ class SimulationPersistence:
         except Exception:
             await session.rollback()
             logger.exception("Failed to persist LLM calls for %s", sim_id)
+
+    async def persist_expert_opinions(
+        self,
+        session: AsyncSession,
+        sim_id: uuid.UUID,
+        step: int,
+        opinions: list[dict],
+    ) -> None:
+        """Persist expert opinion records for a step.
+
+        SPEC: docs/spec/08_DB_SPEC.md#expert_opinions
+
+        Each opinion dict: {agent_id, opinion_text, score, confidence, step}
+        Fire-and-forget — exceptions are logged but do not raise.
+        """
+        if not opinions:
+            return
+        try:
+            for op in opinions:
+                agent_id = op.get("agent_id")
+                if agent_id is None:
+                    continue
+                # Clamp score and confidence to valid DB ranges
+                score = max(-1.0, min(1.0, float(op.get("score", 0.0))))
+                confidence = max(0.0, min(1.0, float(op.get("confidence", 0.5))))
+                row = ExpertOpinion(
+                    opinion_id=uuid.uuid4(),
+                    simulation_id=sim_id,
+                    expert_agent_id=agent_id if isinstance(agent_id, uuid.UUID) else uuid.UUID(str(agent_id)),
+                    step=op.get("step", step),
+                    score=score,
+                    reasoning=op.get("opinion_text"),
+                    confidence=confidence,
+                    affects_communities=[],
+                )
+                session.add(row)
+            await session.commit()
+            logger.debug("Persisted %d expert opinions for simulation %s step %d", len(opinions), sim_id, step)
+        except Exception:
+            await session.rollback()
+            logger.exception("Failed to persist expert opinions for %s step %d", sim_id, step)
+
+    async def persist_agent_memories(
+        self,
+        session: AsyncSession,
+        sim_id: uuid.UUID,
+        memories: list[dict],
+    ) -> None:
+        """Persist agent memory records for a step.
+
+        SPEC: docs/spec/08_DB_SPEC.md#agent_memories
+
+        Each memory dict: {agent_id, memory_type, content, emotion_weight, step, social_weight}
+        Batched — cap at 100 per call to avoid huge inserts.
+        Fire-and-forget — exceptions are logged but do not raise.
+        """
+        if not memories:
+            return
+        batch = memories[:100]
+        try:
+            for mem in batch:
+                agent_id = mem.get("agent_id")
+                if agent_id is None:
+                    continue
+                content = mem.get("content", "")
+                if not content:
+                    continue
+                row = AgentMemory(
+                    memory_id=uuid.uuid4(),
+                    simulation_id=sim_id,
+                    agent_id=agent_id if isinstance(agent_id, uuid.UUID) else uuid.UUID(str(agent_id)),
+                    memory_type=mem.get("memory_type", "episodic"),
+                    content=str(content),
+                    emotion_weight=float(mem.get("emotion_weight", 0.5)),
+                    step=int(mem.get("step", 0)),
+                    social_weight=float(mem.get("social_weight", 0.0)),
+                    embedding=None,
+                )
+                session.add(row)
+            await session.commit()
+            logger.debug("Persisted %d agent memories for simulation %s", len(batch), sim_id)
+        except Exception:
+            await session.rollback()
+            logger.exception("Failed to persist agent memories for %s", sim_id)
 
     async def load_simulations(self, session: AsyncSession) -> list[dict]:
         """Load all simulations from DB for listing."""

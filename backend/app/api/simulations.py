@@ -393,6 +393,56 @@ async def step_simulation(
             llm_records = [{"agent_id": None, "step": result.step, "provider": _cfg.default_llm_provider, "model": _cfg.slm_model, "prompt_hash": "", "tier": 1}]
         await persist.persist_llm_calls(session, sim_uuid, llm_records)
 
+    # M-5: Persist expert opinions (from emergent events with "expert" in type)
+    expert_events = [
+        e for e in result.emergent_events
+        if "expert" in (e.event_type or "").lower()
+    ]
+    if expert_events:
+        opinions = [
+            {
+                "agent_id": e.community_id,  # use community_id as proxy agent_id when available
+                "opinion_text": e.description,
+                "score": (e.severity * 2) - 1,  # severity [0,1] → score [-1,1]
+                "confidence": e.severity,
+                "step": result.step,
+            }
+            for e in expert_events
+            if e.community_id is not None
+        ]
+        if opinions:
+            asyncio.create_task(
+                persist.persist_expert_opinions(session, sim_uuid, result.step, opinions)
+            )
+
+    # M-7: Persist agent memories (collect from agent state, cap at 100)
+    agent_memories: list[dict] = []
+    for agent in state.agents:
+        memories = getattr(agent, 'memories', None) or []
+        for mem in memories:
+            if isinstance(mem, dict):
+                mem_entry = dict(mem)
+                mem_entry.setdefault("agent_id", agent.agent_id)
+                mem_entry.setdefault("step", result.step)
+                agent_memories.append(mem_entry)
+            elif hasattr(mem, 'content'):
+                agent_memories.append({
+                    "agent_id": agent.agent_id,
+                    "memory_type": getattr(mem, 'memory_type', 'episodic'),
+                    "content": getattr(mem, 'content', ''),
+                    "emotion_weight": getattr(mem, 'emotion_weight', 0.5),
+                    "step": result.step,
+                    "social_weight": getattr(mem, 'social_weight', 0.0),
+                })
+            if len(agent_memories) >= 100:
+                break
+        if len(agent_memories) >= 100:
+            break
+    if agent_memories:
+        asyncio.create_task(
+            persist.persist_agent_memories(session, sim_uuid, agent_memories)
+        )
+
     # Broadcast step result via WebSocket
     asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
         "type": "step_result",
@@ -1123,7 +1173,14 @@ def _get_interviewer() -> AgentInterviewer:
 
 def _get_group_chat_manager(simulation_id: str) -> GroupChatManager:
     if simulation_id not in _group_chat_managers:
-        _group_chat_managers[simulation_id] = GroupChatManager()
+        try:
+            orch = get_orchestrator()
+            _group_chat_managers[simulation_id] = GroupChatManager(
+                gateway=getattr(orch, '_gateway', None),
+                llm_adapter=getattr(orch, '_llm_adapter', None),
+            )
+        except Exception:
+            _group_chat_managers[simulation_id] = GroupChatManager()
     return _group_chat_managers[simulation_id]
 
 
