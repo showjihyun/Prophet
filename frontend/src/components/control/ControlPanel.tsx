@@ -24,6 +24,7 @@ import {
   Plus,
   Copy,
   GitCompare,
+  Zap,
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
@@ -47,6 +48,8 @@ export default function ControlPanel() {
   const speed = useSimulationStore((s) => s.speed);
   const setSpeed = useSimulationStore((s) => s.setSpeed);
   const currentProjectId = useSimulationStore((s) => s.currentProjectId);
+  const propagationAnimEnabled = useSimulationStore((s) => s.propagationAnimationsEnabled);
+  const togglePropagationAnimations = useSimulationStore((s) => s.togglePropagationAnimations);
   const projects = useSimulationStore((s) => s.projects);
   const scenarios = useSimulationStore((s) => s.scenarios);
   const setCurrentProject = useSimulationStore((s) => s.setCurrentProject);
@@ -586,6 +589,12 @@ export default function ControlPanel() {
           icon={<Brain className="w-4 h-4" />}
           label="LLM Dashboard"
           onClick={() => useSimulationStore.getState().toggleLLMDashboard()}
+        />
+        <ControlButton
+          testId="propagation-anim-toggle"
+          icon={<Zap className={`w-4 h-4 ${propagationAnimEnabled ? "text-[var(--anim-share)]" : ""}`} />}
+          label={propagationAnimEnabled ? "Animations ON" : "Animations OFF"}
+          onClick={togglePropagationAnimations}
         />
 
         <div className="w-px h-6 bg-[var(--border)] mx-1" />

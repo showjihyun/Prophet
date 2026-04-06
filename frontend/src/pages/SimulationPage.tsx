@@ -8,7 +8,7 @@
  * Zone 2: Community Panel (260px) | Graph Engine (fill) | Metrics Panel (280px)
  * Zone 3: Timeline (120px) + Conversations (fill remaining)
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { LS_KEY_SIMULATION_ID } from "@/config/constants";
@@ -43,6 +43,8 @@ export default function SimulationPage() {
   const setSimulation = useSimulationStore((s) => s.setSimulation);
 
   const [reportOpen, setReportOpen] = useState(false);
+  // Dedup: track last toast event_type and the timestamp it was shown
+  const lastToastRef = useRef<{ type: string; at: number } | null>(null);
 
   // Restore simulation from URL param or localStorage on mount.
   // @spec docs/spec/06_API_SPEC.md#get-simulationssimulation_id
@@ -69,10 +71,16 @@ export default function SimulationPage() {
       case 'emergent_event': {
         const event = lastMessage.data as EmergentEvent;
         appendEmergentEvent(event);
-        addToast({
-          type: 'warning',
-          message: `${(event.event_type ?? "event").replace(/_/g, ' ')} detected at step ${event.step ?? 0}`,
-        });
+        // Dedup: skip toast if same event_type fired within the last 10 seconds
+        const now = Date.now();
+        const last = lastToastRef.current;
+        if (!last || last.type !== event.event_type || now - last.at > 10_000) {
+          lastToastRef.current = { type: event.event_type ?? "event", at: now };
+          addToast({
+            type: 'warning',
+            message: `${(event.event_type ?? "event").replace(/_/g, ' ')} detected at step ${event.step ?? 0}`,
+          });
+        }
         break;
       }
       case 'status_change':

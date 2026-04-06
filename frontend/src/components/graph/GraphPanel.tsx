@@ -45,6 +45,31 @@ if (typeof document !== "undefined" && !document.getElementById(CASCADE_STYLE_ID
 /** How long (ms) cascade highlights stay active after a new cascade event. */
 const CASCADE_TTL_MS = 8000;
 
+// ---------------------------------------------------------------------------
+// GAP-7: Propagation animation constants
+// ---------------------------------------------------------------------------
+const ACTION_COLORS: Record<string, string> = {
+  share: "#22c55e",
+  comment: "#3b82f6",
+  like: "#eab308",
+  adopt: "#a855f7",
+};
+
+type AnimationTier = "closeup" | "midrange" | "overview";
+
+function getAnimationTier(zoom: number): AnimationTier {
+  if (zoom >= 0.7) return "closeup";
+  if (zoom >= 0.3) return "midrange";
+  return "overview";
+}
+
+/** Max animations per step by tier. */
+const TIER_LIMITS: Record<AnimationTier, number> = {
+  closeup: 50,
+  midrange: 30,
+  overview: 5,
+};
+
 const COMMUNITY_COLOR: Record<string, string> = Object.fromEntries(
   COMMUNITIES.map((c) => [c.id, c.color]),
 );
@@ -350,6 +375,9 @@ export default function GraphPanel() {
   const steps = useSimulationStore((s) => s.steps);
   const highlightedCommunity = useSimulationStore((s) => s.highlightedCommunity);
   const setHighlightedCommunity = useSimulationStore((s) => s.setHighlightedCommunity);
+  const propagationAnimEnabled = useSimulationStore((s) => s.propagationAnimationsEnabled);
+  const lastPropStepRef = useRef(-1);
+  const propagationTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // --- Initialize Cytoscape ---
   useEffect(() => {
@@ -719,6 +747,223 @@ export default function GraphPanel() {
       if (cascadeTimeoutRef.current !== null) {
         clearTimeout(cascadeTimeoutRef.current);
       }
+    };
+  }, []);
+
+  // --- GAP-7: Propagation animations (zoom-based LOD) ---
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || steps.length === 0 || !propagationAnimEnabled) return;
+
+    const latestStep = steps[steps.length - 1];
+    // Only animate new steps
+    if (latestStep.step <= lastPropStepRef.current) return;
+    lastPropStepRef.current = latestStep.step;
+
+    const pairs = (latestStep.propagation_pairs ?? []).filter(
+      (p) => p.action !== "ignore" && ACTION_COLORS[p.action],
+    );
+    if (pairs.length === 0) return;
+
+    // Clear previous animation timeouts
+    for (const t of propagationTimeoutsRef.current) clearTimeout(t);
+    propagationTimeoutsRef.current = [];
+
+    const tier = getAnimationTier(cy.zoom());
+    const limit = TIER_LIMITS[tier];
+
+    if (tier === "overview") {
+      // --- Overview: Community hotspot glow + inter-community arcs ---
+      const communityActivity: Record<string, { count: number; dominantAction: string }> = {};
+      const crossCommunity: { srcComm: string; tgtComm: string; action: string }[] = [];
+
+      for (const pair of pairs) {
+        const srcNode = cy.getElementById(pair.source);
+        const tgtNode = cy.getElementById(pair.target);
+        const srcComm = srcNode.nonempty() ? (srcNode.data("community") as string) : null;
+        const tgtComm = tgtNode.nonempty() ? (tgtNode.data("community") as string) : null;
+
+        if (srcComm) {
+          const entry = communityActivity[srcComm] ?? { count: 0, dominantAction: pair.action };
+          entry.count++;
+          communityActivity[srcComm] = entry;
+        }
+        if (srcComm && tgtComm && srcComm !== tgtComm && crossCommunity.length < 3) {
+          crossCommunity.push({ srcComm, tgtComm, action: pair.action });
+        }
+      }
+
+      // Community hotspot glow
+      const activeCommunities = Object.entries(communityActivity)
+        .sort((a, b) => b[1].count - a[1].count)
+        .slice(0, limit);
+
+      cy.batch(() => {
+        for (const [commId, { dominantAction }] of activeCommunities) {
+          const color = ACTION_COLORS[dominantAction] ?? "#22c55e";
+          const nodes = cy.nodes(`[community = "${commId}"]`);
+          nodes.style("underlay-color", color);
+          nodes.style("underlay-opacity", 0.35);
+          nodes.style("underlay-padding", 3);
+          nodes.style("underlay-shape", "ellipse");
+        }
+      });
+
+      // Fade back after 1200ms
+      const glowTimeout = setTimeout(() => {
+        if (!cyRef.current) return;
+        cy.batch(() => {
+          for (const [commId] of activeCommunities) {
+            const nodes = cy.nodes(`[community = "${commId}"]`);
+            nodes.removeStyle("underlay-color underlay-opacity underlay-padding underlay-shape");
+          }
+        });
+      }, 1200);
+      propagationTimeoutsRef.current.push(glowTimeout);
+
+      // Inter-community arcs (CSS overlays)
+      if (containerRef.current && crossCommunity.length > 0) {
+        for (const { srcComm, tgtComm, action } of crossCommunity) {
+          const srcNodes = cy.nodes(`[community = "${srcComm}"]`);
+          const tgtNodes = cy.nodes(`[community = "${tgtComm}"]`);
+          if (srcNodes.empty() || tgtNodes.empty()) continue;
+
+          const srcBB = srcNodes.renderedBoundingBox({});
+          const tgtBB = tgtNodes.renderedBoundingBox({});
+          const srcCx = (srcBB.x1 + srcBB.x2) / 2;
+          const srcCy = (srcBB.y1 + srcBB.y2) / 2;
+          const tgtCx = (tgtBB.x1 + tgtBB.x2) / 2;
+          const tgtCy = (tgtBB.y1 + tgtBB.y2) / 2;
+
+          const arc = document.createElement("div");
+          arc.style.position = "absolute";
+          arc.style.left = `${Math.min(srcCx, tgtCx)}px`;
+          arc.style.top = `${Math.min(srcCy, tgtCy)}px`;
+          arc.style.width = `${Math.abs(tgtCx - srcCx)}px`;
+          arc.style.height = `${Math.abs(tgtCy - srcCy)}px`;
+          arc.style.borderBottom = `2px solid ${ACTION_COLORS[action] ?? "#22c55e"}`;
+          arc.style.borderRadius = "50%";
+          arc.style.pointerEvents = "none";
+          arc.style.animation = "propagation-arc-fade 1.5s ease-out forwards";
+          containerRef.current.appendChild(arc);
+
+          const arcTimeout = setTimeout(() => arc.remove(), 1600);
+          propagationTimeoutsRef.current.push(arcTimeout);
+        }
+      }
+    } else {
+      // --- Close-up / Mid-range: per-edge animations ---
+      const sorted = [...pairs].sort((a, b) => b.probability - a.probability).slice(0, limit);
+
+      for (const pair of sorted) {
+        const color = ACTION_COLORS[pair.action] ?? "#22c55e";
+        const srcNode = cy.getElementById(pair.source);
+        const tgtNode = cy.getElementById(pair.target);
+
+        // Edge flash: find edge between source and target
+        if (srcNode.nonempty() && tgtNode.nonempty()) {
+          const edges = srcNode.edgesWith(tgtNode);
+          if (edges.nonempty()) {
+            const edge = edges[0];
+            const origColor = edge.style("line-color");
+            const origOpacity = edge.numericStyle("opacity");
+            edge.animate(
+              { style: { "line-color": color, opacity: 1, width: 2 } },
+              {
+                duration: 400,
+                easing: "ease-out",
+                complete: () => {
+                  edge.animate(
+                    { style: { "line-color": origColor, opacity: origOpacity, width: 0.5 } },
+                    { duration: 400, easing: "ease-in" },
+                  );
+                },
+              },
+            );
+          }
+
+          // Source pulse
+          srcNode.animate(
+            { style: { "border-width": 4, "border-color": color } },
+            {
+              duration: 300,
+              easing: "ease-out",
+              complete: () => {
+                srcNode.animate(
+                  { style: { "border-width": 0 } },
+                  { duration: 300, easing: "ease-in" },
+                );
+              },
+            },
+          );
+
+          // Target ripple (Close-up only)
+          if (tier === "closeup") {
+            tgtNode.animate(
+              { style: { "underlay-opacity": 0.5, "underlay-color": color, "underlay-padding": 8, "underlay-shape": "ellipse" } },
+              {
+                duration: 350,
+                easing: "ease-out",
+                complete: () => {
+                  tgtNode.animate(
+                    { style: { "underlay-opacity": 0, "underlay-padding": 0 } },
+                    { duration: 350, easing: "ease-in" },
+                  );
+                },
+              },
+            );
+          }
+
+          // Floating particle (Close-up, high probability only)
+          if (tier === "closeup" && pair.probability > 0.5 && srcNode.nonempty() && tgtNode.nonempty()) {
+            const srcPos = srcNode.renderedPosition();
+            const tgtPos = tgtNode.renderedPosition();
+            const particleId = `particle-${latestStep.step}-${pair.source}-${pair.target}`;
+
+            try {
+              const particle = cy.add({
+                group: "nodes",
+                data: { id: particleId, _isParticle: true },
+                position: { x: srcNode.position("x"), y: srcNode.position("y") },
+              });
+
+              particle.style({
+                width: 4,
+                height: 4,
+                "background-color": color,
+                "border-width": 0,
+                label: "",
+                "overlay-opacity": 0,
+                "events": "no",
+              } as Record<string, unknown>);
+
+              particle.animate(
+                { position: { x: tgtNode.position("x"), y: tgtNode.position("y") } },
+                {
+                  duration: 1000,
+                  easing: "ease-in-out",
+                  complete: () => {
+                    try { cy.remove(particle); } catch { /* already removed */ }
+                  },
+                },
+              );
+
+              // Safety cleanup
+              const particleTimeout = setTimeout(() => {
+                try { if (cy.getElementById(particleId).nonempty()) cy.remove(cy.getElementById(particleId)); } catch { /* ok */ }
+              }, 1200);
+              propagationTimeoutsRef.current.push(particleTimeout);
+            } catch { /* particle creation failed, skip */ }
+          }
+        }
+      }
+    }
+  }, [steps, propagationAnimEnabled]);
+
+  // Cleanup propagation timeouts on unmount
+  useEffect(() => {
+    return () => {
+      for (const t of propagationTimeoutsRef.current) clearTimeout(t);
     };
   }, []);
 

@@ -159,6 +159,10 @@ Get step history.
         }
       },
       "action_distribution": {},
+      "propagation_pairs": [
+        { "source": "agent-id-1", "target": "agent-id-2", "action": "share", "probability": 0.85 },
+        { "source": "agent-id-3", "target": "agent-id-4", "action": "comment", "probability": 0.42 }
+      ],
       "llm_calls_this_step": 5,
       "step_duration_ms": 287
     }

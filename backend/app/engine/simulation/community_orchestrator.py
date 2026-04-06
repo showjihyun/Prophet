@@ -150,10 +150,39 @@ class CommunityOrchestrator:
                 )
 
         # 3.5. Event-driven activation: only tick active agents
+        # Build a minimal SocialNetwork wrapper so ExposureModel can walk the subgraph
+        from app.engine.network.schema import NetworkMetrics as _NetworkMetrics, SocialNetwork as _SocialNetwork
+        _social_net = _SocialNetwork(
+            graph=self.subgraph,
+            communities=[self.community_config],
+            influencer_node_ids=[],
+            bridge_edge_ids=[],
+            metrics=_NetworkMetrics(
+                clustering_coefficient=0.0,
+                avg_path_length=0.0,
+                degree_distribution={},
+                community_sizes={},
+                bridge_count=0,
+                is_valid=True,
+            ),
+        )
+        _exposure_results = self._exposure_model.compute_exposure(
+            agents=self.agents,
+            graph=_social_net,
+            active_events=[
+                ce for ce in campaign_events
+                if ce.start_step <= step <= ce.end_step
+            ],
+            step=step,
+        )
+        exposure_scores = {
+            aid: er.exposure_score for aid, er in _exposure_results.items()
+        }
+
         activation = EventDrivenActivation()
         active_agents = activation.get_active_agents(
             all_agents=self.agents,
-            exposure_scores={},  # will be populated from exposure model
+            exposure_scores=exposure_scores,
             base_activation_rate=0.10,
             seed=seed,
         )

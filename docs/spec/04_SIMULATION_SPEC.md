@@ -396,6 +396,11 @@ class StepResult:
     # Agent summary (full states in DB)
     action_distribution: dict[str, int]  # action → count
 
+    # Propagation pairs for real-time graph animation (GAP-7)
+    # Top N propagation events sorted by probability desc.
+    # Frontend renders edge flash / floating particle animations.
+    propagation_pairs: list[PropagationPair]  # max 50 per step
+
     # LLM usage
     llm_calls_this_step: int
     llm_tier_distribution: dict[int, int]  # tier → count

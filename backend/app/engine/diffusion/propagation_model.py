@@ -85,7 +85,9 @@ class PropagationModel:
             targets = []
 
         events: list[PropagationEvent] = []
-        influence = source_agent.influence_score
+        # Apply a floor so low-influence agents still have a chance to propagate.
+        # influence_score is 0.1–0.9 in typical agents, but guard against edge cases.
+        influence = max(0.1, source_agent.influence_score)
 
         # Emotion factor: excitement - skepticism
         emotion_factor = (

@@ -129,6 +129,7 @@ class CascadeConfig:
     Violation: raise ValueError.
     """
     viral_cascade_threshold: float = 0.15
+    slow_adoption_threshold: float = 0.02  # per-step delta below which adoption is "slow"
     slow_adoption_steps: int = 5
     polarization_variance_threshold: float = 0.4
     collapse_drop_rate: float = 0.20
@@ -138,6 +139,10 @@ class CascadeConfig:
         if self.viral_cascade_threshold <= 0:
             raise ValueError(
                 f"viral_cascade_threshold must be > 0, got {self.viral_cascade_threshold}"
+            )
+        if self.slow_adoption_threshold <= 0:
+            raise ValueError(
+                f"slow_adoption_threshold must be > 0, got {self.slow_adoption_threshold}"
             )
         if self.slow_adoption_steps <= 0:
             raise ValueError(

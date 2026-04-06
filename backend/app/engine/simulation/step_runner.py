@@ -20,7 +20,7 @@ from app.engine.diffusion.cascade_detector import (
     StepResult as CascadeStepResult,
 )
 from app.engine.diffusion.exposure_model import ExposureModel
-from app.engine.diffusion.schema import CampaignEvent, EmergentEvent, NegativeEvent, RecSysConfig
+from app.engine.diffusion.schema import CampaignEvent, CascadeConfig, EmergentEvent, NegativeEvent, RecSysConfig
 from app.engine.diffusion.negative_cascade import NegativeCascadeModel
 from app.engine.diffusion.sentiment_model import SentimentModel
 from app.engine.network.evolution import NetworkEvolver
@@ -188,11 +188,16 @@ class StepRunner:
 
     def __init__(self, llm_adapter=None, gateway=None) -> None:
         """SPEC: docs/spec/04_SIMULATION_SPEC.md"""
+        from app.config import settings
         self._agent_tick = AgentTick(llm_adapter=llm_adapter, gateway=gateway)
         self._tier_selector = TierSelector()
         self._exposure_model = ExposureModel()
         self._sentiment_model = SentimentModel()
-        self._cascade_detector = CascadeDetector()
+        cascade_config = CascadeConfig(
+            viral_cascade_threshold=settings.cascade_viral_threshold,
+            slow_adoption_steps=settings.cascade_slow_adoption_steps,
+        )
+        self._cascade_detector = CascadeDetector(config=cascade_config)
         self._network_evolver = NetworkEvolver()
         self._gateway = LLMGateway()
         self._negative_cascade = NegativeCascadeModel()
@@ -521,10 +526,33 @@ class StepRunner:
             community_metrics=community_metrics,
             emergent_events=emergent_events,
             action_distribution=action_dist,
+            propagation_pairs=self._build_propagation_pairs(all_propagation_events),
             llm_calls_this_step=total_llm_calls,
             llm_tier_distribution=tier_dist,
             step_duration_ms=elapsed_ms,
         )
+
+
+    @staticmethod
+    def _build_propagation_pairs(
+        events: list,
+        limit: int = 50,
+    ) -> list[dict[str, object]]:
+        """Convert PropagationEvents to lightweight dicts for frontend animation (GAP-7).
+
+        SPEC: docs/spec/04_SIMULATION_SPEC.md#stepresult
+        Returns top *limit* pairs sorted by probability descending.
+        """
+        sorted_events = sorted(events, key=lambda e: e.probability, reverse=True)[:limit]
+        return [
+            {
+                "source": str(e.source_agent_id),
+                "target": str(e.target_agent_id),
+                "action": str(e.action_type),
+                "probability": float(e.probability),
+            }
+            for e in sorted_events
+        ]
 
 
 __all__ = ["StepRunner"]

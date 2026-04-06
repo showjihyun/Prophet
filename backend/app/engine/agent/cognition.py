@@ -46,9 +46,9 @@ def _map_score_to_action(score: float) -> AgentAction:
       [-0.5,  0.0)  -> VIEW
       [ 0.0,  0.3)  -> LIKE
       [ 0.3,  0.5)  -> SAVE
-      [ 0.5,  0.8)  -> COMMENT
-      [ 0.8,  1.2)  -> SHARE
-      [ 1.2,  2.0]  -> ADOPT
+      [ 0.5,  0.6)  -> COMMENT
+      [ 0.6,  0.8)  -> SHARE
+      [ 0.8,  2.0]  -> ADOPT
     """
     if score < -1.0:
         return AgentAction.MUTE
@@ -60,9 +60,9 @@ def _map_score_to_action(score: float) -> AgentAction:
         return AgentAction.LIKE
     elif score < 0.5:
         return AgentAction.SAVE
-    elif score < 0.8:
+    elif score < 0.6:
         return AgentAction.COMMENT
-    elif score < 1.2:
+    elif score < 0.8:
         return AgentAction.SHARE
     else:
         return AgentAction.ADOPT

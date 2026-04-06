@@ -76,6 +76,10 @@ interface SimulationStore {
   setSpeed: (speed: number) => void;
   toggleLLMDashboard: () => void;
   setHighlightedCommunity: (communityId: string | null) => void;
+
+  // Propagation animation (GAP-7)
+  propagationAnimationsEnabled: boolean;
+  togglePropagationAnimations: () => void;
 }
 
 export const useSimulationStore = create<SimulationStore>((set) => ({
@@ -151,4 +155,6 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   setSpeed: (speed) => set({ speed }),
   toggleLLMDashboard: () => set((state) => ({ isLLMDashboardOpen: !state.isLLMDashboardOpen })),
   setHighlightedCommunity: (communityId) => set({ highlightedCommunity: communityId }),
+  propagationAnimationsEnabled: true,
+  togglePropagationAnimations: () => set((state) => ({ propagationAnimationsEnabled: !state.propagationAnimationsEnabled })),
 }));

@@ -233,6 +233,167 @@ Version: 0.2.0 | Status: REVIEW
 - Click → opens AgentInspector
 - Community highlight via `highlightedCommunity` store state
 
+##### Real-Time Propagation Animation (GAP-7)
+
+When the simulation is running, each step produces `propagation_pairs` — a list of
+`(source_agent_id, target_agent_id, action_type, probability)` tuples representing
+agents exchanging context. The GraphPanel renders these as **edge particle
+animations** that make the social network feel alive, like a game world.
+
+**Data flow:**
+1. Backend `StepResult` includes a new `propagation_pairs` field (array of
+   `{source: string, target: string, action: string, probability: number}`)
+2. Frontend `StepResult` type adds the same field
+3. On each step update, GraphPanel reads `propagation_pairs` and triggers
+   edge animations for each active propagation
+
+**Animation layers (in order of visual priority):**
+
+| Layer | Trigger | Visual Effect | Duration |
+|-------|---------|---------------|----------|
+| Edge flash | propagation on existing edge | Edge color flashes to action color, opacity → 1.0, then fades back | 800ms |
+| Source pulse | agent sends context | Source node border pulses outward (scale 1.0→1.3→1.0) with action color | 600ms |
+| Target ripple | agent receives context | Target node shows inward ripple ring (action color, opacity 1→0) | 700ms |
+| Floating particle | high-probability propagation (p > 0.5) | Small colored dot travels along edge from source to target | 1000ms |
+
+**Action color mapping:**
+
+| Action | Color | CSS Variable |
+|--------|-------|-------------|
+| share | `#22c55e` (green) | `--anim-share` |
+| comment | `#3b82f6` (blue) | `--anim-comment` |
+| like | `#eab308` (yellow) | `--anim-like` |
+| adopt | `#a855f7` (purple) | `--anim-adopt` |
+| ignore | — (no animation) | — |
+
+**Zoom-Based LOD (Level of Detail) Animation Tiers:**
+
+The animation system uses **zoom level** as the primary LOD driver — like a map,
+zooming in reveals individual agent interactions in full detail, zooming out
+abstracts them into aggregate "thumbnail" indicators. This aligns with the
+existing GraphPanel LOD system (`applyLOD()` at zoom thresholds 0.3 / 0.7).
+
+Animations are **never fully disabled** at any zoom level or graph size.
+
+| Tier | Zoom Level | Visual Effect | Performance Cost |
+|------|-----------|---------------|-----------------|
+| **Close-up** | z >= 0.7 | Full detail: edge flash + source pulse + target ripple + floating particle | High (per-edge) |
+| **Mid-range** | 0.3 <= z < 0.7 | Edge flash + source pulse only (no ripple, no particle) | Medium |
+| **Overview** | z < 0.3 | Community hotspot glow — active communities pulse as a whole + edge-bundle shimmer between communicating communities | Low (per-community) |
+
+**Tier details:**
+
+*Close-up (z >= 0.7)* — Individual agent-level animations.
+- The user is inspecting a neighborhood — show every interaction in detail.
+- **Edge flash:** edge color transitions to action color, opacity spikes to 1.0,
+  fades back over 800ms.
+- **Source pulse:** sending agent's border scales 1.0→1.3→1.0 in action color. (600ms)
+- **Target ripple:** receiving agent shows an expanding ring (action color,
+  opacity 1→0) emanating inward. (700ms)
+- **Floating particle:** for high-probability propagations (p > 0.5), a small
+  colored dot (temporary Cytoscape node) travels along the edge from source to
+  target via linear interpolation, then is removed. (1,000ms)
+- Max **50 animations per step** (sorted by probability desc).
+
+*Mid-range (0.3 <= z < 0.7)* — Streamlined individual animations.
+- The user sees community clusters — show which edges are active without
+  cluttering the view.
+- **Edge flash** and **Source pulse** only (same as Close-up but capped).
+- No target ripple, no floating particles.
+- Max **30 animations per step**.
+
+*Overview (z < 0.3)* — Community-level aggregate "thumbnail" effects.
+- The user sees the full network — individual edges are invisible at this zoom
+  (`haystack` mode, per existing LOD). Instead, show **where communication is
+  happening** at the community level.
+- **Community hotspot glow:** For each community with propagation activity this
+  step, all nodes in that community receive a single batched background-color
+  flash to the dominant action color. A brief, synchronized pulse that makes
+  the cluster visibly "breathe". (1,200ms, one `cy.batch()` + one
+  `cy.animate()` per active community, max 5.)
+- **Inter-community shimmer:** If propagation crosses community boundaries
+  (bridge edges), draw a temporary translucent arc (CSS overlay `<div>`)
+  between the two community centroids. Arc color = action color, opacity
+  fades 0.6→0 over 1,500ms. Max 3 arcs per step.
+- This thumbnail effect gives an immediate sense of "Alpha is buzzing" or
+  "information is flowing from Beta to Gamma" without any per-edge cost.
+
+**Performance budget per step:**
+
+| Tier | Max `cy.animate()` calls | Max `cy.batch()` | DOM overlays |
+|------|--------------------------|-------------------|-------------|
+| Close-up | 150 (50 × 3 layers) | 1 | 0 |
+| Mid-range | 60 (30 × 2 layers) | 1 | 0 |
+| Overview | 5 (community glows) | 1 | 3 (arcs) |
+
+**Zoom transition:** When the user zooms across a threshold mid-animation,
+in-flight animations complete naturally but new animations use the new tier.
+The `cy.on('zoom')` handler already fires `applyLOD()` — propagation tier
+is recalculated in the same callback.
+
+**Implementation approach:**
+```typescript
+interface PropagationPair {
+  source: string;  // agent_id
+  target: string;  // agent_id
+  action: string;  // AgentAction value
+  probability: number;
+}
+
+type AnimationTier = 'closeup' | 'midrange' | 'overview';
+
+function getAnimationTier(zoomLevel: number): AnimationTier {
+  if (zoomLevel >= 0.7) return 'closeup';
+  if (zoomLevel >= 0.3) return 'midrange';
+  return 'overview';
+}
+
+function animatePropagations(cy: Core, pairs: PropagationPair[]) {
+  const tier = getAnimationTier(cy.zoom());
+  const filtered = pairs.filter(p => p.action !== 'ignore');
+
+  if (tier === 'overview') {
+    animateCommunityHotspots(cy, filtered);
+    animateInterCommunityArcs(filtered);
+    return;
+  }
+
+  const limit = tier === 'closeup' ? 50 : 30;
+  const sorted = filtered
+    .sort((a, b) => b.probability - a.probability)
+    .slice(0, limit);
+
+  cy.batch(() => {
+    for (const pair of sorted) {
+      flashEdge(cy, pair);
+      pulseSource(cy, pair);
+      if (tier === 'closeup') {
+        rippleTarget(cy, pair);
+        if (pair.probability > 0.5) spawnParticle(cy, pair);
+      }
+    }
+  });
+}
+```
+
+**Animation toggle:** ControlPanel provides a toggle button (default ON).
+When OFF, all propagation animations are suppressed regardless of tier.
+The toggle does NOT affect cascade animations (GAP-6) which remain independent.
+
+**Acceptance criteria:**
+
+| ID | Test | Expected |
+|----|------|----------|
+| GAP-7-01 | Step with 10 pairs at z >= 0.7 (Close-up) | Edge flash + pulse + ripple + particles for p > 0.5 |
+| GAP-7-02 | Step with 10 pairs at 0.3 <= z < 0.7 (Mid-range) | Edge flash + source pulse only, no particles |
+| GAP-7-03 | Step with 10 pairs at z < 0.3 (Overview) | Community hotspot glow + inter-community arcs |
+| GAP-7-04 | 1,000 nodes + 50 animations at Close-up | Frame rate >= 24fps during animation burst |
+| GAP-7-05 | Zoom from Close-up to Overview mid-step | In-flight animations complete, next step uses Overview tier |
+| GAP-7-06 | Animation toggle OFF | No propagation animations at any zoom level |
+| GAP-7-07 | Ignore action in propagation pair | No animation triggered for that pair |
+| GAP-7-08 | Cross-community propagation at Overview | Translucent arc between community centroids |
+| GAP-7-09 | 10,000 nodes at Overview zoom | Community glow only, no per-edge cost, >= 24fps |
+
 #### CommunityPanel
 ```typescript
 // components/graph/CommunityPanel.tsx
@@ -614,3 +775,8 @@ event.event_type.replace(/_/g, " ")
 | FE-13 | All sidebar pages render without errors | No console errors |
 | FE-14 | Project CRUD (create/update/delete) works | API integration verified |
 | FE-15 | Community template CRUD works | Templates persist across sessions |
+| FE-16 | Propagation animation at Close-up zoom (z >= 0.7) | Edge flash + pulse + ripple + floating particles |
+| FE-17 | Propagation animation at Mid-range zoom (0.3–0.7) | Edge flash + source pulse only |
+| FE-18 | Propagation animation at Overview zoom (z < 0.3) | Community hotspot glow + inter-community arcs |
+| FE-19 | Zoom transition mid-animation | Tier switches gracefully, in-flight anims complete |
+| FE-20 | Animation toggle switch works | Propagation animations on/off across all zoom tiers |

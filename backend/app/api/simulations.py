@@ -529,6 +529,7 @@ async def step_simulation(
         total_adoption=result.total_adoption,
         community_metrics=cm_resp,
         action_distribution=result.action_distribution,
+        propagation_pairs=result.propagation_pairs,
         llm_calls_this_step=result.llm_calls_this_step,
         step_duration_ms=result.step_duration_ms,
         emergent_events=[
@@ -712,6 +713,7 @@ async def get_steps(
                 total_adoption=sr.total_adoption,
                 community_metrics=cm,
                 action_distribution=sr.action_distribution,
+                propagation_pairs=getattr(sr, 'propagation_pairs', []),
                 llm_calls_this_step=sr.llm_calls_this_step,
                 step_duration_ms=sr.step_duration_ms,
                 emergent_events=[

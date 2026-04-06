@@ -46,6 +46,7 @@ class CascadeDetector:
 
     def __init__(self, config: CascadeConfig | None = None) -> None:
         self._config = config or CascadeConfig()
+        self._slow_adoption_fired: bool = False
 
     def detect(
         self,
@@ -138,7 +139,7 @@ class CascadeDetector:
         history: list[StepResult],
         config: CascadeConfig,
     ) -> EmergentEvent | None:
-        """Slow adoption: N steps below threshold.
+        """Slow adoption: N steps below threshold (fires once, resets on recovery).
 
         SPEC: docs/spec/03_DIFFUSION_SPEC.md#cascadedetector
         """
@@ -156,11 +157,23 @@ class CascadeDetector:
         recent = all_steps[-window:]
 
         # Check if all recent steps have low adoption rate change
+        slow = True
         for i in range(1, len(recent)):
             delta = recent[i].adoption_rate - recent[i - 1].adoption_rate
-            if delta >= config.viral_cascade_threshold:
-                return None
+            if delta >= config.slow_adoption_threshold:
+                slow = False
+                break
 
+        if not slow:
+            # Adoption recovering — reset one-shot guard
+            self._slow_adoption_fired = False
+            return None
+
+        # Only fire once per slow-adoption episode (False → True transition)
+        if self._slow_adoption_fired:
+            return None
+
+        self._slow_adoption_fired = True
         return EmergentEvent(
             event_type="slow_adoption",
             step=current.step,
