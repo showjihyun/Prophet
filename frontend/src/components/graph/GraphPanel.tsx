@@ -418,6 +418,9 @@ export default function GraphPanel() {
     function initCytoscape(graphData: CytoscapeGraph) {
       if (!containerRef.current) return;
 
+    const n = graphData.nodes.length;
+    const isLarge = n > 500;
+
     const cy = cytoscape({
       container: containerRef.current,
       elements: {
@@ -427,18 +430,18 @@ export default function GraphPanel() {
       style: CY_STYLE,
       layout: {
         name: "cose",
-        idealEdgeLength: 50,
-        nodeOverlap: 8,
+        idealEdgeLength: isLarge ? 80 : 50,
+        nodeOverlap: 20,
         refresh: 20,
         fit: true,
         padding: 40,
-        randomize: false,
-        componentSpacing: 60,
-        nodeRepulsion: 6000,
-        edgeElasticity: 80,
+        randomize: true,
+        componentSpacing: 100,
+        nodeRepulsion: isLarge ? 12000 : 6000,
+        edgeElasticity: 100,
         nestingFactor: 1.2,
-        gravity: 0.3,
-        numIter: 800,
+        gravity: isLarge ? 0.8 : 0.3,
+        numIter: isLarge ? 300 : 800,
         animate: false,
       } as cytoscape.CoseLayoutOptions,
 
