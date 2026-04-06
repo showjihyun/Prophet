@@ -54,8 +54,12 @@ _VALID_TRANSITIONS: dict[str, set[str]] = {
         SimulationStatus.RUNNING.value,
         SimulationStatus.FAILED.value,
     },
-    SimulationStatus.COMPLETED.value: set(),
-    SimulationStatus.FAILED.value: set(),
+    SimulationStatus.COMPLETED.value: {
+        SimulationStatus.CONFIGURED.value,  # allow reset after completion
+    },
+    SimulationStatus.FAILED.value: {
+        SimulationStatus.CONFIGURED.value,  # allow reset after failure
+    },
 }
 
 from app.config import settings as _settings

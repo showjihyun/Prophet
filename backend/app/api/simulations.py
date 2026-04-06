@@ -659,9 +659,23 @@ async def stop_simulation(
         SimulationStatus.RUNNING,
         SimulationStatus.PAUSED,
         SimulationStatus.CONFIGURED,
+        SimulationStatus.FAILED,
+        SimulationStatus.COMPLETED,
     )
-    state.status = "completed"
     sim_uuid = _sim_id_to_uuid(simulation_id)
+
+    # If stopping from failed/completed, reset to created for restart
+    if state.status in ("failed", "completed"):
+        state.status = "created"
+        state.current_step = 0
+        await persist.persist_status(session, sim_uuid, "created")
+        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+            "type": "status_change",
+            "data": {"status": "created"},
+        }))
+        return StatusResponse(status=SimulationStatus.CREATED)
+
+    state.status = "completed"
     await persist.persist_status(session, sim_uuid, "completed")
     asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
         "type": "status_change",
