@@ -121,17 +121,19 @@ function agentToInfluencer(a: AgentSummary, rank: number): Influencer {
 
 export default function TopInfluencersPage() {
   const navigate = useNavigate();
-  const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
+  const simulation = useSimulationStore((s) => s.simulation);
+  const simulationId = simulation?.simulation_id ?? null;
   const [search, setSearch] = useState("");
-  const [influencers, setInfluencers] = useState<Influencer[]>(MOCK_INFLUENCERS);
-  const [distributionData, setDistributionData] = useState(DISTRIBUTION_DATA);
-  const [stats, setStats] = useState({ total: 120, avg: 72.4, active: 98, bridges: 23 });
+  const [influencers, setInfluencers] = useState<Influencer[]>([]);
+  const [distributionData, setDistributionData] = useState<{ name: string; value: number; fill: string }[]>([]);
+  const [stats, setStats] = useState({ total: 0, avg: 0, active: 0, bridges: 0 });
   const [loading, setLoading] = useState(false);
 
   // Fetch real agents from API
   useEffect(() => {
     if (!simulationId) return;
     let cancelled = false;
+    setLoading(true);
     apiClient.agents.list(simulationId, { limit: 200 }).then((res) => {
       if (cancelled) return;
       const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score);
@@ -300,6 +302,31 @@ export default function TopInfluencersPage() {
       />
 
       <div className="flex-1 p-6 flex flex-col gap-6 overflow-auto">
+        {/* Empty state — no simulation selected */}
+        {!simulation && !loading && (
+          <div className="flex flex-col items-center justify-center py-24 gap-3">
+            <CrownIcon />
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No active simulation. Run a simulation first to view influencer rankings.
+            </p>
+            <button
+              onClick={() => navigate("/projects")}
+              className="mt-2 h-9 px-5 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity"
+            >
+              Go to Projects
+            </button>
+          </div>
+        )}
+
+        {/* Loading state */}
+        {loading && (
+          <div className="flex items-center justify-center py-24">
+            <LoadingSpinner label="Loading agents..." />
+          </div>
+        )}
+
+        {/* Main content — only when simulation is active */}
+        {simulation && !loading && (<>
         {/* Summary Stats — updated per UI-08 SPEC */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Influencers Tracked" value={String(stats.total)} icon={<CrownIcon />} />
@@ -406,14 +433,7 @@ export default function TopInfluencersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loading && (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center">
-                        <LoadingSpinner label="Loading agents..." />
-                      </td>
-                    </tr>
-                  )}
-                  {!loading && paginatedData.map((inf) => (
+                  {paginatedData.map((inf) => (
                     <tr
                       key={inf.agentId}
                       className="interactive border-b border-[var(--border)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
@@ -612,6 +632,7 @@ export default function TopInfluencersPage() {
             </div>
           </div>
         </div>
+        </>)}
       </div>
     </div>
   );
