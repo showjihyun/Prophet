@@ -892,34 +892,51 @@ class SimulationOrchestrator:
             )
 
         graph = state.network.graph
-        agents_by_node: dict[int, AgentState] = {}
-        for agent in state.agents:
-            for nid, ndata in graph.nodes(data=True):
-                if ndata.get("agent_id") == agent.agent_id:
-                    agents_by_node[nid] = agent
-                    break
 
-        # Build community ID → name mapping from config
+        # Bug 1 fix: O(1) agent lookup — build dict keyed by agent_id UUID
+        agent_by_id: dict = {agent.agent_id: agent for agent in state.agents}
+        # Map node_id → agent using node data's agent_id attribute
+        agents_by_node: dict[int, AgentState] = {}
+        for nid, ndata in graph.nodes(data=True):
+            aid = ndata.get("agent_id")
+            if aid is not None and aid in agent_by_id:
+                agents_by_node[nid] = agent_by_id[aid]
+
+        # Bug 2 fix: build community_uuid → short_key mapping by iterating all nodes
+        # node_data["community_id"] is the short key (e.g. "A", "B", "C")
+        # node_data["community_uuid"] is the full UUID
+        community_uuid_to_key: dict[str, str] = {}
+        for _nid, ndata in graph.nodes(data=True):
+            cuuid = ndata.get("community_uuid")
+            ckey = ndata.get("community_id", "")
+            if cuuid is not None and str(cuuid) not in community_uuid_to_key:
+                community_uuid_to_key[str(cuuid)] = str(ckey)
+
+        # Build community_uuid → name mapping from config using correct key
         community_names: dict[str, str] = {}
         for cc in state.config.communities:
-            for nid, ndata in graph.nodes(data=True):
-                cuuid = ndata.get("community_uuid")
-                if cuuid is not None:
-                    community_names[str(cuuid)] = cc.name
-                    break
+            for cuuid_str, ckey in community_uuid_to_key.items():
+                if ckey == cc.id:
+                    community_names[cuuid_str] = cc.name
 
         nodes = []
         for node_id, node_data in graph.nodes(data=True):
             agent = agents_by_node.get(node_id)
             community_uuid = str(node_data.get("community_uuid", ""))
+            # Bug 3+4 fix: add `community` (short key) and `label` fields
+            community_key = community_uuid_to_key.get(community_uuid, node_data.get("community_id", ""))
+            agent_id_str = str(agent.agent_id) if agent else str(node_id)
+            short_id = agent_id_str[:8]
             node_dict: dict = {
                 "id": str(node_id),
+                "label": f"Agent {short_id}",
+                "community": str(community_key),
                 "community_id": community_uuid,
-                "community_name": community_names.get(community_uuid, community_uuid[:8]),
+                "community_name": community_names.get(community_uuid, str(community_key)),
             }
             if agent:
                 node_dict.update({
-                    "agent_id": str(agent.agent_id),
+                    "agent_id": agent_id_str,
                     "agent_type": agent.agent_type.value if hasattr(agent.agent_type, "value") else str(agent.agent_type),
                     "action": agent.action.value if hasattr(agent.action, "value") else str(agent.action),
                     "adopted": agent.adopted,
@@ -928,13 +945,24 @@ class SimulationOrchestrator:
                 })
             nodes.append({"data": node_dict})
 
+        # Bug 5 fix: add `edge_type` and `is_bridge` to each edge
+        # Build node_id → community_key map for bridge detection
+        node_community: dict[int, str] = {}
+        for node_id, node_data in graph.nodes(data=True):
+            cuuid = str(node_data.get("community_uuid", ""))
+            node_community[node_id] = community_uuid_to_key.get(cuuid, node_data.get("community_id", ""))
+
         edges = []
         for u, v, edge_data in graph.edges(data=True):
+            is_bridge = node_community.get(u, "") != node_community.get(v, "")
+            edge_type = "bridge" if is_bridge else "intra"
             edge_dict: dict = {
                 "id": f"e{u}-{v}",
                 "source": str(u),
                 "target": str(v),
                 "weight": round(edge_data.get("weight", 0.5), 3),
+                "is_bridge": edge_data.get("is_bridge", is_bridge),
+                "edge_type": edge_data.get("edge_type", edge_type),
             }
             edges.append({"data": edge_dict})
 

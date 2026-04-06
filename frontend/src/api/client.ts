@@ -332,7 +332,7 @@ export const apiClient = {
       request<void>(`/projects/${id}`, { method: "DELETE" }),
   },
   network: {
-    get: (simId: string) => request<CytoscapeGraph>(`/simulations/${simId}/network?format=cytoscape`),
+    get: (simId: string) => request<CytoscapeGraph>(`/simulations/${simId}/network/?format=cytoscape`),
     getMetrics: (simId: string) =>
       request<NetworkMetrics>(`/simulations/${simId}/network/metrics`),
   },

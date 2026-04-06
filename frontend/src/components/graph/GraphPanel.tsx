@@ -364,7 +364,8 @@ export default function GraphPanel() {
         } else {
           graphData = generateMockGraphData();
         }
-      } catch {
+      } catch (err) {
+        console.warn("Network fetch failed, using mock data:", err);
         graphData = generateMockGraphData();
       }
       if (cancelled || !containerRef.current) return;
