@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from "../../api/client";
+import HelpTooltip from "../shared/HelpTooltip";
 
 const COMMUNITY_COLORS: Record<string, string> = {
   Alpha: "var(--community-alpha)",
@@ -111,8 +112,9 @@ export default function MetricsPanel() {
       <div className="flex flex-col" style={{ gap: "var(--card-gap)" }}>
         {/* Active Agents */}
         <MetricCard testId="active-agents-metric">
-          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1">
-            Active Agents
+          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1 flex items-center gap-1.5">
+            <span>Active Agents</span>
+            <HelpTooltip term="activeAgents" align="right" />
           </div>
           <div className="flex items-baseline gap-1">
             <span className="text-2xl font-bold text-[var(--foreground)]">
@@ -132,8 +134,9 @@ export default function MetricsPanel() {
 
         {/* Sentiment Distribution */}
         <MetricCard testId="sentiment-distribution">
-          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2">
-            Sentiment Distribution
+          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2 flex items-center gap-1.5">
+            <span>Sentiment Distribution</span>
+            <HelpTooltip term="sentimentDistribution" align="right" />
           </div>
           <SentimentBar label="Positive" value={sentimentPositive} color="var(--sentiment-positive)" />
           <SentimentBar label="Neutral" value={sentimentNeutral} color="var(--sentiment-neutral)" />
@@ -142,8 +145,9 @@ export default function MetricsPanel() {
 
         {/* Polarization Index */}
         <MetricCard testId="polarization-index">
-          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1">
-            Polarization Index
+          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1 flex items-center gap-1.5">
+            <span>Polarization Index</span>
+            <HelpTooltip term="polarization" align="right" />
           </div>
           <span className="text-lg font-bold text-[var(--foreground)]">
             {polarization.toFixed(2)}
@@ -166,16 +170,18 @@ export default function MetricsPanel() {
         {/* Cascade Stats */}
         <div className="grid grid-cols-2 gap-2">
           <MetricCard testId="cascade-depth">
-            <div className="text-[11px] text-[var(--muted-foreground)] font-medium">
-              Depth
+            <div className="text-[11px] text-[var(--muted-foreground)] font-medium flex items-center gap-1.5">
+              <span>Depth</span>
+              <HelpTooltip term="cascadeDepth" />
             </div>
             <span className="text-lg font-bold text-[var(--foreground)]">
               {cascadeDepth}
             </span>
           </MetricCard>
           <MetricCard testId="cascade-width">
-            <div className="text-[11px] text-[var(--muted-foreground)] font-medium">
-              Width
+            <div className="text-[11px] text-[var(--muted-foreground)] font-medium flex items-center gap-1.5">
+              <span>Width</span>
+              <HelpTooltip term="cascadeWidth" align="right" />
             </div>
             <span className="text-lg font-bold text-[var(--foreground)]">
               {cascadeWidth.toLocaleString()}
@@ -185,8 +191,9 @@ export default function MetricsPanel() {
 
         {/* Top Influencers */}
         <MetricCard testId="top-influencers">
-          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2">
-            Top Influencers
+          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2 flex items-center gap-1.5">
+            <span>Top Influencers</span>
+            <HelpTooltip term="influencer" align="right" />
           </div>
           <div className="flex flex-col gap-1.5">
             {topInfluencers.map((inf, i) => (

@@ -105,8 +105,10 @@ describe('TopInfluencers (UI-03)', () => {
       await waitFor(() => {
         expect(screen.getByText('Influencers Tracked')).toBeInTheDocument();
       });
-      expect(screen.getByText('Avg Influence Score')).toBeInTheDocument();
-      expect(screen.getByText('Top Community')).toBeInTheDocument();
+      // Use getAllByText: HelpTooltip popovers (always rendered for anti-flicker)
+      // also contain these labels, so multiple matches are expected.
+      expect(screen.getAllByText('Avg Influence Score').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Top Community').length).toBeGreaterThan(0);
       expect(screen.getByText('Active Cascades')).toBeInTheDocument();
     });
   });
@@ -136,7 +138,8 @@ describe('TopInfluencers (UI-03)', () => {
         expect(screen.getByText('Agent ID')).toBeInTheDocument();
       });
       expect(screen.getByText('Community')).toBeInTheDocument();
-      expect(screen.getByText('Influence Score')).toBeInTheDocument();
+      // Multiple matches: column header + StatCard tooltip popover
+      expect(screen.getAllByText('Influence Score').length).toBeGreaterThan(0);
       expect(screen.getByText('Sentiment')).toBeInTheDocument();
       expect(screen.getByText('Chains')).toBeInTheDocument();
       expect(screen.getByText('Connections')).toBeInTheDocument();

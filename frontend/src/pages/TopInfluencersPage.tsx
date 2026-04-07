@@ -335,10 +335,10 @@ export default function TopInfluencersPage() {
         {simulation && !loading && (<>
         {/* Summary Stats — updated per UI-08 SPEC */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Influencers Tracked" value={String(stats.total)} icon={<CrownIcon />} />
-          <StatCard label="Avg Influence Score" value={String(stats.avg)} icon={<BarChartIcon />} />
-          <StatCard label="Top Community" value={topCommunity} icon={<UsersIcon />} />
-          <StatCard label="Active Cascades" value={String(stats.active)} icon={<GitBranchIcon />} />
+          <StatCard label="Influencers Tracked" value={String(stats.total)} icon={<CrownIcon />} term="influencer" />
+          <StatCard label="Avg Influence Score" value={String(stats.avg)} icon={<BarChartIcon />} term="influenceScore" />
+          <StatCard label="Top Community" value={topCommunity} icon={<UsersIcon />} term="topCommunity" />
+          <StatCard label="Active Cascades" value={String(stats.active)} icon={<GitBranchIcon />} term="viralCascade" tooltipAlign="right" />
         </div>
 
         {/* Content area: table + sidebar */}

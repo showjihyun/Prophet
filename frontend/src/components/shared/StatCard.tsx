@@ -5,6 +5,8 @@
  * @spec docs/spec/ui/UI_05_GLOBAL_METRICS.md#summary-stats
  */
 import type { ReactNode } from "react";
+import HelpTooltip, { type TooltipAlign } from "./HelpTooltip";
+import type { GlossaryTerm } from "@/config/glossary";
 
 interface StatCardProps {
   label: string;
@@ -14,6 +16,10 @@ interface StatCardProps {
   icon?: ReactNode;
   testId?: string;
   changeTestId?: string;
+  /** Optional glossary term — adds a help icon next to the label. */
+  term?: GlossaryTerm;
+  /** Tooltip alignment (use 'right' for right-edge cards). */
+  tooltipAlign?: TooltipAlign;
 }
 
 const changeColors: Record<string, string> = {
@@ -30,6 +36,8 @@ export default function StatCard({
   icon,
   testId,
   changeTestId,
+  term,
+  tooltipAlign = "center",
 }: StatCardProps) {
   return (
     <div
@@ -37,7 +45,10 @@ export default function StatCard({
       className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4 flex flex-col gap-2 hover:scale-[1.02] transition-transform"
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-normal text-[var(--muted-foreground)]">{label}</span>
+        <span className="text-xs font-normal text-[var(--muted-foreground)] flex items-center gap-1.5">
+          {label}
+          {term && <HelpTooltip term={term} align={tooltipAlign} />}
+        </span>
         {icon && <span className="text-[var(--muted-foreground)]">{icon}</span>}
       </div>
       <span className="text-[28px] font-bold leading-tight text-[var(--foreground)]">

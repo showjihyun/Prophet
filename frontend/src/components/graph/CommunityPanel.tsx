@@ -11,6 +11,7 @@ import { Search } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { SkeletonList } from "../shared/LoadingSpinner";
 import { SIM_STATUS } from "@/config/constants";
+import HelpTooltip from "../shared/HelpTooltip";
 
 interface CommunityItem {
   id: string;
@@ -129,8 +130,9 @@ export default function CommunityPanel() {
 
       {/* Title */}
       <div className="flex items-center justify-between px-4 py-2">
-        <span className="text-sm font-semibold text-[var(--foreground)]">
+        <span className="text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5">
           Communities
+          <HelpTooltip term="community" align="left" />
         </span>
         <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)]">
           {communities.length}
