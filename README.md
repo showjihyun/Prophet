@@ -199,10 +199,6 @@ Perception → Memory (GraphRAG) → Emotion → Cognition → Decision → Infl
 | 10,000 agents × 1 step (projected)        | ~1,500ms  | After Tier A+B perf fixes      |
 | 365-step simulation (1K agents)           | ~2 min    | Real-time WebSocket updates    |
 
-See [`docs/spec/17_PERFORMANCE_SPEC.md`](docs/spec/17_PERFORMANCE_SPEC.md) and
-[`docs/spec/18_FRONTEND_PERFORMANCE_SPEC.md`](docs/spec/18_FRONTEND_PERFORMANCE_SPEC.md)
-for the full performance audit (19 backend + 29 frontend findings).
-
 ---
 
 ## Tech Stack
@@ -228,30 +224,6 @@ Prophet/
 ├── CLAUDE.md              # Project instructions for AI assistants
 ├── DESIGN.md              # UI design master (Pencil integration)
 ├── README.md              # This file
-│
-├── docs/
-│   ├── BUSINESS_REPORT.md         # Investor / stakeholder brief
-│   ├── MARKETING_STRATEGY.md      # Launch & growth plan
-│   ├── init/                      # Original requirements (read-only)
-│   └── spec/                      # 18 core SPEC documents
-│       ├── 00_ARCHITECTURE.md
-│       ├── 01_AGENT_SPEC.md
-│       ├── 02_NETWORK_SPEC.md
-│       ├── 03_DIFFUSION_SPEC.md
-│       ├── 04_SIMULATION_SPEC.md
-│       ├── 05_LLM_SPEC.md
-│       ├── 06_API_SPEC.md
-│       ├── 07_FRONTEND_SPEC.md
-│       ├── 08_DB_SPEC.md
-│       ├── 09_HARNESS_SPEC.md
-│       ├── 10_VALIDATION_SPEC.md
-│       ├── 11_SKILLS_SPEC.md
-│       ├── 15_DEV_WORKFLOW_SPEC.md
-│       ├── 16_COMMUNITY_MGMT_SPEC.md
-│       ├── 17_PERFORMANCE_SPEC.md
-│       ├── 18_FRONTEND_PERFORMANCE_SPEC.md
-│       ├── MASTER_SPEC.md
-│       └── ui/                    # 16 UI screen specs
 │
 ├── backend/                       # FastAPI backend
 │   ├── app/
@@ -283,37 +255,6 @@ Prophet/
 
 ---
 
-## SPEC Documents
-
-Prophet is **SPEC-driven**: every feature has a written spec before any code
-ships. Tests are written from the spec, not the implementation.
-
-| #   | Document                  | Description                                         |
-|-----|---------------------------|-----------------------------------------------------|
-| 00  | ARCHITECTURE              | System architecture and directory layout            |
-| 01  | AGENT_SPEC                | 6-Layer Agent Engine with 12 action types           |
-| 02  | NETWORK_SPEC              | Hybrid Network Generator (WS + BA + bridges)        |
-| 03  | DIFFUSION_SPEC            | RecSys exposure + propagation + cascade detection   |
-| 04  | SIMULATION_SPEC           | Simulation Orchestrator with async locks            |
-| 05  | LLM_SPEC                  | LLM Adapter + 3-tier batched inference              |
-| 06  | API_SPEC                  | 55+ REST endpoints + WebSocket protocol             |
-| 07  | FRONTEND_SPEC             | React 18 components + GAP-7 propagation animation   |
-| 08  | DB_SPEC                   | PostgreSQL 16 + pgvector schema                     |
-| 09  | HARNESS_SPEC              | F18–F30 test harness                                |
-| 10  | VALIDATION_SPEC           | Validation methodology (Twitter15/16)               |
-| 11  | SKILLS_SPEC               | Plugins & skills configuration                      |
-| 15  | DEV_WORKFLOW_SPEC         | Model selection (Opus / Sonnet) + dev workflow      |
-| 16  | COMMUNITY_MGMT_SPEC       | Runtime community management                        |
-| 17  | PERFORMANCE_SPEC          | Backend perf optimization (19 findings)             |
-| 18  | FRONTEND_PERFORMANCE_SPEC | Frontend perf optimization (29 findings)            |
-| UI  | 16 UI screen SPECs        | Screen-level design specs (Pencil sync)             |
-
-See [`docs/spec/MASTER_SPEC.md`](docs/spec/MASTER_SPEC.md) for the full index
-and [`docs/spec/SPEC_CHECKLIST.md`](docs/spec/SPEC_CHECKLIST.md) for
-implementation status.
-
----
-
 ## Roadmap
 
 **Shipped (April 2026):**
@@ -321,7 +262,7 @@ implementation status.
 - ✅ Phase A–H: API integration, UI, real APIs, design tokens, DB, validation, harness, perf
 - ✅ GAP-7: Real-time propagation animation (zoom-based LOD)
 - ✅ Tier A+B performance optimizations (backend + frontend)
-- ✅ Pause/Resume/Run-All controls verified by SPEC contract tests
+- ✅ Pause/Resume/Run-All controls verified by contract tests
 
 **In progress:**
 - 🟡 Cloud Starter tier (hosted, $99/month)
@@ -338,14 +279,14 @@ implementation status.
 
 ## Contributing
 
-Contributions are welcome! Prophet follows a SPEC-first development model:
+Contributions are welcome! Prophet follows a test-first development model:
 
-1. Find or create a SPEC for the change in `docs/spec/`
-2. Write tests against the SPEC contract first
+1. Open an issue describing the change
+2. Write tests against the contract first
 3. Implement until tests pass
-4. Submit PR with SPEC reference in the description
+4. Submit PR
 
-See [`CLAUDE.md`](CLAUDE.md) for the full contributor guide and coding rules
+See [`CLAUDE.md`](CLAUDE.md) for the contributor guide and coding rules
 (no hardcoded domain literals, no `pip` — `uv` only, etc.).
 
 ### Running the test suite
@@ -371,12 +312,9 @@ cd frontend && npx playwright test
 
 ## Documentation
 
-- 📊 **[Business Report](docs/BUSINESS_REPORT.md)** — investor / stakeholder brief
-- 📣 **[Marketing Strategy](docs/MARKETING_STRATEGY.md)** — launch & growth plan
-- 📚 **[SPEC Index](docs/spec/MASTER_SPEC.md)** — all 18 core specs
-- ✅ **[SPEC Checklist](docs/spec/SPEC_CHECKLIST.md)** — implementation status
-- 🎨 **[Design System](DESIGN.md)** — UI tokens, components, Pencil integration
-- 🤖 **[Contributor Guide](CLAUDE.md)** — coding rules, workflow, SPEC-gate
+- 🎨 **[Design System](DESIGN.md)** — UI tokens, components
+- 🤖 **[Contributor Guide](CLAUDE.md)** — coding rules and workflow
+- 📖 **API Docs** — http://localhost:8000/docs (Swagger UI when running)
 
 ---
 

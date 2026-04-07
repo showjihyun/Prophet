@@ -365,6 +365,11 @@ Prophet/
 
 - **⛔ SPEC 없이 구현하지 않는다** — `docs/spec/`에 SPEC이 없으면 SPEC부터 작성한다. 절대로 SPEC 없이 코드를 생성하지 않는다.
 - **⛔ SPEC 변경 시 테스트 필수 갱신** — Backend/Frontend SPEC이 변경되면 해당 테스트 코드를 반드시 생성/갱신한다.
+- **⛔ SPEC은 비공개 자산 — public commit 금지** — `docs/spec/`, `docs/init/`,
+  `docs/BUSINESS_REPORT.md`, `docs/MARKETING_STRATEGY.md`, `docs/OASIS_vs_Prophet.md`는
+  프로젝트의 IP/모트이므로 `.gitignore`에 등록되어 있다. 이 파일들은 로컬에서만 사용하고
+  GitHub에 push하지 않는다. README.md 등 공개 문서를 작성할 때는 SPEC 문서나 그 내부
+  내용을 인용/링크하지 말 것 — 누구든 SPEC만 보고 Prophet을 재현할 수 있기 때문이다.
 - **⛔ pip 사용 금지** — `uv` 만 사용
 - **SLM fallback 필수** — 모든 Tier 3 (Elite LLM) 기능은 Tier 1 (Mass SLM) fallback 보유
 - **하네스 먼저** — 구현 전 하네스 픽스처/목 먼저 작성
