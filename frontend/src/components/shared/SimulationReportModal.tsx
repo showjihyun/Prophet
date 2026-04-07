@@ -15,12 +15,30 @@ interface Props {
 
 /**
  * Help tooltip — appears on hover OR on click (mobile-friendly).
- * Click toggles a sticky popover; hover shows it temporarily.
+ *
+ * Anti-flicker design:
+ * - Hover handlers live on the WRAPPER span, not the button, so moving the
+ *   mouse from icon → tooltip stays inside the same hover region.
+ * - The tooltip uses `pointer-events-none` so it never steals hover state
+ *   away from the wrapper (the wrapper drives `hovered`).
+ * - The tooltip is always rendered (visibility toggled via opacity) so
+ *   appearance/disappearance never causes layout reflow.
+ * - `align="right"` positions the tooltip flush to the right edge of the
+ *   icon, used for cards near the modal's right edge so the 256px tooltip
+ *   doesn't overflow the modal and trigger horizontal scrollbar flicker.
  */
-function HelpTooltip({ text, label }: { text: string; label: string }) {
+function HelpTooltip({
+  text,
+  label,
+  align = "center",
+}: {
+  text: string;
+  label: string;
+  align?: "left" | "center" | "right";
+}) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLSpanElement>(null);
 
   // Close on outside click
   useEffect(() => {
@@ -36,27 +54,37 @@ function HelpTooltip({ text, label }: { text: string; label: string }) {
 
   const visible = open || hovered;
 
+  const alignClass =
+    align === "right"
+      ? "right-0"
+      : align === "left"
+        ? "left-0"
+        : "left-1/2 -translate-x-1/2";
+
   return (
-    <span ref={ref} className="relative inline-flex items-center">
+    <span
+      ref={ref}
+      className="relative inline-flex items-center"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <button
         type="button"
         aria-label={`What does ${label} mean?`}
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
         className="inline-flex items-center justify-center w-3.5 h-3.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
       >
         <HelpCircle className="w-3.5 h-3.5" />
       </button>
-      {visible && (
-        <span
-          role="tooltip"
-          className="absolute z-10 left-1/2 -translate-x-1/2 top-full mt-1.5 w-64 px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg text-[11px] font-normal leading-relaxed text-[var(--foreground)] whitespace-normal pointer-events-auto"
-        >
-          <span className="block font-semibold text-[var(--foreground)] mb-1">{label}</span>
-          {text}
-        </span>
-      )}
+      {/* Always rendered — opacity-toggled to avoid layout reflow */}
+      <span
+        role="tooltip"
+        aria-hidden={!visible}
+        className={`absolute z-20 ${alignClass} top-full mt-1.5 w-64 px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg text-[11px] font-normal leading-relaxed text-[var(--foreground)] whitespace-normal pointer-events-none transition-opacity duration-100 ${visible ? "opacity-100" : "opacity-0"}`}
+      >
+        <span className="block font-semibold text-[var(--foreground)] mb-1">{label}</span>
+        {text}
+      </span>
     </span>
   );
 }
@@ -203,6 +231,7 @@ export default function SimulationReportModal({ onClose }: Props) {
               value={String(report.totalEmergentEvents)}
               accent={report.totalEmergentEvents > 0 ? "warning" : undefined}
               tooltip={HELP.emergentEvents}
+              tooltipAlign="right"
             />
           </div>
 
@@ -320,12 +349,14 @@ function MetricCard({
   accent,
   className,
   tooltip,
+  tooltipAlign = "center",
 }: {
   label: string;
   value: string;
   accent?: "positive" | "warning";
   className?: string;
   tooltip?: string;
+  tooltipAlign?: "left" | "center" | "right";
 }) {
   const valueColor =
     accent === "positive"
@@ -338,7 +369,7 @@ function MetricCard({
     <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-3 flex flex-col gap-1">
       <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)] flex items-center gap-1.5">
         <span>{label}</span>
-        {tooltip && <HelpTooltip label={label} text={tooltip} />}
+        {tooltip && <HelpTooltip label={label} text={tooltip} align={tooltipAlign} />}
       </p>
       <p className={`text-xl font-bold ${valueColor}`}>{value}</p>
     </div>
