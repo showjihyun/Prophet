@@ -389,10 +389,35 @@ export default function GraphPanel() {
   useEffect(() => {
     if (!containerRef.current) return;
     let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
+
+    // Wait until the container has a non-zero size before initializing
+    // Cytoscape. If we init with width/height === 0 (can happen on first
+    // mount inside a flex layout when the parent hasn't laid out yet),
+    // cose collapses every node to (0,0) and cy.fit() produces garbage.
+    // We poll via requestAnimationFrame for up to 30 frames (~500ms).
+    // SPEC: docs/spec/07_FRONTEND_SPEC.md#graph-panel-layout-robustness
+    async function waitForContainerSize(): Promise<boolean> {
+      for (let i = 0; i < 30; i++) {
+        const el = containerRef.current;
+        if (!el || cancelled) return false;
+        if (el.clientWidth > 0 && el.clientHeight > 0) return true;
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      }
+      return false;
+    }
 
     async function loadGraph() {
       let graphData: CytoscapeGraph;
       setIsLoading(true);
+      // Ensure the container is actually sized before we hand it to Cytoscape.
+      const sized = await waitForContainerSize();
+      if (cancelled) return;
+      if (!sized) {
+        // Give up on polling but still proceed — we attach a ResizeObserver
+        // below that will rescue us if the container gains size later.
+        console.warn("[GraphPanel] container never reached non-zero size; proceeding");
+      }
       try {
         if (simulationId) {
           graphData = await apiClient.network.get(simulationId);
@@ -562,12 +587,58 @@ export default function GraphPanel() {
     });
 
     cyRef.current = cy;
+
+    // Observe container size changes — if GraphPanel was mounted while
+    // its flex parent still had zero height (common on initial layout or
+    // when an overlay/panel collapses), cytoscape's internal canvas stays
+    // at 0×0 until we explicitly call cy.resize(). When the container
+    // becomes non-zero (or meaningfully changes size), re-size + re-run
+    // the layout so nodes spread across the viewport instead of piling
+    // up at the origin.
+    // SPEC: docs/spec/07_FRONTEND_SPEC.md#graph-panel-layout-robustness
+    if (containerRef.current && "ResizeObserver" in window) {
+      let lastW = containerRef.current.clientWidth;
+      let lastH = containerRef.current.clientHeight;
+      let didRerunLayout = lastW > 0 && lastH > 0;
+      resizeObserver = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        const { width, height } = entry.contentRect;
+        if (width <= 0 || height <= 0) return;
+        if (Math.abs(width - lastW) < 1 && Math.abs(height - lastH) < 1) return;
+        lastW = width;
+        lastH = height;
+        cy.resize();
+        // If layout never got a real chance to run (container started at 0),
+        // re-run it now that we have real dimensions.
+        if (!didRerunLayout) {
+          didRerunLayout = true;
+          cy.layout({
+            name: "cose",
+            fit: true,
+            padding: 40,
+            randomize: true,
+            animate: false,
+            numIter: isLarge ? 300 : 800,
+            nodeRepulsion: isLarge ? 12000 : 6000,
+            gravity: isLarge ? 0.8 : 0.3,
+          } as cytoscape.CoseLayoutOptions).run();
+        } else {
+          cy.fit(undefined, 40);
+        }
+      });
+      resizeObserver.observe(containerRef.current);
+    }
     }
 
     loadGraph();
 
     return () => {
       cancelled = true;
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
       if (cyRef.current) {
         cyRef.current.destroy();
         cyRef.current = null;
@@ -1039,8 +1110,20 @@ export default function GraphPanel() {
           "radial-gradient(ellipse at center, #0f172a 0%, #020617 100%)",
       }}
     >
-      {/* Cytoscape canvas container */}
-      <div ref={containerRef} className="absolute inset-0" />
+      {/* Cytoscape canvas container.
+          NOTE: Use inline width/height:100% rather than `absolute inset-0` —
+          cytoscape mutates this element's style on mount, and in some
+          Tailwind+flex parents `inset-0` resolves to height:0 (top/bottom
+          inset collapse), leaving the internal canvas at 0px high. That
+          makes cose pile every node at (0,0) — the infamous
+          "all agents in the bottom-left corner" bug. Inline sizing is
+          immune to that interaction.
+          SPEC: docs/spec/07_FRONTEND_SPEC.md#graph-panel-layout-robustness */}
+      <div
+        ref={containerRef}
+        data-testid="graph-cytoscape-container"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+      />
 
       {/* Loading overlay — soft fade-in while graph payload is fetched */}
       {isLoading && (

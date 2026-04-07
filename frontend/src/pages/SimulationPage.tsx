@@ -15,7 +15,7 @@ import { LS_KEY_SIMULATION_ID, SIM_STATUS } from "@/config/constants";
 import { FolderOpen, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
 import CommunityPanel from "../components/graph/CommunityPanel";
-import GraphPanel from "../components/graph/GraphPanel";
+import GraphPanel from "../components/graph/GraphPanel3D";
 import MetricsPanel from "../components/graph/MetricsPanel";
 import TimelinePanel from "../components/timeline/TimelinePanel";
 import ConversationPanel from "../components/control/ConversationPanel";
