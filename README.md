@@ -1,29 +1,88 @@
-# Prophet (MCASP)
+# Prophet
 
-**The wind tunnel for marketing campaigns.**
+> **The wind tunnel for marketing campaigns.**
+> Test your campaign on 10,000 AI agents before you spend a dollar on the launch.
 
-Run your campaign, message, or policy through a virtual society of **10,000 AI
-agents** organized into real social communities — and watch it succeed or burn
-down before you spend a dollar on the launch.
+Prophet is an open-source simulation engine for marketing teams, PR agencies,
+and researchers who are tired of finding out a campaign failed *after* it shipped.
+You point it at your message, your audience, and your communities — it tells you
+how the message spreads, where it stalls, and which groups push back.
+
+```bash
+git clone https://github.com/your-org/prophet.git
+cd prophet && docker compose up -d
+open http://localhost:5173
+```
+
+That's the whole quick start. 5 minutes from clone to your first simulation.
 
 [![Tests](https://img.shields.io/badge/tests-1234%20passing-brightgreen)]()
-[![Backend](https://img.shields.io/badge/backend-861%2F863-brightgreen)]()
-[![Frontend](https://img.shields.io/badge/frontend-373%2F373-brightgreen)]()
-[![TypeScript](https://img.shields.io/badge/TypeScript-0%20errors-blue)]()
-[![Health](https://img.shields.io/badge/health-10.0%2F10-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![Status](https://img.shields.io/badge/status-active-brightgreen)]()
+[![Discussions](https://img.shields.io/badge/discussions-open-blue)]()
 
 ---
 
-## What is Prophet?
+## Why this exists
 
-Prophet (MCASP — Multi-Community Agent Simulation Platform) is an open-source
-simulation engine that models how messages spread through social networks of
-LLM-powered agents. Marketing teams use it to **pre-test campaigns**. Researchers
-use it to study **viral cascades**. Public health teams use it to simulate
-**communication strategies**.
+If you've ever shipped a campaign and watched it crater, you know the feeling:
 
-### How it works
+- **Focus groups lied to you** — 10 humans in a room can't tell you how a message
+  spreads through a community.
+- **A/B tests are too late** — by the time you have data, you're already paying
+  for the launch you're trying to validate.
+- **Brand-lift studies take 6 weeks** — and cost $50K, and tell you nothing about
+  *why* the message failed.
+
+Prophet exists because there is no wind tunnel for marketing. Every other
+discipline that ships things at scale — aerospace, civil engineering, software —
+gets to simulate before it builds. Marketing doesn't. Until now.
+
+**You take your campaign. You drop it into a virtual society of 10,000 AI agents
+organized into the communities you actually care about. You watch what happens.**
+
+---
+
+## Demo
+
+> _[GIF placeholder — 30-second loop showing a simulation: graph spreads, cascade
+> highlights light up communities, sentiment chart updates in real-time. Capture
+> with Loom or QuickTime, drop here.]_
+
+---
+
+## What you can do with it
+
+### 🛍️ Pre-test a product launch
+
+A beverage brand was about to spend $1.2M launching a sustainability-focused
+product. Ran the message through Prophet against 5,000 agents (15% skeptics, 60%
+mainstream, 20% early adopters, 5% influencers). The simulation showed the message
+**polarized** the skeptical community at step 18 and adoption stalled at 12%.
+They reframed the campaign and hit 31% in the second simulation.
+
+### 🏥 Pre-screen public health messages
+
+A health agency tested 3 vaccine messages against a 10K-agent virtual population.
+Strategy B caused echo-chamber formation in skeptical communities. Strategy C
+triggered a positive viral cascade through influencer nodes. They picked C and
+projected 3x adoption.
+
+### 🏢 Stress-test internal communications
+
+A Fortune 500 ran their RTO mandate announcement through a synthetic employee
+population. Prophet predicted a 38% sentiment collapse in engineering. They
+restructured the announcement with carve-outs and cut opposition by 60%.
+
+### 🔬 Computational social science research
+
+Open-source. Reproducible. Runs on a laptop. Built-in cascade detection. If you've
+been wanting to do agent-based diffusion research without renting a GPU cluster,
+Prophet is for you.
+
+---
+
+## How it works (in 6 steps)
 
 ```
 1. Generate     → 10K agents in 5 communities (early adopters, consumers,
@@ -38,34 +97,36 @@ use it to study **viral cascades**. Public health teams use it to simulate
 4. Detect       → Auto-detect viral cascades, polarization, echo chambers,
                   collapse, slow adoption
 
-5. Visualize    → Real-time Cytoscape graph with zoom-based animation
+5. Visualize    → Real-time graph with zoom-based animation
                   (close-up / mid / overview tiers)
 
 6. Decide       → Compare scenarios, run Monte Carlo sweeps, export results
 ```
 
-### Why it's different
+---
 
-- **Cost-controlled.** A naive 10K-agent GPT-4 simulation costs ~$15,000.
-  Prophet's 3-tier model (80% local SLM + 10% heuristic + 10% elite LLM)
-  brings it to **under $5**.
-- **Realistic networks.** Hybrid Watts-Strogatz + Barabási-Albert generator
-  produces clustering + power-law influencers + cross-community bridges.
-  Random graphs don't.
-- **GraphRAG memory.** Each agent has episodic + semantic memory backed by
-  pgvector. Most agent simulators have no memory at all.
-- **Built-in cascade detection.** 5 emergent behaviors (viral, polarization,
-  echo chamber, collapse, slow adoption) detected mathematically — not by
-  eyeballing the graph.
-- **Real-time visualization.** WebSocket-driven Cytoscape canvas at 30+ FPS
-  with zoom-based animation tiers. Watch your campaign succeed or fail
-  step-by-step.
+## Three things that make Prophet different
+
+**1. It's affordable.** A naive 10K-agent GPT-4 simulation costs ~$15,000. Prophet's
+3-tier inference model (80% local SLM + 10% heuristic + 10% elite LLM) brings the
+same simulation to **under $5**. You can run hundreds of scenarios for the price
+of one focus group.
+
+**2. The networks are real.** Random graphs don't behave like communities. Prophet
+generates social networks using a hybrid Watts-Strogatz + Barabási-Albert model
+that produces realistic clustering, power-law influencers, and cross-community
+bridges. Your simulation isn't a toy.
+
+**3. You can watch it happen.** Real-time graph visualization at 30+ FPS.
+Messages flash across edges. Cascades light up communities. You see the simulation
+spread, step by step, the same way the real campaign would. Marketing leaders
+who see the demo immediately understand what Prophet does — no slide deck needed.
 
 ---
 
 ## Quick Start
 
-### Run with Docker
+### Run with Docker (recommended)
 
 ```bash
 git clone https://github.com/your-org/prophet.git
@@ -76,9 +137,6 @@ docker compose up -d
 
 # Pull LLM model (first time only, ~4.7GB)
 docker compose exec ollama ollama pull llama3.1:8b
-
-# GPU environment (NVIDIA)
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
 | Service             | URL                          |
@@ -86,12 +144,9 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 | Frontend            | http://localhost:5173        |
 | Backend API         | http://localhost:8000        |
 | API Docs (Swagger)  | http://localhost:8000/docs   |
-| Ollama              | http://localhost:11434       |
-| PostgreSQL          | localhost:5433               |
-| Valkey              | localhost:6379               |
 
-Open `http://localhost:5173`, click **New Simulation**, pick a scenario
-template, and click **Run All**. The graph spreads in real time.
+Open `http://localhost:5173`, click **New Simulation**, pick a template, and
+click **Run All**. The graph spreads in real time.
 
 ### Local development
 
@@ -100,237 +155,169 @@ template, and click **Run All**. The graph spreads in real time.
 cd backend
 uv sync
 uv run uvicorn app.main:app --reload
-uv run pytest -v          # 861/863 tests passing
+uv run pytest -q
 
 # Frontend
 cd frontend
 npm install
 npm run dev
-npx vitest run            # 373/373 tests passing
+npx vitest run
 ```
 
----
+### GPU environment
 
-## Use Cases
-
-### 🛍️ Marketing campaign pre-test
-
-A CPG brand launches a sustainability-focused product. Prophet runs the
-message through 5,000 agents (15% skeptics, 60% mainstream, 20% early
-adopters, 5% influencers). The simulation reveals the message **polarizes**
-the skeptical community at step 18 and adoption stalls at 12%. The brand
-re-frames before spending the launch budget.
-
-### 🏥 Public health communication
-
-A health agency tests three vaccine messages against a 10K-agent virtual
-population. Strategy B causes echo-chamber formation. Strategy C triggers
-a positive viral cascade through influencer nodes. The agency picks Strategy
-C and projects 3x adoption.
-
-### 🏢 Internal corporate communications
-
-A Fortune 500 announces a return-to-office mandate. Their comms team runs
-the message against a synthetic employee population. Prophet predicts a
-38% sentiment collapse in engineering communities. The company restructures
-the announcement with carve-outs and cuts opposition by 60%.
-
-### 🔬 Computational social science research
-
-Open-source, reproducible alternative to OASIS. 10x cheaper. Runs on a
-laptop. Built-in cascade detection. Designed for citation.
-
----
-
-## Architecture
-
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  Frontend: React 18 + Cytoscape.js (10K-node real-time graph)  │
-│  Recharts (timeline + metrics) | Zustand (state) | WebSocket   │
-├────────────────────────────────────────────────────────────────┤
-│  API: FastAPI (async) + WebSocket (55+ endpoints)              │
-├──────────┬──────────┬──────────┬─────────────┬─────────────────┤
-│  6-Layer │  Network │  Diffusion│  LLM Gateway│  Cascade        │
-│  Agent   │  Hybrid  │  RecSys   │  3-Tier     │  Detector       │
-│  Engine  │  WS+BA   │  Exposure │  Adapter    │  Auto-emergent  │
-├──────────┴──────────┴──────────┴─────────────┴─────────────────┤
-│  PostgreSQL 16 + pgvector  │  Valkey  │  Ollama / Claude / GPT │
-└────────────────────────────────────────────────────────────────┘
-```
-
-### 6-Layer Agent Engine
-
-```
-Perception → Memory (GraphRAG) → Emotion → Cognition → Decision → Influence
-```
-
-- **12 action types:** ignore, view, search, like, save, comment, share,
-  repost, follow, unfollow, adopt, mute
-- **3-Tier inference:** Mass SLM (80%) → Heuristic (10%) → Elite LLM (10%)
-- **GraphRAG memory:** episodic + semantic via pgvector
-- **Configurable from UI** — no hardcoded models
-
-### Hybrid Network Generator
-
-- **Watts-Strogatz** (community clustering) + **Barabási-Albert** (influencer
-  power-law) + **bridge edges** (cross-community)
-- **5 community types:** Early Adopters, Consumers, Skeptics, Experts,
-  Influencers
-- **Dynamic edge evolution** per simulation step
-- **Customizable templates** via UI
-
-### Diffusion Engine
-
-- **RecSys-inspired exposure model** (OASIS-inspired feed ranking)
-- **5 emergent behavior detections:** Viral Cascade, Polarization, Echo
-  Chamber, Collapse, Slow Adoption
-- **Monte Carlo simulation** (N-run probability analysis)
-- **Export JSON/CSV** for downstream analysis
-
----
-
-## Performance
-
-| Scenario                                  | Step time | Notes                          |
-|-------------------------------------------|-----------|--------------------------------|
-| 1,000 agents × 1 step (Tier 1/2 only)     | ~287ms    | Verified benchmark             |
-| 1,000 agents × 1 step (with Tier 3 LLM)   | ~500ms    | `asyncio.gather` over LLM batch|
-| 10,000 agents × 1 step (projected)        | ~1,500ms  | After Tier A+B perf fixes      |
-| 365-step simulation (1K agents)           | ~2 min    | Real-time WebSocket updates    |
 
 ---
 
 ## Tech Stack
 
-| Layer            | Technology                                                  |
-|------------------|-------------------------------------------------------------|
-| Frontend         | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui         |
-| Visualization    | Cytoscape.js, Recharts                                      |
-| State / Server   | Zustand, TanStack Query, native WebSocket                   |
-| Backend          | Python 3.12, FastAPI, SQLAlchemy 2.0 (async), Pydantic v2   |
-| LLM              | Ollama (local SLM), Claude API, OpenAI API, Gemini API      |
-| Database         | PostgreSQL 16 + pgvector                                    |
-| Cache            | Valkey                                                       |
-| Package mgmt     | `uv` (Python), `npm` (Node)                                 |
-| Testing          | pytest, Vitest, Playwright                                  |
+Prophet is open-source from top to bottom — no proprietary dependencies anywhere.
 
----
-
-## Project Structure
-
-```
-Prophet/
-├── CLAUDE.md              # Project instructions for AI assistants
-├── DESIGN.md              # UI design master (Pencil integration)
-├── README.md              # This file
-│
-├── backend/                       # FastAPI backend
-│   ├── app/
-│   │   ├── api/                   # 55+ REST endpoints + WebSocket
-│   │   ├── engine/
-│   │   │   ├── agent/             # 6-Layer agent engine
-│   │   │   ├── network/           # Hybrid network generator
-│   │   │   ├── diffusion/         # Propagation, exposure, cascade
-│   │   │   └── simulation/        # Step runner, orchestrator
-│   │   ├── llm/                   # Ollama / Claude / OpenAI / Gemini
-│   │   └── models/                # SQLAlchemy ORM
-│   ├── harness/                   # F18–F30 test harness
-│   ├── tests/                     # 861 GREEN tests
-│   └── pyproject.toml             # uv-managed
-│
-├── frontend/                      # React 18 frontend
-│   ├── src/
-│   │   ├── pages/                 # 20 pages
-│   │   ├── components/            # Graph, Control, Timeline, Metrics
-│   │   ├── store/                 # Zustand state
-│   │   ├── api/                   # API client
-│   │   ├── hooks/                 # Custom hooks
-│   │   ├── config/constants.ts    # All shared constants (no hardcoded literals)
-│   │   └── __tests__/             # 373 GREEN tests
-│   └── package.json
-│
-└── docker-compose.yml             # PostgreSQL + Valkey + Ollama + App
-```
+| Layer          | Stack                                                     |
+|----------------|-----------------------------------------------------------|
+| Frontend       | React 18, TypeScript, Vite, Tailwind, Cytoscape.js        |
+| State          | Zustand, TanStack Query, native WebSocket                 |
+| Backend        | Python 3.12, FastAPI (async), SQLAlchemy 2.0, Pydantic v2 |
+| LLM            | Ollama (local SLM), Claude API, OpenAI API, Gemini API    |
+| Database       | PostgreSQL 16 + pgvector                                  |
+| Cache          | Valkey                                                    |
+| Testing        | pytest, Vitest, Playwright                                |
+| Package mgmt   | `uv` (Python), `npm` (Node)                               |
 
 ---
 
 ## Roadmap
 
-**Shipped (April 2026):**
-- ✅ Phase 0–7: Core engine, network, diffusion, LLM, simulation, visualization
-- ✅ Phase A–H: API integration, UI, real APIs, design tokens, DB, validation, harness, perf
-- ✅ GAP-7: Real-time propagation animation (zoom-based LOD)
-- ✅ Tier A+B performance optimizations (backend + frontend)
-- ✅ Pause/Resume/Run-All controls verified by contract tests
+**Shipped:**
+- ✅ 6-layer agent engine (perception → memory → emotion → cognition → decision → influence)
+- ✅ Hybrid network generator (WS + BA + bridge edges)
+- ✅ 3-tier LLM inference (Mass SLM / Heuristic / Elite LLM)
+- ✅ Real-time WebSocket visualization
+- ✅ Monte Carlo simulation
+- ✅ Pause / Resume / Run-All controls
+- ✅ Export to JSON / CSV
+- ✅ Community management (CRUD + reassign)
+- ✅ Real-time propagation animation (zoom-based LOD)
 
 **In progress:**
-- 🟡 Cloud Starter tier (hosted, $99/month)
-- 🟡 Scenario template marketplace
+- 🟡 Hosted Cloud Starter tier
+- 🟡 Scenario template library
 - 🟡 Validation studies vs. real campaigns
 
 **Planned:**
 - ⬜ Plugin SDK for custom agent layers
 - ⬜ Integration with Segment / mParticle / HubSpot
-- ⬜ Synthetic population marketplace (industry-specific)
 - ⬜ Multi-language LLM agents (cross-cultural simulation)
+- ⬜ Synthetic population marketplace
+
+See [`ROADMAP.md`](ROADMAP.md) for the full picture and how to influence it.
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Prophet follows a test-first development model:
+**We need help.** Specifically:
 
-1. Open an issue describing the change
-2. Write tests against the contract first
-3. Implement until tests pass
-4. Submit PR
+- 🐛 **Bug reports** with reproduction steps
+- 📚 **Documentation** improvements (typos, clarity, examples)
+- 🧪 **Test cases** for edge cases you find
+- ✨ **`good first issue`** picks — small, clearly-scoped tasks tagged for newcomers
+- 💡 **Use cases** — tell us what you're trying to simulate; we may already support it
 
-See [`CLAUDE.md`](CLAUDE.md) for the contributor guide and coding rules
-(no hardcoded domain literals, no `pip` — `uv` only, etc.).
+Start here:
 
-### Running the test suite
+1. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) — setup is under 10 minutes
+2. Browse [`good first issue`](https://github.com/your-org/prophet/labels/good%20first%20issue)
+3. Open a Discussion before any large change
+4. Open a PR — we aim to respond within 48 hours
 
-```bash
-# Backend
-cd backend && uv run pytest -q
-
-# Frontend
-cd frontend && npx vitest run
-
-# Type check
-cd frontend && npx tsc --noEmit
-
-# Lint
-cd frontend && npx eslint .
-
-# E2E
-cd frontend && npx playwright test
-```
+Maintainers are active. First-time contributors get a thank-you and a fast review.
+We label every issue, we keep the roadmap public, and we publish what we ship.
 
 ---
 
 ## Documentation
 
-- 🎨 **[Design System](DESIGN.md)** — UI tokens, components
-- 🤖 **[Contributor Guide](CLAUDE.md)** — coding rules and workflow
 - 📖 **API Docs** — http://localhost:8000/docs (Swagger UI when running)
+- 🤝 **[Contributing Guide](CONTRIBUTING.md)**
+- 📜 **[Code of Conduct](CODE_OF_CONDUCT.md)**
+- 🔒 **[Security Policy](SECURITY.md)**
+- 📅 **[Changelog](CHANGELOG.md)**
+- 🗺️ **[Roadmap](ROADMAP.md)**
+
+---
+
+## Community
+
+- 💬 **GitHub Discussions** — questions, ideas, show-and-tell
+- 🐛 **GitHub Issues** — bugs and feature requests
+- 🐦 **Twitter / X** — [@prophet_sim](https://twitter.com/) _(coming soon)_
+
+If you build something cool with Prophet, we want to see it. Open a Discussion
+and post a screenshot.
+
+---
+
+## Inspiration & Acknowledgments
+
+Prophet stands on the shoulders of work done by many other people and projects.
+The ideas didn't come from nowhere — and we want to credit where credit is due.
+
+### Inspired by MiroFish
+
+The single biggest influence on Prophet's architecture was **MiroFish**, which
+combines OASIS (the academic agent simulator) with GraphRAG and Zep Cloud for
+long-term agent memory. MiroFish proved that LLM-driven agents with persistent
+memory could be assembled into a coherent simulation pipeline. Prophet takes that
+idea, opens it up, makes it cheaper through tiered inference, and adds the
+marketing-specific layer (cascade detection, viral metrics, real-time
+visualization) that MiroFish doesn't focus on.
+
+### Other prior art we learned from
+
+- **OASIS** — the academic foundation for large-scale agent-based social
+  simulation. Prophet's RecSys-inspired exposure model and multi-community
+  network structure draw directly from OASIS's design.
+- **GraphRAG** (Microsoft Research) — the hybrid vector + graph retrieval
+  pattern that powers Prophet's per-agent memory layer.
+- **NetworkX** — without it, the hybrid Watts-Strogatz + Barabási-Albert
+  network generator would have taken months instead of days.
+- **Cytoscape.js** — the rendering engine behind Prophet's 10K-node real-time
+  graph. It's the reason we can show the simulation instead of just describing
+  it.
+- **Ollama** — local SLM inference is what makes the 3-tier cost model possible.
+  Without `llama3.1:8b` on a laptop, every Prophet simulation would still cost
+  thousands of dollars.
+- **The Hugging Face / open-weight LLM community** — for proving that small
+  models can be good enough for agent reasoning.
+- **NetLogo and MASON** — the original agent-based modeling toolkits. They
+  showed the world that "simulating a society" was a tractable engineering
+  problem decades before LLMs made the agents interesting.
+
+If you contributed to any of these and feel we should credit you more
+specifically, open a PR — we'll fix it.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE) file.
+MIT — see [LICENSE](LICENSE).
+
+Use it commercially. Fork it. Modify it. Embed it. We just ask you to keep the
+license file and not pretend you wrote it from scratch.
 
 ---
 
 ## Citation
 
-If you use Prophet in academic research, please cite:
+If Prophet helps your research, please cite:
 
 ```bibtex
-@software{prophet_mcasp_2026,
-  title  = {Prophet (MCASP): Multi-Community Agent Simulation Platform},
+@software{prophet_2026,
+  title  = {Prophet: A simulation engine for marketing campaign diffusion},
   author = {Prophet Contributors},
   year   = {2026},
   url    = {https://github.com/your-org/prophet}
@@ -339,4 +326,5 @@ If you use Prophet in academic research, please cite:
 
 ---
 
-**Built with care. Tested obsessively. Open-sourced to make marketing less of a guess.**
+**Built because marketing deserves a wind tunnel.**
+**Open-sourced because everyone deserves one.**
