@@ -28,8 +28,13 @@ import {
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
-import type { SimulationRun } from '../../types/simulation';
+import type { SimulationRun, SimulationStatus } from '../../types/simulation';
 import type { ScenarioInfo, CreateSimulationConfig } from '../../api/client';
+import {
+  SIM_STATUS,
+  TERMINAL_SIM_STATUSES,
+  STARTABLE_SIM_STATUSES,
+} from '@/config/constants';
 import ThemeToggle from '../shared/ThemeToggle';
 import InjectEventModal from '../shared/InjectEventModal';
 import ReplayModal from '../shared/ReplayModal';
@@ -94,12 +99,12 @@ export default function ControlPanel() {
     maxStepsRef.current = simulation?.max_steps ?? 365;
   });
 
-  // Auto-step loop: runs steps automatically while status is "running"
+  // Auto-step loop: runs steps automatically while status is RUNNING
   // Skip when runAll is active — the server handles all steps in that case.
   // Uses refs for simulation ID and max_steps to avoid interval teardown on
   // simulation object reference changes.
   useEffect(() => {
-    if (status !== "running" || !simIdRef.current || runAllLoading) {
+    if (status !== SIM_STATUS.RUNNING || !simIdRef.current || runAllLoading) {
       if (stepIntervalRef.current) {
         clearInterval(stepIntervalRef.current);
         stepIntervalRef.current = null;
@@ -118,11 +123,11 @@ export default function ControlPanel() {
         appendStep(result);
         // Check completion
         if (result.step + 1 >= maxStepsRef.current) {
-          setStatus("completed");
+          setStatus(SIM_STATUS.COMPLETED);
         }
       } catch {
         // Step failed — pause
-        setStatus("paused");
+        setStatus(SIM_STATUS.PAUSED);
       } finally {
         stepInFlightRef.current = false;
       }
@@ -221,7 +226,7 @@ export default function ControlPanel() {
         max_steps: 365,
       });
       setSimulation(sim);
-      setStatus("configured");
+      setStatus(SIM_STATUS.CONFIGURED);
     } catch (err) {
       alert(`Failed to create simulation: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
@@ -268,22 +273,22 @@ export default function ControlPanel() {
     navigate("/setup");
   };
 
-  const isRunning = status === "running";
+  const isRunning = status === SIM_STATUS.RUNNING;
 
   const handlePlay = async () => {
     if (!simulation?.simulation_id) return;
     try {
       const simId = simulation.simulation_id;
-      if (status === 'configured' || status === 'created') {
+      if (STARTABLE_SIM_STATUSES.includes(status)) {
         await apiClient.simulations.start(simId);
-      } else if (status === 'failed' || status === 'completed') {
+      } else if (TERMINAL_SIM_STATUSES.includes(status)) {
         // Recover from terminal state: reset → start
         await apiClient.simulations.stop(simId);
         await apiClient.simulations.start(simId);
       } else {
         await apiClient.simulations.resume(simId);
       }
-      setStatus('running');
+      setStatus(SIM_STATUS.RUNNING);
     } catch { /* status unchanged on failure */ }
   };
 
@@ -291,7 +296,7 @@ export default function ControlPanel() {
     try {
       if (simulation?.simulation_id) {
         await apiClient.simulations.pause(simulation.simulation_id);
-        setStatus('paused');
+        setStatus(SIM_STATUS.PAUSED);
       }
     } catch { /* status unchanged */ }
   };
@@ -310,7 +315,7 @@ export default function ControlPanel() {
     try {
       if (simulation?.simulation_id) {
         await apiClient.simulations.stop(simulation.simulation_id);
-        setStatus('created');
+        setStatus(SIM_STATUS.CREATED);
       }
     } catch { /* ignore */ }
   };
@@ -318,10 +323,10 @@ export default function ControlPanel() {
   const handleRunAll = async () => {
     if (!simulation?.simulation_id || runAllLoading) return;
     setRunAllLoading(true);
-    setStatus('running');
+    setStatus(SIM_STATUS.RUNNING);
     try {
       const report = await apiClient.simulations.runAll(simulation.simulation_id);
-      setStatus(report.status as 'completed' | 'failed' | 'paused');
+      setStatus(report.status as SimulationStatus);
     } catch {
       // leave status unchanged on failure
     } finally {
@@ -380,16 +385,16 @@ export default function ControlPanel() {
             className={`w-2 h-2 rounded-full ${
               isRunning
                 ? "bg-[var(--sentiment-positive)] animate-pulse-dot"
-                : status === "paused"
+                : status === SIM_STATUS.PAUSED
                   ? "bg-[var(--sentiment-warning)]"
                   : "bg-[var(--muted-foreground)]"
             }`}
           />
           {isRunning
             ? `Running`
-            : status === "paused"
+            : status === SIM_STATUS.PAUSED
               ? "Paused"
-              : status === "completed"
+              : status === SIM_STATUS.COMPLETED
                 ? "Completed"
                 : "Ready"}
           <span className="text-[var(--muted-foreground)]">
@@ -577,7 +582,7 @@ export default function ControlPanel() {
           icon={runAllLoading ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <ChevronsRight className="w-4 h-4" />}
           label="Run All"
           onClick={handleRunAll}
-          disabled={isRunning || runAllLoading || !simulation || (status !== 'configured' && status !== 'paused')}
+          disabled={isRunning || runAllLoading || !simulation || (status !== SIM_STATUS.CONFIGURED && status !== SIM_STATUS.PAUSED)}
         />
         <ControlButton
           testId="step-btn"

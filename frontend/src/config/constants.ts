@@ -145,3 +145,32 @@ export const OPENAI_MODELS = [
   "gpt-4o-mini",
   "gpt-4-turbo",
 ] as const;
+
+// ── Simulation status ──────────────────────────────────────────────────────
+// Mirrors backend SimulationStatus enum (backend/app/api/schemas.py).
+// Always import from here instead of hardcoding string literals.
+//
+// @spec docs/spec/04_SIMULATION_SPEC.md#simulation-status
+
+import type { SimulationStatus } from "@/types/simulation";
+
+export const SIM_STATUS = {
+  CREATED: "created",
+  CONFIGURED: "configured",
+  RUNNING: "running",
+  PAUSED: "paused",
+  COMPLETED: "completed",
+  FAILED: "failed",
+} as const satisfies Record<string, SimulationStatus>;
+
+/** Statuses representing terminal/end states for a simulation run. */
+export const TERMINAL_SIM_STATUSES: readonly SimulationStatus[] = [
+  SIM_STATUS.COMPLETED,
+  SIM_STATUS.FAILED,
+] as const;
+
+/** Statuses from which a fresh `start()` is the correct play action. */
+export const STARTABLE_SIM_STATUSES: readonly SimulationStatus[] = [
+  SIM_STATUS.CREATED,
+  SIM_STATUS.CONFIGURED,
+] as const;
