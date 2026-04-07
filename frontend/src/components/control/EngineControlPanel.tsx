@@ -8,6 +8,7 @@ import { Cpu, DollarSign, Gauge, Brain, Zap } from "lucide-react";
 import { apiClient } from "../../api/client";
 import { useSimulationStore } from "../../store/simulationStore";
 import type { TierDistribution, EngineImpactReport } from "../../types/simulation";
+import { SIM_STATUS } from "@/config/constants";
 
 interface EngineControlResponse {
   tier_distribution: TierDistribution;
@@ -25,7 +26,7 @@ export default function EngineControlPanel() {
   const [impact, setImpact] = useState<EngineImpactReport | null>(null);
   const [tierDist, setTierDist] = useState<TierDistribution | null>(null);
 
-  const isPaused = status === "paused";
+  const isPaused = status === SIM_STATUS.PAUSED;
 
   const handleApply = useCallback(async () => {
     if (!simulation?.simulation_id || !isPaused) return;

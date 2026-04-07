@@ -9,6 +9,7 @@ import StatCard from "../components/shared/StatCard";
 import { apiClient, type CommunityInfo } from "../api/client";
 import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { useSimulationStore } from "../store/simulationStore";
+import { SIM_STATUS } from "@/config/constants";
 
 const COMMUNITIES = [
   {
@@ -136,7 +137,7 @@ export default function CommunitiesDetailPage() {
   const [communities, setCommunities] = useState(COMMUNITIES);
   const [loading, setLoading] = useState(false);
   const simStatus = useSimulationStore((s) => s.status);
-  const canEdit = simulationId != null && (simStatus === "paused" || simStatus === "configured" || simStatus === "created");
+  const canEdit = simulationId != null && (simStatus === SIM_STATUS.PAUSED || simStatus === SIM_STATUS.CONFIGURED || simStatus === SIM_STATUS.CREATED);
   // Use getState() so addToast subscription doesn't trigger re-renders
   const addToast = (t: { type: 'info' | 'success' | 'warning' | 'error'; message: string }) => useSimulationStore.getState().addToast(t);
 

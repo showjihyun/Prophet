@@ -3,7 +3,7 @@
  * @spec docs/spec/07_FRONTEND_SPEC.md#state-management
  */
 import { create } from "zustand";
-import { LS_KEY_THEME, LS_KEY_SIMULATION_ID, LS_KEY_PROJECT_ID, DEFAULT_SLM_LLM_RATIO, DEFAULT_SIMULATION_SPEED } from "@/config/constants";
+import { LS_KEY_THEME, LS_KEY_SIMULATION_ID, LS_KEY_PROJECT_ID, DEFAULT_SLM_LLM_RATIO, DEFAULT_SIMULATION_SPEED, SIM_STATUS } from "@/config/constants";
 import type {
   SimulationRun,
   SimulationStatus,
@@ -86,7 +86,7 @@ interface SimulationStore {
 
 export const useSimulationStore = create<SimulationStore>((set) => ({
   simulation: null,
-  status: "created",
+  status: SIM_STATUS.CREATED,
   currentStep: 0,
   steps: [],
   latestStep: null,

@@ -691,6 +691,99 @@ export interface CommunityTemplate { ... }
 
 ---
 
+## 9.5 Coding Conventions — No Hardcoded Domain Literals
+
+> **Rule:** Domain enum values (simulation status, agent action, tier, etc.) MUST
+> NOT appear as inline string literals in component or page code. Always import
+> from `@/config/constants` (or extend it if a new constant is needed).
+
+### Why
+
+- **Type safety:** TypeScript can catch typos like `'paussed'` vs `SIM_STATUS.PAUSED`.
+- **Single source of truth:** Renaming a status only requires touching constants.ts.
+- **Refactor safety:** Find-all-usages works on a symbol, not a free string.
+- **Backend parity:** Constants mirror backend enum (`backend/app/api/schemas.py`),
+  so any drift is loud at the import site.
+
+### Where to add new constants
+
+`frontend/src/config/constants.ts` — group by domain:
+
+```typescript
+// Mirror of backend SimulationStatus enum
+export const SIM_STATUS = {
+  CREATED: "created",
+  CONFIGURED: "configured",
+  RUNNING: "running",
+  PAUSED: "paused",
+  COMPLETED: "completed",
+  FAILED: "failed",
+} as const satisfies Record<string, SimulationStatus>;
+
+export const TERMINAL_SIM_STATUSES: readonly SimulationStatus[] = [
+  SIM_STATUS.COMPLETED,
+  SIM_STATUS.FAILED,
+] as const;
+
+export const STARTABLE_SIM_STATUSES: readonly SimulationStatus[] = [
+  SIM_STATUS.CREATED,
+  SIM_STATUS.CONFIGURED,
+] as const;
+```
+
+The `as const satisfies Record<string, SimulationStatus>` pattern guarantees the
+constant values stay in sync with the type union.
+
+### Allowed exceptions
+
+- **Type union definitions** (`types/simulation.ts`) — these define the canonical
+  values, so the literals must live there.
+- **Test fixtures** in `__tests__/` — tests assert against literal API responses.
+- **Different domains** with their own status field (e.g., Monte Carlo job phases,
+  scenario draft state) — create a separate constant group, do not reuse SIM_STATUS.
+
+### What to import
+
+| Use case | Use |
+|----------|-----|
+| Single status comparison | `status === SIM_STATUS.PAUSED` |
+| Set membership / multiple checks | `STARTABLE_SIM_STATUSES.includes(status)` |
+| Setting state | `setStatus(SIM_STATUS.RUNNING)` |
+| Default initial value | `status: SIM_STATUS.CREATED` |
+
+### Anti-patterns
+
+```typescript
+// ❌ Wrong — inline literal
+if (status === 'paused') { ... }
+setStatus('running');
+
+// ❌ Wrong — duplicated set
+if (status === 'completed' || status === 'failed') { ... }
+
+// ✅ Right
+if (status === SIM_STATUS.PAUSED) { ... }
+setStatus(SIM_STATUS.RUNNING);
+if (TERMINAL_SIM_STATUSES.includes(status)) { ... }
+```
+
+### Enforcement
+
+PR review must reject inline domain literals. Future improvement: ESLint rule
+(`no-restricted-syntax`) to flag bare string literals matching SimulationStatus
+values outside `config/constants.ts` and `types/simulation.ts`.
+
+### Other domains that follow the same rule
+
+| Constant | Source | File |
+|----------|--------|------|
+| `SIM_STATUS` | SimulationStatus enum | `config/constants.ts` |
+| Agent actions | `AgentAction` type | TBD: extract to constants when first hardcoded |
+| LLM tiers | tier 1/2/3 | TBD: extract when reused |
+| Engine status badges | derived from SimulationStatus | TBD: derive from SIM_STATUS |
+
+---
+
 ## 10. Error Specification
 
 | Situation | Recovery | User Feedback |

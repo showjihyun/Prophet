@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
-import { LS_KEY_SIMULATION_ID } from "@/config/constants";
+import { LS_KEY_SIMULATION_ID, SIM_STATUS } from "@/config/constants";
 import { FolderOpen, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
 import CommunityPanel from "../components/graph/CommunityPanel";
@@ -94,7 +94,7 @@ export default function SimulationPage() {
   // setState is deferred via queueMicrotask to avoid calling it synchronously
   // inside the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (status === 'completed' && stepsLength > 0) {
+    if (status === SIM_STATUS.COMPLETED && stepsLength > 0) {
       queueMicrotask(() => setReportOpen(true));
     }
   }, [status, stepsLength]);
@@ -187,7 +187,7 @@ export default function SimulationPage() {
         <AgentInspector
           agentId={selectedAgentId}
           simulationId={simulation.simulation_id}
-          isPaused={status === "paused"}
+          isPaused={status === SIM_STATUS.PAUSED}
         />
       )}
 

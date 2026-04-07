@@ -302,6 +302,11 @@ Prophet/
 - React 18 — `use client` 없음 (Vite SPA)
 - Zustand store는 `src/store/` 에만
 - API 호출은 `src/api/client.ts` 를 통해서만
+- **⛔ 도메인 enum 리터럴 하드코딩 금지** — `SimulationStatus`, `AgentAction` 등의
+  값은 절대 인라인 문자열로 쓰지 않는다. `@/config/constants`의 `SIM_STATUS`,
+  `TERMINAL_SIM_STATUSES`, `STARTABLE_SIM_STATUSES` 등 상수를 사용한다.
+  새 enum 값이 필요하면 `constants.ts`에 먼저 추가한 후 import해서 쓴다.
+  SPEC: `docs/spec/07_FRONTEND_SPEC.md#95-coding-conventions--no-hardcoded-domain-literals`
 
 ### DB
 - 모든 마이그레이션은 Alembic으로 (`uv run alembic revision --autogenerate`)

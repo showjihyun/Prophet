@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiClient, type AgentDetail, type MemoryRecord } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";
+import { SIM_STATUS } from "@/config/constants";
 
 // Community color map for deriving connection colors from graph data
 const COMMUNITY_COLORS: Record<string, string> = {
@@ -374,8 +375,8 @@ export default function AgentDetailPage() {
         actions={
           <button
             onClick={() => setInterveneOpen(true)}
-            disabled={status !== 'paused'}
-            title={status !== 'paused' ? "Pause simulation to intervene" : undefined}
+            disabled={status !== SIM_STATUS.PAUSED}
+            title={status !== SIM_STATUS.PAUSED ? "Pause simulation to intervene" : undefined}
             className="h-9 px-4 text-sm font-medium text-white rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: 'var(--sentiment-positive)' }}
           >

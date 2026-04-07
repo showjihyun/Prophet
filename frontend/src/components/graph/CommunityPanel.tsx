@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { SkeletonList } from "../shared/LoadingSpinner";
+import { SIM_STATUS } from "@/config/constants";
 
 interface CommunityItem {
   id: string;
@@ -76,7 +77,7 @@ export default function CommunityPanel() {
   const status = useSimulationStore((s) => s.status);
   const latestStep = useSimulationStore((s) => s.latestStep);
   const hasSteps = useSimulationStore((s) => s.steps.length > 0);
-  const isLoading = hasSimulation && status === "running" && !hasSteps;
+  const isLoading = hasSimulation && status === SIM_STATUS.RUNNING && !hasSteps;
 
   // Build communities from live data or fall back to mock
   const communities = useMemo<CommunityItem[]>(() => {
