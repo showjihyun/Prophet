@@ -35,25 +35,7 @@ import PageNav from "../components/shared/PageNav";
 import AgentInterveneModal from "../components/shared/AgentInterveneModal";
 import EgoGraph from "../components/graph/EgoGraph";
 
-const MOCK_AGENT = {
-  id: "A-0042",
-  agentNumber: 3847,
-  community: "Alpha",
-  communityColor: "var(--community-alpha)",
-  influence: 98.2,
-  connections: 247,
-  subscribers: 12,
-  trust: 0.87,
-  personality: {
-    Openness: 78,
-    Skepticism: 42,
-    Adaptability: 65,
-    Advocacy: 88,
-    "Trust/Safety": 71,
-  },
-  memorySummary:
-    "Agent has been a consistent advocate for the primary message within the Alpha community. Recent interactions show increasing trust with Bridge community members. Memory includes 34 episodic events, 12 semantic concepts related to brand messaging, and active social connections with 5 high-influence peers.",
-};
+// MOCK_AGENT removed — page requires a real agent record from the API.
 
 const SENTIMENT_DATA = [
   { day: "D41", positive: 60, negative: 20 },
@@ -73,14 +55,8 @@ interface Interaction {
   time: string;
 }
 
-const MOCK_INTERACTIONS: Interaction[] = [
-  { target: "B-0091", type: "Share", sentiment: "Positive", message: "Great insight on the campaign strategy, sharing with my network...", time: "2h ago" },
-  { target: "A-0187", type: "Reply", sentiment: "Positive", message: "I agree with the approach. The data supports this direction.", time: "4h ago" },
-  { target: "BR-0012", type: "Influence", sentiment: "Neutral", message: "Bridging the gap between Alpha and Beta communities on this topic.", time: "6h ago" },
-  { target: "D-0067", type: "Mention", sentiment: "Positive", message: "Referenced Agent D-0067's analysis in the community discussion.", time: "8h ago" },
-  { target: "G-0055", type: "Share", sentiment: "Negative", message: "Disagreeing with the Gamma community's stance on this issue.", time: "12h ago" },
-  { target: "A-0334", type: "Reply", sentiment: "Positive", message: "Excellent follow-up on yesterday's interaction chain.", time: "1d ago" },
-];
+// MOCK_INTERACTIONS removed — derivedInteractions (from real step history) is the
+// single source of truth. See `derivedInteractions` useMemo below.
 
 const SENTIMENT_STYLES: Record<string, React.CSSProperties> = {
   Positive: { backgroundColor: "color-mix(in srgb, var(--sentiment-positive) 15%, transparent)", color: "var(--sentiment-positive)" },
@@ -107,16 +83,7 @@ interface ConnectionItem {
   influence: number;
 }
 
-const MOCK_CONNECTIONS: ConnectionItem[] = [
-  { id: "a1", name: "Agent #1043", community: "Alpha", color: "#3b82f6", trust: 0.92, influence: 0.85 },
-  { id: "a2", name: "Agent #4214", community: "Beta", color: "#22c55e", trust: 0.87, influence: 0.72 },
-  { id: "a3", name: "Agent #0891", community: "Alpha", color: "#3b82f6", trust: 0.84, influence: 0.68 },
-  { id: "a4", name: "Agent #2301", community: "Gamma", color: "#f97316", trust: 0.79, influence: 0.61 },
-  { id: "a5", name: "Agent #7782", community: "Delta", color: "#a855f7", trust: 0.75, influence: 0.55 },
-  { id: "a6", name: "Agent #0012", community: "Bridge", color: "#ef4444", trust: 0.73, influence: 0.90 },
-  { id: "a7", name: "Agent #5567", community: "Beta", color: "#22c55e", trust: 0.71, influence: 0.48 },
-  { id: "a8", name: "Agent #3344", community: "Alpha", color: "#3b82f6", trust: 0.68, influence: 0.52 },
-];
+// MOCK_CONNECTIONS removed — `connections` state is loaded from the network API.
 
 // ---------------------------------------------------------------------------
 // Mock messages data for the Messages tab
@@ -132,64 +99,7 @@ interface MessageItem {
   replyTo?: string;
 }
 
-const MOCK_MESSAGES: MessageItem[] = [
-  {
-    id: "m1",
-    type: "share",
-    content: "The AI camera phone looks promising. Battery specs need verification though.",
-    timestamp: "2m ago",
-    sentiment: "positive",
-    reach: 47,
-    reactions: { like: 12, comment: 3, repost: 2 },
-  },
-  {
-    id: "m2",
-    type: "comment",
-    content: "Responding to Agent #1043: I agree the camera quality is competitive, but the price point concerns me.",
-    timestamp: "15m ago",
-    sentiment: "neutral",
-    reach: 23,
-    reactions: { like: 5, comment: 1, repost: 0 },
-    replyTo: "Agent #1043",
-  },
-  {
-    id: "m3",
-    type: "repost",
-    content: "RT @Agent #4214: This campaign is gaining traction in the Beta community. Watch the cascade.",
-    timestamp: "32m ago",
-    sentiment: "positive",
-    reach: 89,
-    reactions: { like: 24, comment: 7, repost: 15 },
-    replyTo: "Agent #4214",
-  },
-  {
-    id: "m4",
-    type: "adopt",
-    content: "Decision: Adopting the product. Key factor: trusted recommendation from Agent #0592.",
-    timestamp: "1h ago",
-    sentiment: "positive",
-    reach: 12,
-    reactions: { like: 3, comment: 0, repost: 1 },
-  },
-  {
-    id: "m5",
-    type: "comment",
-    content: "I'm skeptical about the marketing claims. Has anyone actually tested the AI features?",
-    timestamp: "2h ago",
-    sentiment: "negative",
-    reach: 56,
-    reactions: { like: 8, comment: 12, repost: 4 },
-  },
-  {
-    id: "m6",
-    type: "share",
-    content: "Sharing expert analysis: The technology behind the AI camera is solid, based on the review from Community Delta.",
-    timestamp: "3h ago",
-    sentiment: "positive",
-    reach: 134,
-    reactions: { like: 31, comment: 9, repost: 18 },
-  },
-];
+// MOCK_MESSAGES removed — apiMessages is the source of truth.
 
 const TABS = ["Activity", "Connections", "Messages"] as const;
 
@@ -201,23 +111,57 @@ const COMMUNITY_ID_TO_NAME: Record<string, { name: string; color: string }> = {
   E: { name: "Bridge", color: "var(--community-bridge)" },
 };
 
-function apiToAgent(a: AgentDetail) {
-  const comm = COMMUNITY_ID_TO_NAME[a.community_id] ?? { name: a.community_id, color: "var(--muted-foreground)" };
+type AgentView = {
+  id: string;
+  agentNumber: string;
+  community: string;
+  communityColor: string;
+  influence: number;
+  connections: number;
+  subscribers: number;
+  trust: number;
+  personality: Record<string, number>;
+  memorySummary: string;
+};
+
+function apiToAgent(
+  a: AgentDetail,
+  communityNameOverride?: string,
+): AgentView {
+  // The agent endpoint returns community_id as a UUID. The static
+  // COMMUNITY_ID_TO_NAME map only knows letter keys (A-E). If we have an
+  // override (e.g. from the network endpoint's community_name) use it,
+  // otherwise show a friendly fallback rather than the raw UUID.
+  const fromMap = COMMUNITY_ID_TO_NAME[a.community_id];
+  const community =
+    communityNameOverride ??
+    fromMap?.name ??
+    "Community";
+  const communityColor = fromMap?.color ?? "var(--muted-foreground)";
+
   return {
     id: a.agent_id,
-    agentNumber: a.agent_id.replace(/\D/g, "").slice(-4) || a.agent_id.slice(0, 6),
-    community: comm.name,
-    communityColor: comm.color,
+    // Show first 4 hex chars of the UUID — stable, never empty.
+    agentNumber: a.agent_id.replace(/-/g, "").slice(0, 4),
+    community,
+    communityColor,
     influence: Math.round(a.influence_score * 1000) / 10,
     connections: 0,
     subscribers: 0,
     trust: a.emotion?.trust ?? 0,
     personality: Object.fromEntries(
-      Object.entries(a.personality ?? {}).map(([k, v]) => [k.charAt(0).toUpperCase() + k.slice(1), Math.round(v * 100)]),
+      Object.entries(a.personality ?? {}).map(([k, v]) => [
+        k.charAt(0).toUpperCase() + k.slice(1),
+        Math.round(v * 100),
+      ]),
     ),
-    memorySummary: a.memories.length > 0
-      ? a.memories.slice(0, 3).map((m) => m.content ?? String(m)).join(" | ")
-      : MOCK_AGENT.memorySummary,
+    memorySummary:
+      a.memories.length > 0
+        ? a.memories
+            .slice(0, 3)
+            .map((m) => m.content ?? String(m))
+            .join(" | ")
+        : "No recorded memories yet — agent has not produced any episodic events in this run.",
   };
 }
 
@@ -234,15 +178,19 @@ export default function AgentDetailPage() {
   const [connSearch, setConnSearch] = useState("");
   const [msgFilter, setMsgFilter] = useState("all");
 
-  const [agent, setAgent] = useState({ ...MOCK_AGENT, id: agentId ?? MOCK_AGENT.id });
+  // Agent state is nullable — we render a loading state until the real
+  // record arrives from the API. (We used to seed with mock data on first
+  // paint, which leaked fake info into the UI before the real record loaded.)
+  const [agent, setAgent] = useState<AgentView | null>(null);
   const [agentLoading, setAgentLoading] = useState<boolean>(true);
   const [agentNotFound, setAgentNotFound] = useState<boolean>(false);
   // Connections start empty; populated when network data loads (no mock fallback).
   const [connections, setConnections] = useState<ConnectionItem[]>([]);
 
-  // Fetch real agent data from API. Do NOT fall back to mock on failure —
-  // showing fake data for a real agent id is more confusing than an explicit
-  // empty/not-found state. SPEC: 18_FRONTEND_PERFORMANCE_SPEC §5.2.
+  // Fetch real agent data + the network graph in parallel. The network
+  // payload carries `community_name` which is friendlier than the raw
+  // community_id UUID returned by the agent endpoint. We fall back to
+  // the agent endpoint alone if network is unavailable.
   useEffect(() => {
     if (!simulationId || !agentId) {
       setAgentLoading(false);
@@ -251,20 +199,35 @@ export default function AgentDetailPage() {
     let cancelled = false;
     setAgentLoading(true);
     setAgentNotFound(false);
-    apiClient.agents
-      .get(simulationId, agentId)
-      .then((res) => {
+
+    Promise.all([
+      apiClient.agents.get(simulationId, agentId),
+      apiClient.network.get(simulationId).catch(() => null),
+    ])
+      .then(([detail, network]) => {
         if (cancelled) return;
-        setAgent(apiToAgent(res));
+        let communityName: string | undefined;
+        if (network) {
+          const node = network.nodes.find(
+            (n) => String(n.data.agent_id) === agentId,
+          );
+          const name = node?.data.community_name;
+          if (typeof name === "string" && name.length > 0) {
+            communityName = name;
+          }
+        }
+        setAgent(apiToAgent(detail, communityName));
         setAgentNotFound(false);
       })
       .catch(() => {
         if (cancelled) return;
+        setAgent(null);
         setAgentNotFound(true);
       })
       .finally(() => {
         if (!cancelled) setAgentLoading(false);
       });
+
     return () => {
       cancelled = true;
     };
@@ -391,9 +354,34 @@ export default function AgentDetailPage() {
     [msgFilter, messagesSource],
   );
 
-  // Loading / not-found gates: avoid rendering MOCK_AGENT in the body when
-  // the real agent could not be loaded.
-  if (agentLoading) {
+  // Loading / not-found / no-sim gates — never render the body with a
+  // null agent and never fall back to mock data.
+  if (!simulationId) {
+    return (
+      <div
+        data-testid="agent-detail-page"
+        className="min-h-screen bg-[var(--muted)] flex items-center justify-center"
+      >
+        <div className="max-w-md text-center flex flex-col items-center gap-4 p-8">
+          <h2 className="text-xl font-semibold text-[var(--foreground)]">
+            No active simulation
+          </h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Open a simulation in <code className="font-mono">/simulation</code>{" "}
+            and click an agent in the graph to see its details here.
+          </p>
+          <button
+            onClick={() => navigate("/simulation")}
+            className="h-9 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
+          >
+            Go to simulation
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (agentLoading || agent === null) {
     return (
       <div
         data-testid="agent-detail-page"

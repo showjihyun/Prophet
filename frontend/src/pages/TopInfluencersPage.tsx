@@ -48,46 +48,8 @@ const COMMUNITY_COLORS: Record<string, string> = {
   Bridge: "var(--community-bridge)",
 };
 
-const MOCK_INFLUENCERS: Influencer[] = [
-  { rank: 1, agentId: "A-0042", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 98.2, sentiment: "Positive", chains: 24, connections: 247, status: "Active" },
-  { rank: 2, agentId: "BR-0012", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 96.5, sentiment: "Neutral", chains: 31, connections: 189, status: "Active" },
-  { rank: 3, agentId: "B-0091", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 94.7, sentiment: "Positive", chains: 19, connections: 203, status: "Active" },
-  { rank: 4, agentId: "D-0067", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 92.1, sentiment: "Positive", chains: 17, connections: 178, status: "Active" },
-  { rank: 5, agentId: "A-0187", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 91.5, sentiment: "Neutral", chains: 15, connections: 156, status: "Active" },
-  { rank: 6, agentId: "BR-0034", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 90.2, sentiment: "Negative", chains: 22, connections: 134, status: "Idle" },
-  { rank: 7, agentId: "B-0203", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 88.3, sentiment: "Positive", chains: 12, connections: 145, status: "Active" },
-  { rank: 8, agentId: "D-0145", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 86.8, sentiment: "Neutral", chains: 14, connections: 121, status: "Active" },
-  { rank: 9, agentId: "G-0055", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 85.9, sentiment: "Positive", chains: 11, connections: 132, status: "Idle" },
-  { rank: 10, agentId: "A-0334", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 87.1, sentiment: "Neutral", chains: 13, connections: 118, status: "Active" },
-  { rank: 11, agentId: "G-0102", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 84.5, sentiment: "Positive", chains: 10, connections: 115, status: "Active" },
-  { rank: 12, agentId: "A-0501", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 83.2, sentiment: "Neutral", chains: 9, connections: 108, status: "Active" },
-  { rank: 13, agentId: "B-0312", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 82.7, sentiment: "Positive", chains: 8, connections: 99, status: "Active" },
-  { rank: 14, agentId: "D-0289", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 81.3, sentiment: "Negative", chains: 7, connections: 95, status: "Idle" },
-  { rank: 15, agentId: "BR-0056", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 80.1, sentiment: "Neutral", chains: 18, connections: 142, status: "Active" },
-  { rank: 16, agentId: "G-0178", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 79.4, sentiment: "Positive", chains: 6, connections: 88, status: "Active" },
-  { rank: 17, agentId: "A-0623", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 78.6, sentiment: "Neutral", chains: 5, connections: 82, status: "Active" },
-  { rank: 18, agentId: "B-0445", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 77.9, sentiment: "Positive", chains: 7, connections: 91, status: "Active" },
-  { rank: 19, agentId: "D-0401", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 76.3, sentiment: "Neutral", chains: 4, connections: 76, status: "Idle" },
-  { rank: 20, agentId: "G-0234", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 75.8, sentiment: "Negative", chains: 3, connections: 68, status: "Active" },
-  { rank: 21, agentId: "A-0745", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 74.2, sentiment: "Positive", chains: 6, connections: 72, status: "Active" },
-  { rank: 22, agentId: "BR-0078", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 73.5, sentiment: "Neutral", chains: 14, connections: 128, status: "Active" },
-  { rank: 23, agentId: "B-0567", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 72.1, sentiment: "Positive", chains: 5, connections: 65, status: "Active" },
-  { rank: 24, agentId: "D-0512", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 71.4, sentiment: "Neutral", chains: 3, connections: 59, status: "Idle" },
-  { rank: 25, agentId: "G-0311", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 70.9, sentiment: "Positive", chains: 4, connections: 61, status: "Active" },
-  { rank: 26, agentId: "A-0889", community: "Alpha", communityColor: COMMUNITY_COLORS.Alpha, influenceScore: 69.7, sentiment: "Negative", chains: 2, connections: 54, status: "Active" },
-  { rank: 27, agentId: "B-0689", community: "Beta", communityColor: COMMUNITY_COLORS.Beta, influenceScore: 68.3, sentiment: "Neutral", chains: 3, connections: 48, status: "Idle" },
-  { rank: 28, agentId: "D-0634", community: "Delta", communityColor: COMMUNITY_COLORS.Delta, influenceScore: 67.5, sentiment: "Positive", chains: 2, connections: 42, status: "Active" },
-  { rank: 29, agentId: "G-0423", community: "Gamma", communityColor: COMMUNITY_COLORS.Gamma, influenceScore: 66.1, sentiment: "Neutral", chains: 1, connections: 37, status: "Active" },
-  { rank: 30, agentId: "BR-0091", community: "Bridge", communityColor: COMMUNITY_COLORS.Bridge, influenceScore: 65.4, sentiment: "Positive", chains: 10, connections: 112, status: "Active" },
-];
-
-const DISTRIBUTION_DATA = [
-  { name: "Alpha", value: 120, fill: "var(--community-alpha)" },
-  { name: "Beta", value: 85, fill: "var(--community-beta)" },
-  { name: "Gamma", value: 52, fill: "var(--community-gamma)" },
-  { name: "Delta", value: 65, fill: "var(--community-delta)" },
-  { name: "Bridge", value: 20, fill: "var(--community-bridge)" },
-];
+// MOCK_INFLUENCERS / DISTRIBUTION_DATA removed — page now requires a real
+// simulation and shows an empty state otherwise (see render below).
 
 const SENTIMENT_STYLES: Record<string, React.CSSProperties> = {
   Positive: { backgroundColor: "color-mix(in srgb, var(--sentiment-positive) 15%, transparent)", color: "var(--sentiment-positive)" },
@@ -133,7 +95,8 @@ export default function TopInfluencersPage() {
   useEffect(() => {
     if (!simulationId) return;
     let cancelled = false;
-    setLoading(true);
+    // queueMicrotask: defer setState out of effect body to avoid cascading renders
+    queueMicrotask(() => { if (!cancelled) setLoading(true); });
     apiClient.agents.list(simulationId, { limit: 200 }).then((res) => {
       if (cancelled) return;
       const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score);

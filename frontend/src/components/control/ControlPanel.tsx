@@ -148,7 +148,6 @@ export default function ControlPanel() {
     apiClient.projects.list()
       .then((res) => useSimulationStore.getState().setProjects(Array.isArray(res) ? res : []))
       .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-restore project from simulation and load scenarios on mount
@@ -183,22 +182,56 @@ export default function ControlPanel() {
   };
 
   // When scenario changes, load its simulation if it has one.
-  // Fire the simulation fetch + a cheap network summary warmup in parallel
-  // so the backend's (sim_id, step) cache is primed by the time GraphPanel
-  // mounts and requests the full graph.
+  // When the user picks a scenario in the dropdown:
+  //  1. If the scenario already has a simulation_id, fetch + load it.
+  //  2. If not, auto-create one via POST /projects/{pid}/scenarios/{sid}/run
+  //     so the user can press Play immediately without having to click
+  //     "Create Simulation" as a separate step. The backend builds the
+  //     SimulationConfig from the scenario's stored config and links the
+  //     resulting simulation_id back onto the scenario row.
   const handleScenarioChange = async (scenarioId: string) => {
     const scenario = scenarios.find((s) => s.scenario_id === scenarioId);
-    if (!scenario?.simulation_id) return;
-    const simId = scenario.simulation_id;
+    if (!scenario || !currentProjectId) return;
+
+    // Path 1: existing simulation — straight load.
+    if (scenario.simulation_id) {
+      const simId = scenario.simulation_id;
+      try {
+        const [sim] = await Promise.all([
+          apiClient.simulations.get(simId),
+          // Fire-and-forget cache warm.
+          apiClient.network.getSummary(simId).catch(() => undefined),
+        ]);
+        setSimulation(sim);
+      } catch { /* ignore */ }
+      return;
+    }
+
+    // Path 2: scenario has no simulation yet — auto-provision one.
+    setCreating(true);
     try {
-      const [sim] = await Promise.all([
-        apiClient.simulations.get(simId),
-        // Fire-and-forget — warms the orchestrator payload cache. Errors
-        // are harmless (GraphPanel will retry on mount).
-        apiClient.network.getSummary(simId).catch(() => undefined),
-      ]);
+      const { simulation_id: newSimId } = await apiClient.projects.runScenario(
+        currentProjectId,
+        scenarioId,
+      );
+      // Backend already started the sim — fetch the full record so the
+      // store has all metadata, then update the local scenario list so
+      // a subsequent dropdown change picks Path 1.
+      const sim = await apiClient.simulations.get(newSimId);
       setSimulation(sim);
-    } catch { /* ignore */ }
+      setStatus(SIM_STATUS.RUNNING);
+      setScenarios(
+        scenarios.map((s) =>
+          s.scenario_id === scenarioId
+            ? { ...s, simulation_id: newSimId, status: "running" }
+            : s,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to auto-run scenario:", err);
+    } finally {
+      setCreating(false);
+    }
   };
 
   // Create new scenario via prompt
