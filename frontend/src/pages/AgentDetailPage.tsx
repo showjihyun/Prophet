@@ -225,7 +225,9 @@ export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-H3: subscribe to latestStep gate, read recent steps lazily
+  const latestStep = useSimulationStore((s) => s.latestStep);
+  const stepsLength = useSimulationStore((s) => s.steps.length);
   const status = useSimulationStore((s) => s.status);
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Activity");
   const [interveneOpen, setInterveneOpen] = useState(false);
@@ -233,17 +235,39 @@ export default function AgentDetailPage() {
   const [msgFilter, setMsgFilter] = useState("all");
 
   const [agent, setAgent] = useState({ ...MOCK_AGENT, id: agentId ?? MOCK_AGENT.id });
-  // Connections: start with MOCK_CONNECTIONS as fallback; replaced when network data loads
-  const [connections, setConnections] = useState<ConnectionItem[]>(MOCK_CONNECTIONS);
+  const [agentLoading, setAgentLoading] = useState<boolean>(true);
+  const [agentNotFound, setAgentNotFound] = useState<boolean>(false);
+  // Connections start empty; populated when network data loads (no mock fallback).
+  const [connections, setConnections] = useState<ConnectionItem[]>([]);
 
-  // Fetch real agent data from API
+  // Fetch real agent data from API. Do NOT fall back to mock on failure —
+  // showing fake data for a real agent id is more confusing than an explicit
+  // empty/not-found state. SPEC: 18_FRONTEND_PERFORMANCE_SPEC §5.2.
   useEffect(() => {
-    if (!simulationId || !agentId) return;
-    apiClient.agents.get(simulationId, agentId).then((res) => {
-      setAgent(apiToAgent(res));
-    }).catch(() => {
-      setAgent({ ...MOCK_AGENT, id: agentId });
-    });
+    if (!simulationId || !agentId) {
+      setAgentLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAgentLoading(true);
+    setAgentNotFound(false);
+    apiClient.agents
+      .get(simulationId, agentId)
+      .then((res) => {
+        if (cancelled) return;
+        setAgent(apiToAgent(res));
+        setAgentNotFound(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAgentNotFound(true);
+      })
+      .finally(() => {
+        if (!cancelled) setAgentLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [simulationId, agentId]);
 
   // Fetch real connections from network graph
@@ -302,13 +326,15 @@ export default function AgentDetailPage() {
 
   // Derive sentiment chart data from store steps (last 7), fallback to SENTIMENT_DATA
   const sentimentData = useMemo(() => {
+    const steps = useSimulationStore.getState().steps;
     if (steps.length === 0) return SENTIMENT_DATA;
     return steps.slice(-7).map((s) => ({
       day: `D${s.step}`,
       positive: Math.max(0, s.mean_sentiment) * 100,
       negative: Math.max(0, -s.mean_sentiment) * 100,
     }));
-  }, [steps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength]);
 
   const filteredConnections = useMemo(
     () =>
@@ -322,6 +348,7 @@ export default function AgentDetailPage() {
 
   // Derive interactions from step history — each step where action_distribution changes
   const derivedInteractions = useMemo<Interaction[]>(() => {
+    const steps = useSimulationStore.getState().steps;
     if (steps.length === 0) return [];
     const ACTION_TYPE_MAP: Record<string, Interaction["type"]> = {
       share: "Share",
@@ -348,11 +375,14 @@ export default function AgentDetailPage() {
         time: `Step ${step.step}`,
       };
     });
-  }, [steps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength]);
 
-  const interactions = derivedInteractions.length > 0 ? derivedInteractions : MOCK_INTERACTIONS;
+  // Real-data-only: no mock fallbacks. An empty list shows a clear empty
+  // state in the UI rather than fake content for a real agent id.
+  const interactions = derivedInteractions;
 
-  const messagesSource = apiMessages.length > 0 ? apiMessages : MOCK_MESSAGES;
+  const messagesSource = apiMessages;
   const filteredMessages = useMemo(
     () =>
       msgFilter === "all"
@@ -360,6 +390,48 @@ export default function AgentDetailPage() {
         : messagesSource.filter((m) => m.type === msgFilter),
     [msgFilter, messagesSource],
   );
+
+  // Loading / not-found gates: avoid rendering MOCK_AGENT in the body when
+  // the real agent could not be loaded.
+  if (agentLoading) {
+    return (
+      <div
+        data-testid="agent-detail-page"
+        className="min-h-screen bg-[var(--muted)] flex items-center justify-center"
+      >
+        <div className="flex flex-col items-center gap-3 text-[var(--muted-foreground)]">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          <p className="text-sm">Loading agent…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (agentNotFound) {
+    return (
+      <div
+        data-testid="agent-detail-page"
+        className="min-h-screen bg-[var(--muted)] flex items-center justify-center"
+      >
+        <div className="max-w-md text-center flex flex-col items-center gap-4 p-8">
+          <h2 className="text-xl font-semibold text-[var(--foreground)]">
+            Agent not found
+          </h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            No agent with id <code className="font-mono">{agentId}</code> exists in the
+            current simulation. The simulation may have been reset, or the
+            agent id was passed from a stale URL.
+          </p>
+          <button
+            onClick={() => navigate("/simulation")}
+            className="h-9 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
+          >
+            Back to simulation
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

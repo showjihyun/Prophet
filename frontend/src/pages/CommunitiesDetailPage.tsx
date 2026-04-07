@@ -133,7 +133,8 @@ function apiToLocal(c: CommunityInfo): typeof COMMUNITIES[number] {
 export default function CommunitiesDetailPage() {
   const navigate = useNavigate();
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
-  const latestStep = useSimulationStore((s) => s.steps.length > 0 ? s.steps[s.steps.length - 1] : null);
+  // FE-PERF-M3: use canonical latestStep selector
+  const latestStep = useSimulationStore((s) => s.latestStep);
   const [communities, setCommunities] = useState(COMMUNITIES);
   const [loading, setLoading] = useState(false);
   const simStatus = useSimulationStore((s) => s.status);

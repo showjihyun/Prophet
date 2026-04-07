@@ -2,7 +2,7 @@
  * AnalyticsPage — Post-run analytics for a completed simulation.
  * @spec docs/spec/07_FRONTEND_SPEC.md#simulationsidanalytics
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   LineChart,
@@ -130,18 +130,25 @@ function Section({
 export default function AnalyticsPage() {
   const navigate = useNavigate();
   const simulation = useSimulationStore((s) => s.simulation);
-  const storeSteps = useSimulationStore((s) => s.steps);
+  // FE-PERF-H1: subscribe to length + latestStep, read array lazily inside memos
+  const storeStepsLength = useSimulationStore((s) => s.steps.length);
+  const latestStep = useSimulationStore((s) => s.latestStep);
 
   const [fetchedSteps, setFetchedSteps] = useState<StepResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Derive steps: prefer store (live), fall back to locally fetched
-  const steps = storeSteps.length > 0 ? storeSteps : fetchedSteps;
+  // Memoized so chart helpers don't re-run unless data actually changed.
+  const steps = useMemo<StepResult[]>(() => {
+    const live = useSimulationStore.getState().steps;
+    return live.length > 0 ? live : fetchedSteps;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, storeStepsLength, fetchedSteps]);
 
   // Fetch steps from API only when store is empty
   useEffect(() => {
-    if (storeSteps.length > 0) return;
+    if (storeStepsLength > 0) return;
     if (!simulation) return;
 
     const simulationId = simulation.simulation_id;
@@ -156,13 +163,14 @@ export default function AnalyticsPage() {
         setError(err instanceof Error ? err.message : "Failed to load steps");
         setLoading(false);
       });
-  }, [simulation, storeSteps.length]);
+  }, [simulation, storeStepsLength]);
 
-  const adoptionData = buildAdoptionData(steps);
-  const sentimentData = buildSentimentData(steps);
-  const communityAdoption = buildCommunityAdoption(steps);
-  const communityKeys = getCommunityKeys(steps);
-  const emergentEvents = collectEmergentEvents(steps);
+  // FE-PERF-MEDIUM: memoize all recharts data so charts don't re-build on every parent render
+  const adoptionData = useMemo(() => buildAdoptionData(steps), [steps]);
+  const sentimentData = useMemo(() => buildSentimentData(steps), [steps]);
+  const communityAdoption = useMemo(() => buildCommunityAdoption(steps), [steps]);
+  const communityKeys = useMemo(() => getCommunityKeys(steps), [steps]);
+  const emergentEvents = useMemo(() => collectEmergentEvents(steps), [steps]);
 
   // Steps where emergent events occurred (for ReferenceLine markers)
   const eventSteps = [...new Set(emergentEvents.map((e) => e.step))];

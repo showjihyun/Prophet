@@ -33,21 +33,20 @@ function polarizationColor(v: number): string {
 
 export default function GlobalMetricsPage() {
   const simulation = useSimulationStore((s) => s.simulation);
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-H2: subscribe to length + latestStep, read full array lazily inside memos
+  const stepsLength = useSimulationStore((s) => s.steps.length);
+  const latestStep = useSimulationStore((s) => s.latestStep);
   const simId = simulation?.simulation_id ?? null;
 
   // Fetch steps from API if store is empty but simulation exists
   useEffect(() => {
-    if (simId && steps.length === 0) {
+    if (simId && stepsLength === 0) {
       apiClient.simulations.getSteps(simId).then((fetched) => {
-        const { appendStep } = useSimulationStore.getState();
-        for (const s of fetched) appendStep(s);
+        // FE-PERF-H2: bulk update — single store commit instead of N appendStep calls
+        useSimulationStore.getState().setStepsBulk(fetched);
       }).catch(() => {});
     }
-  }, [simId, steps.length]);
-
-  // Derive all metrics from steps (react-state-management: useMemo for derived)
-  const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
+  }, [simId, stepsLength]);
 
   const totalAgents = useMemo(() => {
     if (!latestStep?.community_metrics) return 0;
@@ -57,12 +56,14 @@ export default function GlobalMetricsPage() {
   }, [latestStep]);
 
   const polarizationData = useMemo(() => {
-    const recent = steps.slice(-10);
+    // Lazy read — re-runs when latestStep / stepsLength change
+    const recent = useSimulationStore.getState().steps.slice(-10);
     return recent.map((s) => ({
       day: `D${s.step}`,
       value: s.sentiment_variance ?? 0,
     }));
-  }, [steps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength]);
 
   const sentimentByCommunity = useMemo(() => {
     if (!latestStep?.community_metrics) return [];
@@ -98,8 +99,9 @@ export default function GlobalMetricsPage() {
     };
   }, [totalAgents]);
 
-  // Cascade analytics from steps
+  // Cascade analytics from steps (lazy read, gated on latestStep)
   const cascadeStats = useMemo(() => {
+    const steps = useSimulationStore.getState().steps;
     if (steps.length === 0) return { depth: "0", width: "0", paths: "0", decay: "0/step" };
     const adoptions = steps.map((s) => s.total_adoption ?? 0);
     const maxAdoption = Math.max(...adoptions, 0);
@@ -111,17 +113,23 @@ export default function GlobalMetricsPage() {
       paths: String(steps.filter((s) => (s.diffusion_rate ?? 0) > 5).length),
       decay: `${avgDiffRate.toFixed(2)}/step`,
     };
-  }, [steps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength]);
 
   const currentStep = latestStep?.step ?? 0;
   const maxSteps = simulation?.max_steps ?? 365;
   const polarization = latestStep?.sentiment_variance ?? 0;
-  const prevPol = steps.length >= 2 ? steps[steps.length - 2]?.sentiment_variance ?? 0 : 0;
+  // prevPol: read from store lazily — only changes when latestStep changes
+  const prevPol = useMemo(() => {
+    const steps = useSimulationStore.getState().steps;
+    return steps.length >= 2 ? steps[steps.length - 2]?.sentiment_variance ?? 0 : 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep]);
   const polDelta = polarization - prevPol;
   const activeCascades = latestStep ? Math.round((latestStep.adoption_rate ?? 0) * Math.max(totalAgents, 1)) : 0;
 
   // Check if we have real data or should show "no data" state
-  const hasData = steps.length > 0;
+  const hasData = stepsLength > 0;
 
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
