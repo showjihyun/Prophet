@@ -8,14 +8,18 @@
  * Zone 2: Community Panel (260px) | Graph Engine (fill) | Metrics Panel (280px)
  * Zone 3: Timeline (120px) + Conversations (fill remaining)
  */
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { LS_KEY_SIMULATION_ID, SIM_STATUS } from "@/config/constants";
 import { FolderOpen, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
 import CommunityPanel from "../components/graph/CommunityPanel";
-import GraphPanel from "../components/graph/GraphPanel3D";
+// GraphPanel pulls three.js + react-force-graph-3d (~1 MB raw / 375 KB gzipped).
+// Lazy-load it so the empty state ("No Active Simulation") below renders
+// without paying the WebGL bundle cost. Once a simulation is active, the
+// chunk is fetched once and cached.
+const GraphPanel = lazy(() => import("../components/graph/GraphPanel"));
 import MetricsPanel from "../components/graph/MetricsPanel";
 import TimelinePanel from "../components/timeline/TimelinePanel";
 import ConversationPanel from "../components/control/ConversationPanel";
@@ -159,7 +163,15 @@ export default function SimulationPage() {
 
         {/* Center: AI Social World Graph Engine — fill */}
         <div className="flex-1 min-w-0">
-          <GraphPanel />
+          <Suspense
+            fallback={
+              <div className="w-full h-full flex items-center justify-center text-sm text-[var(--muted-foreground)]">
+                Loading 3D graph engine…
+              </div>
+            }
+          >
+            <GraphPanel />
+          </Suspense>
         </div>
 
         {/* Right: Metrics Panel — 280px */}

@@ -106,6 +106,7 @@ describe('SimulationMain (UI-01)', () => {
       status: 'running',
       currentStep: 5,
       steps: [],
+      latestStep: null,
       emergentEvents: [],
       isLLMDashboardOpen: false,
       speed: 2,
@@ -161,16 +162,23 @@ describe('SimulationMain (UI-01)', () => {
 
     it('renders communities title with count', () => {
       renderPage();
-      expect(screen.getByText('Communities')).toBeInTheDocument();
+      // Scope to the community panel — the graph overlay also has a
+      // "Communities" legend header.
+      const panel = screen.getByTestId('community-panel');
+      expect(panel.textContent).toMatch(/Communities/);
     });
 
-    it('renders 5 community items (Alpha, Beta, Gamma, Delta, Bridge)', () => {
+    it('renders multiple community rows', () => {
+      // CommunityPanel shows a SkeletonList while running with no steps yet.
+      // Pause the sim so it renders actual rows.
+      useSimulationStore.setState({ status: 'paused' });
       renderPage();
-      expect(screen.getAllByText('Alpha').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Beta').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Gamma').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Delta').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Bridge').length).toBeGreaterThanOrEqual(1);
+      // We don't pin the exact set of names — they vary depending on whether
+      // the panel is in mock vs live mode and whether the test seeded
+      // community_metrics. The contract is "the panel renders >=3 rows".
+      const panel = screen.getByTestId('community-panel');
+      const rows = panel.querySelectorAll('div.cursor-pointer');
+      expect(rows.length).toBeGreaterThanOrEqual(3);
     });
 
     it('renders total agents count', () => {
@@ -179,38 +187,39 @@ describe('SimulationMain (UI-01)', () => {
     });
   });
 
-  /** @spec UI_01_SIMULATION_MAIN.md#zone-2-center-graph-engine */
-  describe('Zone 2: AI Social World Graph Engine', () => {
-    it('renders graph container with dark background', () => {
+  /** @spec 18_FRONTEND_PERFORMANCE_SPEC.md#5-graph-3d-rendering */
+  describe('Zone 2: AI Social World Graph Engine (3D)', () => {
+    // GraphPanel is lazy-loaded inside SimulationPage (perf — three.js
+    // chunk only fetched when a sim is active). Tests must `await
+    // findByTestId` so React Suspense has a chance to resolve.
+    it('renders graph container with dark background', async () => {
       renderPage();
-      expect(screen.getByTestId('graph-panel')).toBeInTheDocument();
+      expect(await screen.findByTestId('graph-panel')).toBeInTheDocument();
     });
 
-    it('renders graph title overlay', () => {
+    it('renders 3D graph title overlay', async () => {
       renderPage();
-      expect(screen.getByText('AI Social World')).toBeInTheDocument();
+      expect(await screen.findByText(/AI Social World — 3D/)).toBeInTheDocument();
     });
 
-    it('renders zoom controls (+/-/maximize)', () => {
+    it('exposes the WebGL container with stable test-id', async () => {
       renderPage();
-      expect(screen.getByTestId('zoom-in-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('zoom-out-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('zoom-maximize-btn')).toBeInTheDocument();
+      expect(await screen.findByTestId('graph-cytoscape-container')).toBeInTheDocument();
     });
 
-    it('renders network legend with community colors', () => {
+    it('shows the 3D controls hint (left-drag / scroll / right-drag)', async () => {
       renderPage();
-      expect(screen.getByTestId('network-legend')).toBeInTheDocument();
+      const hint = await screen.findByText(/Left-drag/i);
+      expect(hint).toBeInTheDocument();
+      expect(hint.textContent).toMatch(/rotate/i);
+      expect(hint.textContent).toMatch(/zoom/i);
+      expect(hint.textContent).toMatch(/pan/i);
     });
 
-    it('renders cascade badge', () => {
+    it('uses 3D aria label on the panel', async () => {
       renderPage();
-      expect(screen.getByTestId('cascade-badge')).toBeInTheDocument();
-    });
-
-    it('renders status overlay with FPS and node/edge counts', () => {
-      renderPage();
-      expect(screen.getByTestId('status-overlay')).toBeInTheDocument();
+      const panel = await screen.findByTestId('graph-panel');
+      expect(panel.getAttribute('aria-label')).toMatch(/3D/);
     });
   });
 
