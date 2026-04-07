@@ -207,6 +207,9 @@ export interface RunAllReport {
 export interface CytoscapeGraph {
   nodes: Array<{ data: Record<string, unknown> }>;
   edges: Array<{ data: Record<string, unknown> }>;
+  /** Populated when ?summary=true is requested — empty nodes/edges + counts. */
+  total_nodes?: number;
+  total_edges?: number;
 }
 
 /** Network metrics. @spec docs/spec/06_API_SPEC.md#get-network-metrics */
@@ -333,6 +336,8 @@ export const apiClient = {
   },
   network: {
     get: (simId: string) => request<CytoscapeGraph>(`/simulations/${simId}/network/?format=cytoscape`),
+    getSummary: (simId: string) =>
+      request<CytoscapeGraph>(`/simulations/${simId}/network/?summary=true`),
     getMetrics: (simId: string) =>
       request<NetworkMetrics>(`/simulations/${simId}/network/metrics`),
   },

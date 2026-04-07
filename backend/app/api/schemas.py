@@ -331,6 +331,10 @@ class NetworkGraphResponse(BaseModel):
     """
     nodes: list[CytoscapeNode] = Field(default_factory=list)
     edges: list[CytoscapeEdge] = Field(default_factory=list)
+    # Optional summary counts — populated when ?summary=true is requested so
+    # the client can render a skeleton before the full payload arrives.
+    total_nodes: int | None = None
+    total_edges: int | None = None
 
 
 class NetworkMetricsResponse(BaseModel):

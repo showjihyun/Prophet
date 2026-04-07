@@ -182,15 +182,23 @@ export default function ControlPanel() {
     } catch { /* ignore */ }
   };
 
-  // When scenario changes, load its simulation if it has one
+  // When scenario changes, load its simulation if it has one.
+  // Fire the simulation fetch + a cheap network summary warmup in parallel
+  // so the backend's (sim_id, step) cache is primed by the time GraphPanel
+  // mounts and requests the full graph.
   const handleScenarioChange = async (scenarioId: string) => {
     const scenario = scenarios.find((s) => s.scenario_id === scenarioId);
-    if (scenario?.simulation_id) {
-      try {
-        const sim = await apiClient.simulations.get(scenario.simulation_id);
-        setSimulation(sim);
-      } catch { /* ignore */ }
-    }
+    if (!scenario?.simulation_id) return;
+    const simId = scenario.simulation_id;
+    try {
+      const [sim] = await Promise.all([
+        apiClient.simulations.get(simId),
+        // Fire-and-forget — warms the orchestrator payload cache. Errors
+        // are harmless (GraphPanel will retry on mount).
+        apiClient.network.getSummary(simId).catch(() => undefined),
+      ]);
+      setSimulation(sim);
+    } catch { /* ignore */ }
   };
 
   // Create new scenario via prompt
@@ -277,16 +285,32 @@ export default function ControlPanel() {
 
   const handlePlay = async () => {
     if (!simulation?.simulation_id) return;
+    const simId = simulation.simulation_id;
+    const recover = async () => {
+      // Terminal-state recovery: stop (idempotent) → start.
+      await apiClient.simulations.stop(simId).catch(() => undefined);
+      await apiClient.simulations.start(simId);
+    };
     try {
-      const simId = simulation.simulation_id;
       if (STARTABLE_SIM_STATUSES.includes(status)) {
         await apiClient.simulations.start(simId);
       } else if (TERMINAL_SIM_STATUSES.includes(status)) {
-        // Recover from terminal state: reset → start
-        await apiClient.simulations.stop(simId);
-        await apiClient.simulations.start(simId);
+        await recover();
       } else {
-        await apiClient.simulations.resume(simId);
+        // Local state says paused/running — try resume, but the backend may
+        // have advanced to 'failed' behind our back (e.g. a step crashed).
+        // On 409 state-mismatch, fall back to full recovery instead of
+        // leaving the user stuck.
+        try {
+          await apiClient.simulations.resume(simId);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("409") || msg.toLowerCase().includes("not allowed")) {
+            await recover();
+          } else {
+            throw err;
+          }
+        }
       }
       setStatus(SIM_STATUS.RUNNING);
     } catch { /* status unchanged on failure */ }

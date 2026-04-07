@@ -114,6 +114,11 @@ class SimulationOrchestrator:
         self._llm_adapter = llm_adapter
         self._slm_adapter = slm_adapter
         self._gateway = gateway
+        # Per-(sim_id, step) caches for expensive read-only derivations.
+        # Graph topology is immutable between steps, so we can safely reuse
+        # serialized payloads and computed metrics until current_step changes.
+        self._network_payload_cache: dict[UUID, tuple[int, dict]] = {}
+        self._network_metrics_cache: dict[UUID, tuple[int, dict]] = {}
 
     def _get_lock(self, simulation_id: UUID) -> asyncio.Lock:
         """Get or create a per-simulation asyncio lock."""
@@ -142,6 +147,8 @@ class SimulationOrchestrator:
         for sim_id in expired:
             del self._simulations[sim_id]
             self._locks.pop(sim_id, None)
+            self._network_payload_cache.pop(sim_id, None)
+            self._network_metrics_cache.pop(sim_id, None)
 
         # Also enforce max count (remove oldest first)
         if len(self._simulations) > self.MAX_SIMULATIONS:
@@ -153,6 +160,8 @@ class SimulationOrchestrator:
                 oldest = sorted_sims.pop(0)
                 del self._simulations[oldest]
                 self._locks.pop(oldest, None)
+                self._network_payload_cache.pop(oldest, None)
+                self._network_metrics_cache.pop(oldest, None)
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -895,6 +904,11 @@ class SimulationOrchestrator:
                 "Simulation may not have been created properly."
             )
 
+        # Cache check — graph topology is invariant between steps.
+        cached = self._network_payload_cache.get(sim_uuid)
+        if cached is not None and cached[0] == state.current_step:
+            return cached[1]
+
         graph = state.network.graph
 
         # Bug 1 fix: O(1) agent lookup — build dict keyed by agent_id UUID
@@ -970,7 +984,31 @@ class SimulationOrchestrator:
             }
             edges.append({"data": edge_dict})
 
-        return {"nodes": nodes, "edges": edges}
+        payload = {"nodes": nodes, "edges": edges}
+        self._network_payload_cache[sim_uuid] = (state.current_step, payload)
+        return payload
+
+    def get_network_summary(self, simulation_id: str | UUID) -> dict:
+        """Lightweight network summary (no per-node payload).
+
+        Allows the frontend to render a skeleton + counts immediately
+        while the full graph payload is loaded lazily.
+        """
+        sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
+        state = self._get_state(sim_uuid)
+        if state.network is None or state.network.graph is None:
+            return {"total_nodes": 0, "total_edges": 0, "community_counts": {}}
+
+        graph = state.network.graph
+        counts: dict[str, int] = {}
+        for _nid, ndata in graph.nodes(data=True):
+            key = str(ndata.get("community_id", "default"))
+            counts[key] = counts.get(key, 0) + 1
+        return {
+            "total_nodes": graph.number_of_nodes(),
+            "total_edges": graph.number_of_edges(),
+            "community_counts": counts,
+        }
 
     def get_network_metrics(self, simulation_id: str | UUID) -> dict:
         """Return computed network metrics.
@@ -997,6 +1035,10 @@ class SimulationOrchestrator:
             raise ValueError(
                 f"Network not available for simulation {simulation_id}."
             )
+
+        cached = self._network_metrics_cache.get(sim_uuid)
+        if cached is not None and cached[0] == state.current_step:
+            return cached[1]
 
         graph = state.network.graph
         total_nodes = graph.number_of_nodes()
@@ -1043,7 +1085,7 @@ class SimulationOrchestrator:
         except Exception:
             pass
 
-        return {
+        metrics = {
             "clustering_coefficient": round(clustering, 4),
             "avg_path_length": round(avg_path, 4),
             "modularity": round(modularity, 4),
@@ -1051,6 +1093,8 @@ class SimulationOrchestrator:
             "total_nodes": total_nodes,
             "total_edges": total_edges,
         }
+        self._network_metrics_cache[sim_uuid] = (state.current_step, metrics)
+        return metrics
 
     # ------------------------------------------------------------------ #
     # LLM Dashboard query methods (called from API endpoints)

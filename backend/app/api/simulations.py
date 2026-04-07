@@ -196,16 +196,9 @@ async def create_simulation(
     edges = list(state.network.graph.edges(data=True)) if state.network else []
     await persist.persist_creation(session, state.simulation_id, config, state.agents, edges)
 
-    # Compute real network metrics from generated graph
+    # Network metrics are computed lazily via GET /network/metrics — avoid
+    # running O(n^2) NetworkX algorithms on the create hot path.
     net_metrics = {"clustering_coefficient": 0.0, "avg_path_length": 0.0}
-    try:
-        metrics = orchestrator.get_network_metrics(str(state.simulation_id))
-        net_metrics = {
-            "clustering_coefficient": metrics.get("clustering_coefficient", 0.0),
-            "avg_path_length": metrics.get("avg_path_length", 0.0),
-        }
-    except (ValueError, KeyError):
-        pass
 
     return SimulationResponse(
         simulation_id=str(state.simulation_id),
@@ -228,9 +221,12 @@ async def list_simulations(
     """List all simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulations
     """
-    # Build a dict of in-memory simulations (live, takes precedence)
+    # Build a dict of in-memory simulations (live, takes precedence).
+    # Snapshot values() to a list to avoid mutation-during-iteration.
     mem_items: dict[str, dict] = {}
-    for state in orchestrator._simulations.values():
+    for state in list(orchestrator._simulations.values()):
+        if status is not None and state.status != status:
+            continue
         mem_items[str(state.simulation_id)] = {
             "simulation_id": str(state.simulation_id),
             "name": state.config.name,
@@ -239,8 +235,12 @@ async def list_simulations(
             "total_agents": len(state.agents),
         }
 
-    # Load DB simulations and fill in any not present in memory
-    db_sims = await persist.load_simulations(session)
+    # Pull a windowed slice from DB with SQL-side filter/limit.
+    # Fetch a bit extra to absorb in-memory overrides that collide by id.
+    db_limit = limit + offset + len(mem_items)
+    db_sims = await persist.load_simulations(
+        session, status=status, limit=db_limit, offset=0
+    )
     for db_sim in db_sims:
         sid = db_sim["simulation_id"]
         if sid not in mem_items:
@@ -253,10 +253,11 @@ async def list_simulations(
             }
 
     items = list(mem_items.values())
-    if status is not None:
-        items = [i for i in items if i["status"] == status]
-
-    total = len(items)
+    # Total = DB count (SQL) + in-memory-only rows not present in DB.
+    db_total = await persist.count_simulations(session, status=status)
+    db_ids = {s["simulation_id"] for s in db_sims}
+    mem_only = sum(1 for sid in mem_items if sid not in db_ids)
+    total = db_total + mem_only
     items = items[offset: offset + limit]
     return PaginatedResponse(items=items, total=total)
 
@@ -293,9 +294,8 @@ async def get_simulation(
     except (ValueError, KeyError):
         pass
 
-    # Fallback: load from DB (read-only, completed/historical sims)
-    db_sims = await persist.load_simulations(session)
-    db_sim = next((s for s in db_sims if s["simulation_id"] == simulation_id), None)
+    # Fallback: point-lookup from DB (read-only, completed/historical sims)
+    db_sim = await persist.load_simulation(session, sim_uuid)
     if db_sim is None:
         raise HTTPException(
             status_code=404,
@@ -361,7 +361,27 @@ async def step_simulation(
     _require_status(state, SimulationStatus.RUNNING, SimulationStatus.PAUSED)
 
     sim_uuid = _sim_id_to_uuid(simulation_id)
-    result = await orchestrator.run_step(sim_uuid)
+    try:
+        result = await orchestrator.run_step(sim_uuid)
+    except Exception as exc:
+        # Orchestrator has already flipped state to FAILED. Persist that and
+        # broadcast so the frontend can swap to the recover UI instead of
+        # repeatedly hitting /resume and getting 409.
+        await persist.persist_status(session, sim_uuid, state.status, state.current_step)
+        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+            "type": "status_change",
+            "data": {"status": state.status},
+        }))
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/step-failed",
+                title="Step Failed",
+                status=500,
+                detail=f"Simulation step crashed: {exc}",
+                instance=f"/api/v1/simulations/{simulation_id}/step",
+            ).model_dump(),
+        ) from exc
 
     # Persist step result + agent snapshots + status update
     await persist.persist_step(session, sim_uuid, result, agents=state.agents)

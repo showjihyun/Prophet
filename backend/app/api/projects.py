@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_orchestrator, get_session, get_persistence
@@ -234,13 +234,8 @@ async def delete_project(
     if project is None:
         raise _project_not_found(project_id)
 
-    # Delete all child scenarios first
-    sc_result = await session.execute(
-        select(Scenario).where(Scenario.project_id == pid)
-    )
-    for scenario in sc_result.scalars().all():
-        await session.delete(scenario)
-
+    # Bulk-delete child scenarios in one statement, then the project.
+    await session.execute(delete(Scenario).where(Scenario.project_id == pid))
     await session.delete(project)
     await session.commit()
 

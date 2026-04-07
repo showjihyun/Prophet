@@ -362,6 +362,7 @@ export default function GraphPanel() {
   } | null>(null);
   const [nodeCount, setNodeCount] = useState(0);
   const [edgeCount, setEdgeCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const [legendItems, setLegendItems] = useState(LEGEND_ITEMS);
   const [fps, setFps] = useState(60);
   const fpsFramesRef = useRef<number[]>([]);
@@ -391,6 +392,7 @@ export default function GraphPanel() {
 
     async function loadGraph() {
       let graphData: CytoscapeGraph;
+      setIsLoading(true);
       try {
         if (simulationId) {
           graphData = await apiClient.network.get(simulationId);
@@ -401,7 +403,10 @@ export default function GraphPanel() {
         console.warn("Network fetch failed, using mock data:", err);
         graphData = generateMockGraphData();
       }
-      if (cancelled || !containerRef.current) return;
+      if (cancelled || !containerRef.current) {
+        setIsLoading(false);
+        return;
+      }
 
       // Compute legend from real data
       const commCounts: Record<string, number> = {};
@@ -418,6 +423,7 @@ export default function GraphPanel() {
       );
 
       initCytoscape(graphData);
+      setIsLoading(false);
     }
 
     function initCytoscape(graphData: CytoscapeGraph) {
@@ -1035,6 +1041,19 @@ export default function GraphPanel() {
     >
       {/* Cytoscape canvas container */}
       <div ref={containerRef} className="absolute inset-0" />
+
+      {/* Loading overlay — soft fade-in while graph payload is fetched */}
+      {isLoading && (
+        <div
+          data-testid="graph-loading-overlay"
+          className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300"
+        >
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+            <p className="text-xs text-white/70">Loading network…</p>
+          </div>
+        </div>
+      )}
 
       {/* Title Overlay — top-left */}
       <div className="absolute top-4 left-4 z-10 pointer-events-none">
