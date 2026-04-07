@@ -1,6 +1,6 @@
 # MASTER SPEC — Prophet (MCASP)
 **Multi-Community Agent Simulation Platform**
-Version: 0.2.0 | Status: REVIEW | Date: 2026-04-04
+Version: 0.3.0 | Status: REVIEW | Date: 2026-04-07
 
 ---
 
