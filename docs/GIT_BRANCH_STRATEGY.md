@@ -1,10 +1,23 @@
 # Git Branch Strategy — Prophet (MCASP)
 
-Version: 1.0 | Date: 2026-04-07 | Status: ACTIVE
+Version: 1.1 | Date: 2026-04-07 | Status: ACTIVE
 
 This document defines the branching, PR, and merge workflow for Prophet.
 The goal is a **linear, readable master history** with clear feature
 boundaries and minimal merge friction.
+
+## Audience
+
+> **This document is for the core team / maintainers.**
+>
+> **External contributors should read [`CONTRIBUTING.md`](../CONTRIBUTING.md)
+> first** — it covers the fork workflow, draft PRs, CI failure debugging,
+> and other newcomer-friendly material that this document does NOT duplicate.
+>
+> The conventions below (branch naming, stacked PRs, `--force-with-lease`)
+> are enforced for **maintainer branches inside the upstream repo only**.
+> Contributor PRs from forks can use any branch name they want — we squash-merge,
+> so the branch name never reaches `master` history anyway.
 
 ---
 
@@ -30,7 +43,23 @@ master (protected, always deployable)
 
 ---
 
-## Branch Lifecycle
+## Two Workflows: Direct vs Fork
+
+| Who | Workflow | Doc |
+|-----|----------|-----|
+| **Maintainers / core team** with push access | Direct branch in upstream repo | This document |
+| **External contributors** without push access | Fork → branch in fork → PR back to upstream | [`CONTRIBUTING.md`](../CONTRIBUTING.md#pull-request-workflow) |
+
+The two workflows produce identical PRs from `master`'s point of view —
+both end in a squash merge of one PR onto `master`. The difference is just
+*where* the working branch lives (upstream repo vs. a fork).
+
+If you're a maintainer reviewing a fork PR, the standard `gh pr checkout
+<number>` command works the same way regardless of where the branch lives.
+
+---
+
+## Branch Lifecycle (maintainer flow)
 
 ### 1. Start a new piece of work
 
