@@ -68,15 +68,16 @@ class AgentTick:
         perception -> memory -> emotion -> cognition -> decision -> influence -> store memory
     """
 
-    def __init__(self, llm_adapter=None):
+    def __init__(self, llm_adapter=None, gateway=None):
         """SPEC: docs/spec/01_AGENT_SPEC.md#agent-tick"""
         self._perception = PerceptionLayer(feed_capacity=20)
         self._memory = MemoryLayer(llm_adapter=llm_adapter)
         self._emotion = EmotionLayer()
-        self._cognition = CognitionLayer(llm_adapter=llm_adapter)
+        self._cognition = CognitionLayer(llm_adapter=llm_adapter, gateway=gateway)
         self._decision = DecisionLayer()
         self._influence = InfluenceLayer()
         self._llm_adapter = llm_adapter
+        self._gateway = gateway
 
     def tick(
         self,
@@ -188,11 +189,27 @@ class AgentTick:
                 agent_with_emotion, action, neighbor_ids, edges, ms, agent_seed
             )
 
-        # Step 8: Memory Storage
+        # Step 8: Memory Storage (with best-effort embedding)
         step_summary = f"Step {agent.step}: took action {action.value}"
         emotion_mean = (emotion.interest + emotion.trust + emotion.excitement) / 3.0
+
+        # Try to compute embedding synchronously via run_until_complete
+        embedding: list[float] | None = None
+        if self._llm_adapter is not None and cognition_tier >= 2:
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Can't await in sync context — schedule and skip
+                    pass
+                else:
+                    embedding = loop.run_until_complete(self._memory.embed_text(step_summary))
+            except Exception:
+                pass  # best-effort: embedding is optional
+
         memory_stored = self._memory.store(
-            agent.agent_id, "episodic", step_summary, emotion_weight=emotion_mean, step=agent.step
+            agent.agent_id, "episodic", step_summary,
+            emotion_weight=emotion_mean, step=agent.step, embedding=embedding,
         )
 
         # Step 9: State Update — Belief Update Formula

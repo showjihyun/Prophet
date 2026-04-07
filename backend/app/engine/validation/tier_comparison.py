@@ -31,7 +31,7 @@ class SLMQualityValidator:
     VAL-05: F1 score for emergent event types must be > 0.70.
     """
 
-    def compare_tiers(
+    def compare_tier_quality(
         self,
         slm_steps: list[StepResult],
         llm_steps: list[StepResult],

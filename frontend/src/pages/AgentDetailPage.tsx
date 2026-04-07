@@ -4,8 +4,9 @@
  */
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { apiClient, type AgentDetail } from "../api/client";
+import { apiClient, type AgentDetail, type MemoryRecord } from "../api/client";
 import { useSimulationStore } from "../store/simulationStore";
+import { SIM_STATUS } from "@/config/constants";
 
 // Community color map for deriving connection colors from graph data
 const COMMUNITY_COLORS: Record<string, string> = {
@@ -272,6 +273,33 @@ export default function AgentDetailPage() {
     }).catch(() => {});
   }, [simulationId, agentId]);
 
+  // Fetch real agent messages (memory records) from API
+  const [apiMessages, setApiMessages] = useState<MessageItem[]>([]);
+  useEffect(() => {
+    if (!simulationId || !agentId) return;
+    apiClient.agents.getMemory(simulationId, agentId).then((res) => {
+      const msgs: MessageItem[] = (res.memories ?? []).map((m: MemoryRecord, i: number) => {
+        const type: MessageItem["type"] =
+          m.memory_type === "episodic" ? "share" :
+          m.memory_type === "semantic" ? "comment" : "share";
+        const sentiment: MessageItem["sentiment"] =
+          m.importance > 0.6 ? "positive" :
+          m.importance < 0.3 ? "negative" : "neutral";
+        return {
+          id: `mem-${i}`,
+          type,
+          content: m.content,
+          timestamp: m.timestamp != null ? `Step ${m.timestamp}` : "—",
+          sentiment,
+          reach: Math.round(m.importance * 100),
+          reactions: { like: 0, comment: 0, repost: 0 },
+          replyTo: m.source_agent_id ? `Agent ${m.source_agent_id}` : undefined,
+        };
+      });
+      if (msgs.length > 0) setApiMessages(msgs);
+    }).catch(() => {});
+  }, [simulationId, agentId]);
+
   // Derive sentiment chart data from store steps (last 7), fallback to SENTIMENT_DATA
   const sentimentData = useMemo(() => {
     if (steps.length === 0) return SENTIMENT_DATA;
@@ -324,12 +352,13 @@ export default function AgentDetailPage() {
 
   const interactions = derivedInteractions.length > 0 ? derivedInteractions : MOCK_INTERACTIONS;
 
+  const messagesSource = apiMessages.length > 0 ? apiMessages : MOCK_MESSAGES;
   const filteredMessages = useMemo(
     () =>
       msgFilter === "all"
-        ? MOCK_MESSAGES
-        : MOCK_MESSAGES.filter((m) => m.type === msgFilter),
-    [msgFilter],
+        ? messagesSource
+        : messagesSource.filter((m) => m.type === msgFilter),
+    [msgFilter, messagesSource],
   );
 
   return (
@@ -346,8 +375,8 @@ export default function AgentDetailPage() {
         actions={
           <button
             onClick={() => setInterveneOpen(true)}
-            disabled={status !== 'paused'}
-            title={status !== 'paused' ? "Pause simulation to intervene" : undefined}
+            disabled={status !== SIM_STATUS.PAUSED}
+            title={status !== SIM_STATUS.PAUSED ? "Pause simulation to intervene" : undefined}
             className="h-9 px-4 text-sm font-medium text-white rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: 'var(--sentiment-positive)' }}
           >
@@ -632,6 +661,13 @@ export default function AgentDetailPage() {
 
           {activeTab === "Messages" && (
             <div className="flex flex-col gap-4">
+              {/* Demo data notice — only shown when using mock data */}
+              {apiMessages.length === 0 && (
+                <div className="px-4 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 text-sm">
+                  Showing sample messages. Real agent messages will appear during simulation.
+                </div>
+              )}
+
               {/* Header with stats */}
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-[var(--foreground)]">Message History</h3>

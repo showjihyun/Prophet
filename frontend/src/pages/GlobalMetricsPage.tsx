@@ -4,7 +4,7 @@
  *
  * Applied Skills: react-state-management (Zustand selectors for derived data).
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -85,7 +85,7 @@ export default function GlobalMetricsPage() {
   // Tier distribution from step's llm_calls and action_distribution
   const tierStats = useMemo(() => {
     const agents = Math.round(totalAgents) || 0;
-    const ratio = simulation ? 0.8 : 0.8; // TODO: read from config
+    const ratio = useSimulationStore.getState().slmLlmRatio || 0.8;
     const t1 = Math.round(agents * ratio);
     const t2 = Math.round(agents * (1 - ratio) * 0.8);
     const t3 = agents - t1 - t2;
@@ -96,7 +96,7 @@ export default function GlobalMetricsPage() {
       t2Pct: ((t2 / total) * 100).toFixed(1),
       t3Pct: ((t3 / total) * 100).toFixed(1),
     };
-  }, [totalAgents, simulation]);
+  }, [totalAgents]);
 
   // Cascade analytics from steps
   const cascadeStats = useMemo(() => {
@@ -123,8 +123,23 @@ export default function GlobalMetricsPage() {
   // Check if we have real data or should show "no data" state
   const hasData = steps.length > 0;
 
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [exportOpen]);
+
   function handleExport(format: 'json' | 'csv') {
     if (simId) apiClient.simulations.export(simId, format);
+    setExportOpen(false);
   }
 
   return (
@@ -132,13 +147,37 @@ export default function GlobalMetricsPage() {
       <PageNav
         breadcrumbs={[{ label: "Back to Simulation", href: "/" }, { label: "Global Insight & Metrics" }]}
         actions={
-          <div className="flex items-center gap-2">
-            <button onClick={() => handleExport('json')} disabled={!simId} className="h-9 px-4 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={simId ? "Export as JSON" : "No active simulation"}>
-              <DownloadIcon /> Export JSON
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setExportOpen((o) => !o)}
+              disabled={!simId}
+              className="h-9 px-4 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={simId ? "Export data" : "No active simulation"}
+            >
+              <DownloadIcon /> Export <ChevronDownIcon />
             </button>
-            <button onClick={() => handleExport('csv')} disabled={!simId} className="h-9 px-4 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={simId ? "Export as CSV" : "No active simulation"}>
-              <DownloadIcon /> Export CSV
-            </button>
+            {exportOpen && (
+              <div className="absolute right-0 mt-1 w-40 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg z-50 overflow-hidden">
+                <button
+                  onClick={() => handleExport('json')}
+                  className="w-full text-left px-4 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)] flex items-center gap-2"
+                >
+                  <DownloadIcon /> Export JSON
+                </button>
+                <button
+                  onClick={() => handleExport('csv')}
+                  className="w-full text-left px-4 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)] flex items-center gap-2"
+                >
+                  <DownloadIcon /> Export CSV
+                </button>
+                <button
+                  onClick={() => { window.print(); setExportOpen(false); }}
+                  className="w-full text-left px-4 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)] flex items-center gap-2"
+                >
+                  <DownloadIcon /> Export PDF
+                </button>
+              </div>
+            )}
           </div>
         }
       />
@@ -273,6 +312,7 @@ function ZapIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill
 function ActivityIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>; }
 function CalendarIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>; }
 function DownloadIcon() { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>; }
+function ChevronDownIcon() { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>; }
 function CpuIcon() { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><line x1="9" y1="1" x2="9" y2="4" /><line x1="15" y1="1" x2="15" y2="4" /><line x1="9" y1="20" x2="9" y2="23" /><line x1="15" y1="20" x2="15" y2="23" /><line x1="20" y1="9" x2="23" y2="9" /><line x1="20" y1="14" x2="23" y2="14" /><line x1="1" y1="9" x2="4" y2="9" /><line x1="1" y1="14" x2="4" y2="14" /></svg>; }
 function BrainIcon() { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" /><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" /></svg>; }
 function SparklesIcon() { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" /><path d="M5 3v4" /><path d="M19 17v4" /><path d="M3 5h4" /><path d="M17 19h4" /></svg>; }

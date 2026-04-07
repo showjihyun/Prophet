@@ -39,44 +39,44 @@ def _make_config(n_communities=2, size=30, seed=42) -> SimulationConfig:
 class TestCreateSimulation:
     """SPEC: 04_SIMULATION_SPEC.md#simulationorchestrator-interface — create_simulation"""
 
-    def test_returns_simulation_state(self):
+    async def test_returns_simulation_state(self):
         """create_simulation returns SimulationState."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         assert isinstance(state, SimulationState)
 
-    def test_status_is_configured(self):
+    async def test_status_is_configured(self):
         """Status should be CONFIGURED after creation."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         assert state.status == SimulationStatus.CONFIGURED.value
 
-    def test_agents_populated(self):
+    async def test_agents_populated(self):
         """Agents list should match community sizes."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config(n_communities=3, size=20))
         assert len(state.agents) == 60
 
-    def test_network_populated(self):
+    async def test_network_populated(self):
         """Network should be generated."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         assert state.network is not None
         assert state.network.graph.number_of_nodes() > 0
 
-    def test_current_step_is_zero(self):
+    async def test_current_step_is_zero(self):
         """current_step should start at 0."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         assert state.current_step == 0
 
-    def test_empty_communities_raises(self):
+    async def test_empty_communities_raises(self):
         """Empty community list raises ValueError."""
         orch = SimulationOrchestrator()
         with pytest.raises(ValueError, match="communities"):
             orch.create_simulation(SimulationConfig(communities=[]))
 
-    def test_agent_ids_unique(self):
+    async def test_agent_ids_unique(self):
         """All agent IDs should be unique."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
@@ -87,14 +87,14 @@ class TestCreateSimulation:
 class TestStartSimulation:
     """SPEC: 04_SIMULATION_SPEC.md#simulationorchestrator-interface — start"""
 
-    def test_start_transitions_to_running(self):
+    async def test_start_transitions_to_running(self):
         """start() sets status to RUNNING."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         orch.start(state.simulation_id)
         assert state.status == SimulationStatus.RUNNING.value
 
-    def test_start_completed_raises(self):
+    async def test_start_completed_raises(self):
         """Starting a COMPLETED simulation raises."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
@@ -102,7 +102,7 @@ class TestStartSimulation:
         with pytest.raises(InvalidStateTransitionError):
             orch.start(state.simulation_id)
 
-    def test_start_failed_raises(self):
+    async def test_start_failed_raises(self):
         """Starting a FAILED simulation raises."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
@@ -110,7 +110,7 @@ class TestStartSimulation:
         with pytest.raises(InvalidStateTransitionError):
             orch.start(state.simulation_id)
 
-    def test_max_concurrent_raises(self):
+    async def test_max_concurrent_raises(self):
         """4th concurrent start raises SimulationCapacityError."""
         orch = SimulationOrchestrator()
         for _ in range(3):
@@ -241,19 +241,19 @@ class TestModifyAgent:
 class TestInjectEvent:
     """SPEC: 04_SIMULATION_SPEC.md#simulationorchestrator-interface — inject_event"""
 
-    def test_inject_valid_event_type(self):
+    async def test_inject_valid_event_type(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         orch.inject_event(state.simulation_id, event_type="negative_pr", payload={})
         assert len(state.injected_events) == 1
 
-    def test_inject_unknown_event_type_raises(self):
+    async def test_inject_unknown_event_type_raises(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         with pytest.raises(ValueError, match="Unknown event type"):
             orch.inject_event(state.simulation_id, event_type="UNKNOWN", payload={})
 
-    def test_inject_environment_event(self):
+    async def test_inject_environment_event(self):
         from app.engine.agent.perception import EnvironmentEvent
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
@@ -279,16 +279,17 @@ class TestReplayStep:
         orch.start(state.simulation_id)
         original = await orch.run_step(state.simulation_id)
         replayed = orch.replay_step(state.simulation_id, target_step=0)
-        assert replayed.step == original.step
+        assert replayed["from_step"] == original.step
+        assert "replay_id" in replayed
 
-    def test_replay_beyond_current_raises(self):
+    async def test_replay_beyond_current_raises(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         state.current_step = 5
         with pytest.raises(ValueError):
             orch.replay_step(state.simulation_id, target_step=10)
 
-    def test_replay_not_persisted_raises(self):
+    async def test_replay_not_persisted_raises(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         state.current_step = 10
@@ -309,7 +310,7 @@ class TestConcurrencyControl:
         assert hasattr(orch, "_locks")
         assert isinstance(orch._locks, dict)
 
-    def test_lock_created_on_simulation_create(self):
+    async def test_lock_created_on_simulation_create(self):
         """A lock should be created when a simulation is created."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())

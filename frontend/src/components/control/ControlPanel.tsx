@@ -7,7 +7,7 @@
  * Right: Play/Pause/Step/Reset/Replay + Settings + Avatar
  */
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Brain,
   Play,
@@ -24,10 +24,17 @@ import {
   Plus,
   Copy,
   GitCompare,
+  Zap,
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
-import type { SimulationRun } from '../../types/simulation';
+import type { SimulationRun, SimulationStatus } from '../../types/simulation';
+import type { ScenarioInfo, CreateSimulationConfig } from '../../api/client';
+import {
+  SIM_STATUS,
+  TERMINAL_SIM_STATUSES,
+  STARTABLE_SIM_STATUSES,
+} from '@/config/constants';
 import ThemeToggle from '../shared/ThemeToggle';
 import InjectEventModal from '../shared/InjectEventModal';
 import ReplayModal from '../shared/ReplayModal';
@@ -38,22 +45,29 @@ const SPEEDS = [1, 2, 5, 10] as const;
 
 export default function ControlPanel() {
   const navigate = useNavigate();
+
+  // State selectors — values used in render output
   const simulation = useSimulationStore((s) => s.simulation);
   const status = useSimulationStore((s) => s.status);
   const currentStep = useSimulationStore((s) => s.currentStep);
-  const setStatus = useSimulationStore((s) => s.setStatus);
-  const appendStep = useSimulationStore((s) => s.appendStep);
-  const setSimulation = useSimulationStore((s) => s.setSimulation);
   const speed = useSimulationStore((s) => s.speed);
-  const setSpeed = useSimulationStore((s) => s.setSpeed);
   const currentProjectId = useSimulationStore((s) => s.currentProjectId);
+  const propagationAnimEnabled = useSimulationStore((s) => s.propagationAnimationsEnabled);
   const projects = useSimulationStore((s) => s.projects);
   const scenarios = useSimulationStore((s) => s.scenarios);
-  const setCurrentProject = useSimulationStore((s) => s.setCurrentProject);
-  const setProjects = useSimulationStore((s) => s.setProjects);
-  const setScenarios = useSimulationStore((s) => s.setScenarios);
 
-  const setCloneConfig = useSimulationStore((s) => s.setCloneConfig);
+  // Action selectors used inside effects (stable references needed for dep array)
+  const appendStep = useSimulationStore((s) => s.appendStep);
+  const setStatus = useSimulationStore((s) => s.setStatus);
+
+  // Action callbacks — use getState() inside handlers so these don't subscribe
+  // to the store and won't trigger re-renders when action references change.
+  const setSimulation = (sim: SimulationRun) => useSimulationStore.getState().setSimulation(sim);
+  const setSpeed = (s: number) => useSimulationStore.getState().setSpeed(s);
+  const setCurrentProject = (id: string | null) => useSimulationStore.getState().setCurrentProject(id);
+  const setScenarios = (s: ScenarioInfo[]) => useSimulationStore.getState().setScenarios(s);
+  const setCloneConfig = (c: CreateSimulationConfig | null) => useSimulationStore.getState().setCloneConfig(c);
+  const togglePropagationAnimations = () => useSimulationStore.getState().togglePropagationAnimations();
 
   const [injectOpen, setInjectOpen] = useState(false);
   const [replayOpen, setReplayOpen] = useState(false);
@@ -65,14 +79,32 @@ export default function ControlPanel() {
 
   // Previous simulations list for the "Load Previous" dropdown
   const [prevSimulations, setPrevSimulations] = useState<SimulationRun[]>([]);
+  const [prevSimSearch, setPrevSimSearch] = useState("");
+  const filteredPrevSimulations = useMemo(() => {
+    if (!prevSimSearch.trim()) return prevSimulations.slice(0, 20);
+    const q = prevSimSearch.toLowerCase();
+    return prevSimulations.filter((s) => s.name.toLowerCase().includes(q) || s.simulation_id.includes(q)).slice(0, 20);
+  }, [prevSimulations, prevSimSearch]);
   const [prevSimOpen, setPrevSimOpen] = useState(false);
-  const setSteps = useSimulationStore((s) => s.appendStep);
-
   const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // FE-PERF-10: prevent request pileup at high speeds (in-flight guard)
+  const stepInFlightRef = useRef(false);
 
-  // Auto-step loop: runs steps automatically while status is "running"
+  // Stable refs for simulation ID and max_steps — updated on every render so the
+  // interval callback always sees current values without being a dependency itself.
+  const simIdRef = useRef(simulation?.simulation_id);
+  const maxStepsRef = useRef(simulation?.max_steps ?? 365);
   useEffect(() => {
-    if (status !== "running" || !simulation?.simulation_id) {
+    simIdRef.current = simulation?.simulation_id;
+    maxStepsRef.current = simulation?.max_steps ?? 365;
+  });
+
+  // Auto-step loop: runs steps automatically while status is RUNNING
+  // Skip when runAll is active — the server handles all steps in that case.
+  // Uses refs for simulation ID and max_steps to avoid interval teardown on
+  // simulation object reference changes.
+  useEffect(() => {
+    if (status !== SIM_STATUS.RUNNING || !simIdRef.current || runAllLoading) {
       if (stepIntervalRef.current) {
         clearInterval(stepIntervalRef.current);
         stepIntervalRef.current = null;
@@ -81,16 +113,23 @@ export default function ControlPanel() {
     }
 
     const runStep = async () => {
+      const simId = simIdRef.current;
+      if (!simId) return;
+      // FE-PERF-10: skip tick if previous step request is still pending
+      if (stepInFlightRef.current) return;
+      stepInFlightRef.current = true;
       try {
-        const result = await apiClient.simulations.step(simulation.simulation_id);
+        const result = await apiClient.simulations.step(simId);
         appendStep(result);
         // Check completion
-        if (result.step + 1 >= (simulation.max_steps ?? 50)) {
-          setStatus("completed");
+        if (result.step + 1 >= maxStepsRef.current) {
+          setStatus(SIM_STATUS.COMPLETED);
         }
       } catch {
         // Step failed — pause
-        setStatus("paused");
+        setStatus(SIM_STATUS.PAUSED);
+      } finally {
+        stepInFlightRef.current = false;
       }
     };
 
@@ -102,12 +141,33 @@ export default function ControlPanel() {
         stepIntervalRef.current = null;
       }
     };
-  }, [status, speed, simulation?.simulation_id, appendStep, setStatus, simulation?.max_steps]);
+  }, [status, speed, appendStep, setStatus, runAllLoading]);
 
   // Load projects list on mount
   useEffect(() => {
-    apiClient.projects.list().then((res) => setProjects(Array.isArray(res) ? res : [])).catch(() => {});
-  }, [setProjects]);
+    apiClient.projects.list()
+      .then((res) => useSimulationStore.getState().setProjects(Array.isArray(res) ? res : []))
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-restore project from simulation and load scenarios on mount
+  useEffect(() => {
+    // If simulation has a project_id but currentProjectId is empty, restore it
+    const simProjectId = (simulation as Record<string, unknown>)?.project_id as string | undefined;
+    const effectiveProjectId = currentProjectId || simProjectId;
+    if (!effectiveProjectId) return;
+    if (!currentProjectId && simProjectId) {
+      setCurrentProject(simProjectId);
+    }
+    // Load scenarios if empty
+    if (scenarios.length === 0) {
+      apiClient.projects.get(effectiveProjectId).then((detail) => {
+        setScenarios(detail.scenarios ?? []);
+      }).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId, simulation]);
 
   // When project changes, load its scenarios
   const handleProjectChange = async (projectId: string) => {
@@ -122,15 +182,23 @@ export default function ControlPanel() {
     } catch { /* ignore */ }
   };
 
-  // When scenario changes, load its simulation if it has one
+  // When scenario changes, load its simulation if it has one.
+  // Fire the simulation fetch + a cheap network summary warmup in parallel
+  // so the backend's (sim_id, step) cache is primed by the time GraphPanel
+  // mounts and requests the full graph.
   const handleScenarioChange = async (scenarioId: string) => {
     const scenario = scenarios.find((s) => s.scenario_id === scenarioId);
-    if (scenario?.simulation_id) {
-      try {
-        const sim = await apiClient.simulations.get(scenario.simulation_id);
-        setSimulation(sim);
-      } catch { /* ignore */ }
-    }
+    if (!scenario?.simulation_id) return;
+    const simId = scenario.simulation_id;
+    try {
+      const [sim] = await Promise.all([
+        apiClient.simulations.get(simId),
+        // Fire-and-forget — warms the orchestrator payload cache. Errors
+        // are harmless (GraphPanel will retry on mount).
+        apiClient.network.getSummary(simId).catch(() => undefined),
+      ]);
+      setSimulation(sim);
+    } catch { /* ignore */ }
   };
 
   // Create new scenario via prompt
@@ -166,7 +234,7 @@ export default function ControlPanel() {
         max_steps: 365,
       });
       setSimulation(sim);
-      setStatus("configured");
+      setStatus(SIM_STATUS.CONFIGURED);
     } catch (err) {
       alert(`Failed to create simulation: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
@@ -192,9 +260,8 @@ export default function ControlPanel() {
       const sim = await apiClient.simulations.get(simId);
       setSimulation(sim);
       const stepsData = await apiClient.simulations.getSteps(simId);
-      for (const step of stepsData) {
-        setSteps(step);
-      }
+      // FE-PERF-03: single bulk update instead of O(n^2) per-step loop
+      useSimulationStore.getState().setStepsBulk(stepsData);
     } catch { /* ignore */ }
   };
 
@@ -214,18 +281,38 @@ export default function ControlPanel() {
     navigate("/setup");
   };
 
-  const isRunning = status === "running";
+  const isRunning = status === SIM_STATUS.RUNNING;
 
   const handlePlay = async () => {
+    if (!simulation?.simulation_id) return;
+    const simId = simulation.simulation_id;
+    const recover = async () => {
+      // Terminal-state recovery: stop (idempotent) → start.
+      await apiClient.simulations.stop(simId).catch(() => undefined);
+      await apiClient.simulations.start(simId);
+    };
     try {
-      if (simulation?.simulation_id) {
-        if (status === 'configured' || status === 'created') {
-          await apiClient.simulations.start(simulation.simulation_id);
-        } else {
-          await apiClient.simulations.resume(simulation.simulation_id);
+      if (STARTABLE_SIM_STATUSES.includes(status)) {
+        await apiClient.simulations.start(simId);
+      } else if (TERMINAL_SIM_STATUSES.includes(status)) {
+        await recover();
+      } else {
+        // Local state says paused/running — try resume, but the backend may
+        // have advanced to 'failed' behind our back (e.g. a step crashed).
+        // On 409 state-mismatch, fall back to full recovery instead of
+        // leaving the user stuck.
+        try {
+          await apiClient.simulations.resume(simId);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("409") || msg.toLowerCase().includes("not allowed")) {
+            await recover();
+          } else {
+            throw err;
+          }
         }
-        setStatus('running');
       }
+      setStatus(SIM_STATUS.RUNNING);
     } catch { /* status unchanged on failure */ }
   };
 
@@ -233,7 +320,7 @@ export default function ControlPanel() {
     try {
       if (simulation?.simulation_id) {
         await apiClient.simulations.pause(simulation.simulation_id);
-        setStatus('paused');
+        setStatus(SIM_STATUS.PAUSED);
       }
     } catch { /* status unchanged */ }
   };
@@ -248,10 +335,11 @@ export default function ControlPanel() {
   };
 
   const handleReset = async () => {
+    if (!window.confirm("Reset simulation? This will stop the current run.")) return;
     try {
       if (simulation?.simulation_id) {
         await apiClient.simulations.stop(simulation.simulation_id);
-        setStatus('created');
+        setStatus(SIM_STATUS.CREATED);
       }
     } catch { /* ignore */ }
   };
@@ -259,9 +347,10 @@ export default function ControlPanel() {
   const handleRunAll = async () => {
     if (!simulation?.simulation_id || runAllLoading) return;
     setRunAllLoading(true);
+    setStatus(SIM_STATUS.RUNNING);
     try {
       const report = await apiClient.simulations.runAll(simulation.simulation_id);
-      setStatus(report.status as 'completed' | 'failed');
+      setStatus(report.status as SimulationStatus);
     } catch {
       // leave status unchanged on failure
     } finally {
@@ -320,16 +409,16 @@ export default function ControlPanel() {
             className={`w-2 h-2 rounded-full ${
               isRunning
                 ? "bg-[var(--sentiment-positive)] animate-pulse-dot"
-                : status === "paused"
+                : status === SIM_STATUS.PAUSED
                   ? "bg-[var(--sentiment-warning)]"
                   : "bg-[var(--muted-foreground)]"
             }`}
           />
           {isRunning
             ? `Running`
-            : status === "paused"
+            : status === SIM_STATUS.PAUSED
               ? "Paused"
-              : status === "completed"
+              : status === SIM_STATUS.COMPLETED
                 ? "Completed"
                 : "Ready"}
           <span className="text-[var(--muted-foreground)]">
@@ -412,23 +501,35 @@ export default function ControlPanel() {
             Load Previous
           </button>
           {prevSimOpen && (
-            <div className="absolute left-0 top-9 z-50 w-64 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg overflow-hidden">
-              {prevSimulations.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-[var(--muted-foreground)]">No simulations found</div>
-              ) : (
-                prevSimulations.slice(0, 10).map((sim) => (
-                  <button
-                    key={sim.simulation_id}
-                    onClick={() => handleLoadPrevSimulation(sim.simulation_id)}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--secondary)] transition-colors border-b border-[var(--border)] last:border-0"
-                  >
-                    <span className="font-medium text-[var(--foreground)] block truncate">{sim.name}</span>
-                    <span className="text-[var(--muted-foreground)]">
-                      {sim.status} · Step {sim.current_step}/{sim.max_steps}
-                    </span>
-                  </button>
-                ))
-              )}
+            <div className="absolute left-0 top-9 z-50 w-72 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg overflow-hidden">
+              <div className="px-2 py-1.5 border-b border-[var(--border)]">
+                <input
+                  type="text"
+                  placeholder="Search simulations..."
+                  value={prevSimSearch}
+                  onChange={(e) => setPrevSimSearch(e.target.value)}
+                  className="w-full h-7 px-2 text-xs rounded border border-[var(--border)] bg-[var(--background)]"
+                  autoFocus
+                />
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                {filteredPrevSimulations.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-[var(--muted-foreground)]">No simulations found</div>
+                ) : (
+                  filteredPrevSimulations.map((sim) => (
+                    <button
+                      key={sim.simulation_id}
+                      onClick={() => handleLoadPrevSimulation(sim.simulation_id)}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--secondary)] transition-colors border-b border-[var(--border)] last:border-0"
+                    >
+                      <span className="font-medium text-[var(--foreground)] block truncate">{sim.name}</span>
+                      <span className="text-[var(--muted-foreground)]">
+                        {sim.status} · Step {sim.current_step}/{sim.max_steps}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -505,7 +606,7 @@ export default function ControlPanel() {
           icon={runAllLoading ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <ChevronsRight className="w-4 h-4" />}
           label="Run All"
           onClick={handleRunAll}
-          disabled={isRunning || runAllLoading || !simulation || (status !== 'configured' && status !== 'paused')}
+          disabled={isRunning || runAllLoading || !simulation || (status !== SIM_STATUS.CONFIGURED && status !== SIM_STATUS.PAUSED)}
         />
         <ControlButton
           testId="step-btn"
@@ -547,6 +648,12 @@ export default function ControlPanel() {
           icon={<Brain className="w-4 h-4" />}
           label="LLM Dashboard"
           onClick={() => useSimulationStore.getState().toggleLLMDashboard()}
+        />
+        <ControlButton
+          testId="propagation-anim-toggle"
+          icon={<Zap className={`w-4 h-4 ${propagationAnimEnabled ? "text-[var(--anim-share)]" : ""}`} />}
+          label={propagationAnimEnabled ? "Animations ON" : "Animations OFF"}
+          onClick={togglePropagationAnimations}
         />
 
         <div className="w-px h-6 bg-[var(--border)] mx-1" />

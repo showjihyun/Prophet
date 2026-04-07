@@ -1,7 +1,6 @@
 """Dynamic network evolution.
 SPEC: docs/spec/02_NETWORK_SPEC.md#dynamic-network-evolution
 """
-import copy
 import logging
 from typing import Any
 
@@ -18,7 +17,7 @@ class NetworkEvolver:
     def __init__(self, config: EvolutionConfig | None = None) -> None:
         self.config = config or EvolutionConfig()
 
-    def evolve(
+    def evolve_step(
         self,
         network: SocialNetwork,
         actions: list[Any],
@@ -33,8 +32,8 @@ class NetworkEvolver:
         if not actions:
             return network
 
-        # Deep copy the graph so we don't mutate the original
-        new_graph = copy.deepcopy(network.graph)
+        # Shallow copy the graph structure (NetworkX .copy() creates new edge dicts)
+        new_graph = network.graph.copy()
 
         for result in actions:
             agent_id = result.agent_id

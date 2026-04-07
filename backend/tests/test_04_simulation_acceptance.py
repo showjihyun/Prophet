@@ -63,21 +63,21 @@ class TestSIM01_CreateSimulation:
     SPEC: docs/spec/04_SIMULATION_SPEC.md#acceptance-criteria
     """
 
-    def test_create_simulation_status_configured(self):
+    async def test_create_simulation_status_configured(self):
         """SIM-01: Status should be CONFIGURED after creation."""
         orch = SimulationOrchestrator()
         config = _make_config()
         state = orch.create_simulation(config)
         assert state.status == SimulationStatus.CONFIGURED.value
 
-    def test_create_simulation_has_agents(self):
+    async def test_create_simulation_has_agents(self):
         """SIM-01: Agents should be generated."""
         orch = SimulationOrchestrator()
         config = _make_config(n_communities=2, community_size=50)
         state = orch.create_simulation(config)
         assert len(state.agents) == 100  # 2 * 50
 
-    def test_create_simulation_has_network(self):
+    async def test_create_simulation_has_network(self):
         """SIM-01: Network should be generated."""
         orch = SimulationOrchestrator()
         config = _make_config()
@@ -85,7 +85,7 @@ class TestSIM01_CreateSimulation:
         assert state.network is not None
         assert state.network.graph.number_of_nodes() == 100
 
-    def test_create_simulation_agents_have_influence_scores(self):
+    async def test_create_simulation_agents_have_influence_scores(self):
         """SIM-01: Agents should have influence scores from network centrality."""
         orch = SimulationOrchestrator()
         config = _make_config()

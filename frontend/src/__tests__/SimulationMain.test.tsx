@@ -18,7 +18,8 @@ vi.mock('@/hooks/useSimulationSocket', () => ({
 vi.mock('cytoscape', () => ({
   default: vi.fn(() => ({
     on: vi.fn(),
-    nodes: () => ({ length: 0, forEach: vi.fn(), toArray: () => [], removeClass: vi.fn() }),
+    batch: vi.fn((cb: () => void) => cb()),
+    nodes: () => ({ length: 0, forEach: vi.fn(), toArray: () => [], removeClass: vi.fn(), style: vi.fn() }),
     edges: () => ({ length: 0, forEach: vi.fn(), removeStyle: vi.fn(), style: vi.fn() }),
     zoom: vi.fn(() => 1),
     width: vi.fn(() => 800),
@@ -47,12 +48,32 @@ vi.mock('recharts', () => ({
   Pie: () => null,
 }));
 
+const { mockPause, mockResume, mockStart, mockRunAll } = vi.hoisted(() => ({
+  mockPause: vi.fn().mockResolvedValue({ status: 'paused' }),
+  mockResume: vi.fn().mockResolvedValue({ status: 'running' }),
+  mockStart: vi.fn().mockResolvedValue({ status: 'running' }),
+  mockRunAll: vi.fn().mockImplementation(() => new Promise((resolve) => {
+    setTimeout(() => resolve({ status: 'completed', total_steps: 365 }), 5000);
+  })),
+}));
+
 vi.mock('@/api/client', () => ({
   apiClient: {
     network: { get: vi.fn().mockRejectedValue(new Error('no network')) },
     agents: { list: vi.fn().mockResolvedValue({ items: [] }) },
-    simulations: { getSteps: vi.fn().mockResolvedValue([]) },
-    projects: { list: vi.fn().mockResolvedValue([]) },
+    simulations: {
+      getSteps: vi.fn().mockResolvedValue([]),
+      pause: mockPause,
+      resume: mockResume,
+      start: mockStart,
+      runAll: mockRunAll,
+      step: vi.fn().mockResolvedValue({ step: 1, adoption_rate: 0.1, mean_sentiment: 0.5, community_metrics: {}, emergent_events: [], agent_states: [] }),
+      stop: vi.fn().mockResolvedValue({ status: 'created' }),
+    },
+    projects: {
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue({ scenarios: [] }),
+    },
     scenarios: { list: vi.fn().mockResolvedValue([]) },
   },
 }));
@@ -256,6 +277,84 @@ describe('SimulationMain (UI-01)', () => {
     it('renders live conversation feed', () => {
       renderPage();
       expect(screen.getByText(/live conversation feed/i)).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * SPEC: 04_SIMULATION_SPEC.md#SIM-03 — Pause mid-step
+   * SPEC: 04_SIMULATION_SPEC.md#pause-resume
+   * Tests the Play/Pause toggle behavior and Run All pause capability.
+   */
+  describe('SIM-03: Pause / Resume Controls', () => {
+    it('shows pause button and hides play button when status is running', () => {
+      useSimulationStore.setState({ status: 'running' });
+      renderPage();
+      const pauseBtn = screen.getByTestId('pause-btn');
+      const playBtn = screen.getByTestId('play-btn');
+      // Pause visible (not hidden)
+      expect(pauseBtn).not.toHaveClass('invisible');
+      // Play hidden
+      expect(playBtn).toHaveClass('invisible');
+    });
+
+    it('shows play button and hides pause button when status is paused', () => {
+      useSimulationStore.setState({ status: 'paused' });
+      renderPage();
+      const pauseBtn = screen.getByTestId('pause-btn');
+      const playBtn = screen.getByTestId('play-btn');
+      // Play visible
+      expect(playBtn).not.toHaveClass('invisible');
+      // Pause hidden
+      expect(pauseBtn).toHaveClass('invisible');
+    });
+
+    it('calls pause API when pause button is clicked during running', async () => {
+      useSimulationStore.setState({ status: 'running' });
+      renderPage();
+      const pauseBtn = screen.getByTestId('pause-btn');
+      fireEvent.click(pauseBtn);
+      await vi.waitFor(() => {
+        expect(mockPause).toHaveBeenCalledWith('sim-test-001');
+      });
+    });
+
+    it('updates status badge to "Paused" after pause', async () => {
+      useSimulationStore.setState({ status: 'running' });
+      renderPage();
+      fireEvent.click(screen.getByTestId('pause-btn'));
+      await vi.waitFor(() => {
+        expect(useSimulationStore.getState().status).toBe('paused');
+      });
+    });
+
+    it('calls resume API when play button is clicked during paused', async () => {
+      useSimulationStore.setState({ status: 'paused' });
+      renderPage();
+      const playBtn = screen.getByTestId('play-btn');
+      fireEvent.click(playBtn);
+      await vi.waitFor(() => {
+        expect(mockResume).toHaveBeenCalledWith('sim-test-001');
+      });
+    });
+
+    it('pause button is visible during Run All execution', async () => {
+      useSimulationStore.setState({ status: 'configured' });
+      renderPage();
+      const runAllBtn = screen.getByTestId('run-all-btn');
+      fireEvent.click(runAllBtn);
+      // After clicking Run All, status should become 'running' → pause button visible
+      await vi.waitFor(() => {
+        const pauseBtn = screen.getByTestId('pause-btn');
+        expect(pauseBtn).not.toHaveClass('invisible');
+      });
+    });
+
+    it('keyboard shortcut Space toggles play/pause', () => {
+      useSimulationStore.setState({ status: 'running' });
+      renderPage();
+      fireEvent.keyDown(window, { key: ' ' });
+      // Should have called pause
+      expect(mockPause).toHaveBeenCalled();
     });
   });
 });

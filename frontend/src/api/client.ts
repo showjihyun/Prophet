@@ -4,6 +4,7 @@
  */
 
 import type { SimulationRun, StepResult } from '../types/simulation';
+import { API_VERSION_PREFIX, DEFAULT_API_BASE_URL, LS_KEY_TOKEN } from "@/config/constants";
 
 export interface CommunityConfigInput {
   id: string;
@@ -206,6 +207,9 @@ export interface RunAllReport {
 export interface CytoscapeGraph {
   nodes: Array<{ data: Record<string, unknown> }>;
   edges: Array<{ data: Record<string, unknown> }>;
+  /** Populated when ?summary=true is requested — empty nodes/edges + counts. */
+  total_nodes?: number;
+  total_edges?: number;
 }
 
 /** Network metrics. @spec docs/spec/06_API_SPEC.md#get-network-metrics */
@@ -219,11 +223,11 @@ export interface NetworkMetrics {
 }
 
 const BASE_URL = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api/v1`
-  : "http://localhost:8000/api/v1";
+  ? `${import.meta.env.VITE_API_URL}${API_VERSION_PREFIX}`
+  : DEFAULT_API_BASE_URL;
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('prophet-token');
+  const token = localStorage.getItem(LS_KEY_TOKEN);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -259,6 +263,8 @@ export const apiClient = {
       request<{ job_id: string }>(`/simulations/${id}/monte-carlo`, { method: "POST", body: JSON.stringify(opts) }),
     getMonteCarloJob: (id: string, jobId: string) =>
       request<Record<string, unknown>>(`/simulations/${id}/monte-carlo/${jobId}`),
+    getLatestMonteCarlo: (id: string) =>
+      request<Record<string, unknown> | null>(`/simulations/${id}/monte-carlo`),
     engineControl: (id: string, body: { slm_llm_ratio: number; slm_model?: string; budget_usd?: number }) =>
       request<Record<string, unknown>>(`/simulations/${id}/engine-control`, { method: "POST", body: JSON.stringify(body) }),
     runAll: (id: string) =>
@@ -288,6 +294,14 @@ export const apiClient = {
   communities: {
     list: (simId: string) =>
       request<{ communities: CommunityInfo[] }>(`/simulations/${simId}/communities/`),
+    update: (simId: string, communityId: string, data: { name?: string; personality_profile?: Record<string, number> }) =>
+      request(`/simulations/${simId}/communities/${communityId}`, { method: "PATCH", body: JSON.stringify(data) }),
+    create: (simId: string, data: { name: string; agent_type?: string; size: number; personality_profile?: Record<string, number> }) =>
+      request(`/simulations/${simId}/communities/`, { method: "POST", body: JSON.stringify(data) }),
+    remove: (simId: string, communityId: string) =>
+      request(`/simulations/${simId}/communities/${communityId}`, { method: "DELETE" }),
+    reassign: (simId: string, communityId: string, data: { agent_ids: string[]; target_community_id: string }) =>
+      request(`/simulations/${simId}/communities/${communityId}/reassign`, { method: "POST", body: JSON.stringify(data) }),
   },
   communityThreads: {
     list: (simId: string, communityId: string) =>
@@ -321,13 +335,24 @@ export const apiClient = {
       request<void>(`/projects/${id}`, { method: "DELETE" }),
   },
   network: {
-    get: (simId: string) => request<CytoscapeGraph>(`/simulations/${simId}/network?format=cytoscape`),
+    get: (simId: string) => request<CytoscapeGraph>(`/simulations/${simId}/network/?format=cytoscape`),
+    getSummary: (simId: string) =>
+      request<CytoscapeGraph>(`/simulations/${simId}/network/?summary=true`),
     getMetrics: (simId: string) =>
       request<NetworkMetrics>(`/simulations/${simId}/network/metrics`),
   },
   llm: {
     getStats: (simId: string) => request(`/simulations/${simId}/llm/stats`),
     getImpact: (simId: string) => request(`/simulations/${simId}/llm/impact`),
+    getCalls: (simId: string, params?: { step?: number; agent_id?: string; provider?: string; limit?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.step != null) q.set("step", String(params.step));
+      if (params?.agent_id) q.set("agent_id", params.agent_id);
+      if (params?.provider) q.set("provider", params.provider);
+      if (params?.limit != null) q.set("limit", String(params.limit));
+      const qs = q.toString();
+      return request(`/simulations/${simId}/llm/calls${qs ? `?${qs}` : ""}`);
+    },
   },
   auth: {
     register: (username: string, password: string) =>

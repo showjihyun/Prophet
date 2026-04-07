@@ -62,6 +62,8 @@ export default function ProjectScenariosPage() {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const addToast = useSimulationStore((s) => s.addToast);
 
   useEffect(() => {
     if (!projectId) return;
@@ -102,6 +104,35 @@ export default function ProjectScenariosPage() {
       } catch { /* ignore */ }
     }
     navigate("/simulation");
+  };
+
+  const handleStop = async (scenario: ScenarioInfo) => {
+    if (!scenario.simulation_id) return;
+    try {
+      await apiClient.simulations.stop(scenario.simulation_id);
+      setScenarios((prev) =>
+        prev.map((s) => s.scenario_id === scenario.scenario_id ? { ...s, status: "completed" } : s),
+      );
+      addToast({ type: "info", message: `Scenario "${scenario.name}" stopped.` });
+    } catch {
+      addToast({ type: "error", message: "Failed to stop scenario." });
+    }
+  };
+
+  const handleDuplicate = async (scenario: ScenarioInfo) => {
+    if (!projectId) return;
+    try {
+      const dup = await apiClient.projects.createScenario(projectId, {
+        name: `${scenario.name} (copy)`,
+        description: scenario.description,
+        config: scenario.config ?? {},
+      });
+      setScenarios((prev) => [...prev, dup]);
+      setMenuOpen(null);
+      addToast({ type: "info", message: `Scenario duplicated.` });
+    } catch {
+      addToast({ type: "error", message: "Failed to duplicate scenario." });
+    }
   };
 
   const handleDelete = async (scenario: ScenarioInfo) => {
@@ -229,7 +260,10 @@ export default function ProjectScenariosPage() {
                         </button>
                       )}
                       {scenario.status === "running" && (
-                        <button className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-[var(--destructive)] border border-[var(--destructive)]/30 rounded-md bg-[var(--destructive)]/10 hover:bg-[var(--destructive)]/15 transition-colors">
+                        <button
+                          onClick={() => handleStop(scenario)}
+                          className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-[var(--destructive)] border border-[var(--destructive)]/30 rounded-md bg-[var(--destructive)]/10 hover:bg-[var(--destructive)]/15 transition-colors"
+                        >
                           <Square className="w-3.5 h-3.5" />
                           Stop
                         </button>
@@ -251,12 +285,31 @@ export default function ProjectScenariosPage() {
                       >
                         <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </button>
-                      <button
-                        aria-label="More options"
-                        className="h-8 w-8 flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors"
-                      >
-                        <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => setMenuOpen(menuOpen === scenario.scenario_id ? null : scenario.scenario_id)}
+                          aria-label="More options"
+                          className="h-8 w-8 flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors"
+                        >
+                          <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                        {menuOpen === scenario.scenario_id && (
+                          <div className="absolute right-0 top-9 z-10 w-40 bg-[var(--card)] border border-[var(--border)] rounded-md shadow-lg py-1">
+                            <button
+                              onClick={() => handleDuplicate(scenario)}
+                              className="w-full text-left px-3 py-1.5 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]"
+                            >
+                              Duplicate
+                            </button>
+                            <button
+                              onClick={() => { handleDelete(scenario); setMenuOpen(null); }}
+                              className="w-full text-left px-3 py-1.5 text-sm text-[var(--destructive)] hover:bg-[var(--secondary)]"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

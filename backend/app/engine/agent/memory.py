@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID, uuid4
 
+from app.config import settings as _settings
+
 
 @dataclass
 class MemoryRecord:
@@ -51,12 +53,14 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
     SPEC: docs/spec/01_AGENT_SPEC.md#layer-2-memorylayer
     """
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = sum(x * x for x in a) ** 0.5
-    norm_b = sum(x * x for x in b) ** 0.5
+    import numpy as np
+    a_arr = np.asarray(a, dtype=np.float64)
+    b_arr = np.asarray(b, dtype=np.float64)
+    norm_a = np.linalg.norm(a_arr)
+    norm_b = np.linalg.norm(b_arr)
     if norm_a == 0 or norm_b == 0:
         return 0.0
-    return dot / (norm_a * norm_b)
+    return float(np.dot(a_arr, b_arr) / (norm_a * norm_b))
 
 
 class MemoryLayer:
@@ -76,7 +80,7 @@ class MemoryLayer:
         alpha: 0.6, gamma: 0.3, delta: 0.1
     """
 
-    MAX_MEMORIES_PER_AGENT: int = 1000
+    MAX_MEMORIES_PER_AGENT: int = _settings.agent_max_memories
 
     def __init__(self, config: MemoryConfig | None = None, llm_adapter=None):
         """SPEC: docs/spec/01_AGENT_SPEC.md#layer-2-memorylayer
@@ -87,10 +91,10 @@ class MemoryLayer:
         """
         if config is None:
             # Use fallback weights since we have no pgvector in Phase 2
-            self._alpha = 0.6
-            self._beta = 0.0
-            self._gamma = 0.3
-            self._delta = 0.1
+            self._alpha = _settings.memory_fallback_alpha
+            self._beta = _settings.memory_fallback_beta
+            self._gamma = _settings.memory_fallback_gamma
+            self._delta = _settings.memory_fallback_delta
         else:
             self._alpha = config.alpha
             self._beta = config.beta
@@ -227,8 +231,9 @@ class MemoryLayer:
         """
         if not content:
             raise ValueError("content must not be empty")
-        if embedding is not None and len(embedding) != 768:
-            raise ValueError(f"embedding length must be 768, got {len(embedding)}")
+        _dim = _settings.embedding_dim
+        if embedding is not None and len(embedding) != _dim:
+            raise ValueError(f"embedding length must be {_dim}, got {len(embedding)}")
 
         # Clamp emotion_weight and social_importance
         emotion_weight = max(0.0, min(1.0, emotion_weight))

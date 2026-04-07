@@ -154,6 +154,9 @@ class StepResult:
     # Agent summary
     action_distribution: dict[str, int] = field(default_factory=dict)
 
+    # Propagation pairs for real-time graph animation (GAP-7)
+    propagation_pairs: list[dict[str, object]] = field(default_factory=list)
+
     # LLM usage
     llm_calls_this_step: int = 0
     llm_tier_distribution: dict[int, int] = field(default_factory=dict)

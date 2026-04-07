@@ -7,6 +7,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient, type AgentSummary } from "../api/client";
+import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { useSimulationStore } from "../store/simulationStore";
 import {
   BarChart,
@@ -120,16 +121,21 @@ function agentToInfluencer(a: AgentSummary, rank: number): Influencer {
 
 export default function TopInfluencersPage() {
   const navigate = useNavigate();
-  const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
+  const simulation = useSimulationStore((s) => s.simulation);
+  const simulationId = simulation?.simulation_id ?? null;
   const [search, setSearch] = useState("");
-  const [influencers, setInfluencers] = useState<Influencer[]>(MOCK_INFLUENCERS);
-  const [distributionData, setDistributionData] = useState(DISTRIBUTION_DATA);
-  const [stats, setStats] = useState({ total: 120, avg: 72.4, active: 98, bridges: 23 });
+  const [influencers, setInfluencers] = useState<Influencer[]>([]);
+  const [distributionData, setDistributionData] = useState<{ name: string; value: number; fill: string }[]>([]);
+  const [stats, setStats] = useState({ total: 0, avg: 0, active: 0, bridges: 0 });
+  const [loading, setLoading] = useState(false);
 
   // Fetch real agents from API
   useEffect(() => {
     if (!simulationId) return;
+    let cancelled = false;
+    setLoading(true);
     apiClient.agents.list(simulationId, { limit: 200 }).then((res) => {
+      if (cancelled) return;
       const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score);
       setInfluencers(sorted.map((a, i) => agentToInfluencer(a, i + 1)));
 
@@ -147,18 +153,37 @@ export default function TopInfluencersPage() {
         })),
       );
 
-      // Compute stats
-      const scores = res.items.map((a) => a.influence_score * 100);
-      const activeCount = res.items.filter((a) => a.action !== "idle").length;
-      const bridgeCount = res.items.filter((a) => a.agent_type === "bridge").length;
+      // Compute stats in a single pass (combines .map + two .filter iterations)
+      let scoreSum = 0;
+      let activeCount = 0;
+      let bridgeCount = 0;
+      for (const a of res.items) {
+        scoreSum += a.influence_score * 100;
+        if (a.action !== "idle") activeCount++;
+        if (a.agent_type === "bridge") bridgeCount++;
+      }
+      const count = res.items.length;
       setStats({
         total: res.total,
-        avg: scores.length ? Math.round((scores.reduce((s, v) => s + v, 0) / scores.length) * 10) / 10 : 0,
+        avg: count ? Math.round((scoreSum / count) * 10) / 10 : 0,
         active: activeCount,
         bridges: bridgeCount,
       });
-    }).catch(() => { /* keep mock */ });
+    }).catch(() => { /* keep mock */ }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [simulationId]);
+
+  // Sort state (A1)
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'influence_score', direction: 'desc' });
+
+  const handleSort = (key: string) => {
+    setSortConfig((prev) =>
+      prev.key === key
+        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'desc' }
+    );
+    setCurrentPage(1);
+  };
 
   // Pagination state (UI-08)
   const [currentPage, setCurrentPage] = useState(1);
@@ -168,9 +193,9 @@ export default function TopInfluencersPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState<FilterState>({ ...DEFAULT_FILTERS });
 
-  // Apply search + filters
+  // Apply search + filters + sort
   const filtered = useMemo(() => {
-    return influencers.filter((i) => {
+    const result = influencers.filter((i) => {
       // Search
       if (
         search &&
@@ -191,7 +216,39 @@ export default function TopInfluencersPage() {
       if (i.connections < filters.minConnections) return false;
       return true;
     });
-  }, [search, filters, influencers]);
+
+    // Apply sort
+    return [...result].sort((a, b) => {
+      let aVal: string | number;
+      let bVal: string | number;
+      if (sortConfig.key === 'influence_score') {
+        aVal = a.influenceScore;
+        bVal = b.influenceScore;
+      } else if (sortConfig.key === 'community_id') {
+        aVal = a.community;
+        bVal = b.community;
+      } else if (sortConfig.key === 'belief') {
+        const sentimentOrder: Record<string, number> = { Positive: 1, Neutral: 0, Negative: -1 };
+        aVal = sentimentOrder[a.sentiment] ?? 0;
+        bVal = sentimentOrder[b.sentiment] ?? 0;
+      } else {
+        return 0;
+      }
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [search, filters, influencers, sortConfig]);
+
+  // Top Community: community with most agents in the filtered list (A10)
+  const topCommunity = useMemo(() => {
+    if (filtered.length === 0) return "—";
+    const counts: Record<string, number> = {};
+    for (const i of filtered) {
+      counts[i.community] = (counts[i.community] ?? 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+  }, [filtered]);
 
   // Pagination derived values
   const total = filtered.length;
@@ -251,11 +308,36 @@ export default function TopInfluencersPage() {
       />
 
       <div className="flex-1 p-6 flex flex-col gap-6 overflow-auto">
+        {/* Empty state — no simulation selected */}
+        {!simulation && !loading && (
+          <div className="flex flex-col items-center justify-center py-24 gap-3">
+            <CrownIcon />
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No active simulation. Run a simulation first to view influencer rankings.
+            </p>
+            <button
+              onClick={() => navigate("/projects")}
+              className="mt-2 h-9 px-5 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity"
+            >
+              Go to Projects
+            </button>
+          </div>
+        )}
+
+        {/* Loading state */}
+        {loading && (
+          <div className="flex items-center justify-center py-24">
+            <LoadingSpinner label="Loading agents..." />
+          </div>
+        )}
+
+        {/* Main content — only when simulation is active */}
+        {simulation && !loading && (<>
         {/* Summary Stats — updated per UI-08 SPEC */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Influencers Tracked" value={String(stats.total)} icon={<CrownIcon />} />
           <StatCard label="Avg Influence Score" value={String(stats.avg)} icon={<BarChartIcon />} />
-          <StatCard label="Top Community" value="Alpha" icon={<UsersIcon />} />
+          <StatCard label="Top Community" value={topCommunity} icon={<UsersIcon />} />
           <StatCard label="Active Cascades" value={String(stats.active)} icon={<GitBranchIcon />} />
         </div>
 
@@ -324,9 +406,33 @@ export default function TopInfluencersPage() {
                   <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
                     <th className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)] w-12">#</th>
                     <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)]">Agent ID</th>
-                    <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)]">Community</th>
-                    <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)] w-48">Influence Score</th>
-                    <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)]">Sentiment</th>
+                    <th
+                      className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)] cursor-pointer hover:text-[var(--foreground)] select-none"
+                      onClick={() => handleSort('community_id')}
+                    >
+                      <span>Community</span>
+                      {sortConfig.key === 'community_id' && (
+                        <span className="ml-1 text-xs">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
+                    <th
+                      className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)] w-48 cursor-pointer hover:text-[var(--foreground)] select-none"
+                      onClick={() => handleSort('influence_score')}
+                    >
+                      <span>Influence Score</span>
+                      {sortConfig.key === 'influence_score' && (
+                        <span className="ml-1 text-xs">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
+                    <th
+                      className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)] cursor-pointer hover:text-[var(--foreground)] select-none"
+                      onClick={() => handleSort('belief')}
+                    >
+                      <span>Sentiment</span>
+                      {sortConfig.key === 'belief' && (
+                        <span className="ml-1 text-xs">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
                     <th className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)]">Chains</th>
                     <th className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)]">Connections</th>
                     <th className="text-left px-3 py-3 font-semibold text-[var(--muted-foreground)]">Status</th>
@@ -337,6 +443,7 @@ export default function TopInfluencersPage() {
                     <tr
                       key={inf.agentId}
                       className="interactive border-b border-[var(--border)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
+                      style={{ contentVisibility: "auto", containIntrinsicSize: "0 48px" }}
                       onClick={() => navigate(`/agents/${inf.agentId}`)}
                     >
                       <td className="text-right px-3 py-3 font-semibold text-[var(--muted-foreground)]">
@@ -465,9 +572,25 @@ export default function TopInfluencersPage() {
           {/* Right Sidebar */}
           <div className="w-[280px] shrink-0">
             <div data-testid="influence-distribution-chart" className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">
-                Influence Distribution
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                  Influence Distribution
+                </h3>
+                {filters.communities.length < 5 && (
+                  <button
+                    onClick={() => {
+                      setFilters((prev) => ({ ...prev, communities: ["Alpha", "Beta", "Gamma", "Delta", "Bridge"] }));
+                      setCurrentPage(1);
+                    }}
+                    className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-[var(--muted-foreground)] mb-3">
+                Click a bar to filter by community.
+              </p>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart
                   data={distributionData}
@@ -487,9 +610,28 @@ export default function TopInfluencersPage() {
                       props.payload.name,
                     ]}
                   />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  <Bar
+                    dataKey="value"
+                    radius={[0, 4, 4, 0]}
+                    style={{ cursor: "pointer" }}
+                    onClick={(data: { name: string }) => {
+                      setFilters((prev) => ({
+                        ...prev,
+                        communities: [data.name],
+                      }));
+                      setCurrentPage(1);
+                    }}
+                  >
                     {distributionData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.fill} />
+                      <Cell
+                        key={entry.name}
+                        fill={entry.fill}
+                        opacity={
+                          filters.communities.length === 5 || filters.communities.includes(entry.name)
+                            ? 1
+                            : 0.35
+                        }
+                      />
                     ))}
                   </Bar>
                 </BarChart>
@@ -497,6 +639,7 @@ export default function TopInfluencersPage() {
             </div>
           </div>
         </div>
+        </>)}
       </div>
     </div>
   );

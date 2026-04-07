@@ -44,6 +44,7 @@ class VLLMAdapter(LLMAdapter):
         self._base_url = base_url.rstrip("/")
         self._default_model = default_model
         self._max_concurrent = max_concurrent
+        self._semaphore = asyncio.Semaphore(max_concurrent)
 
     async def complete(
         self,
@@ -54,6 +55,14 @@ class VLLMAdapter(LLMAdapter):
 
         SPEC: docs/spec/05_LLM_SPEC.md#2-llmadapter-interface-abstract
         """
+        async with self._semaphore:
+            return await self._complete_inner(prompt, options)
+
+    async def _complete_inner(
+        self,
+        prompt: LLMPrompt,
+        options: LLMOptions | None = None,
+    ) -> LLMResponse:
         opts = options or LLMOptions()
         timeout = opts.timeout_seconds
 

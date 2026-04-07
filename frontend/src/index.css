@@ -45,6 +45,12 @@
   /* Metrics */
   --live-badge: #ef4444;
 
+  /* Propagation animation colors (GAP-7) */
+  --anim-share: #22c55e;
+  --anim-comment: #3b82f6;
+  --anim-like: #eab308;
+  --anim-adopt: #a855f7;
+
   /* Layout tokens */
   --control-bar-height: 56px;
   --community-panel-width: 260px;
@@ -155,6 +161,19 @@ body {
 
 .animate-pulse-dot {
   animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+/* GAP-7: Propagation animation — inter-community arc fade */
+@keyframes propagation-arc-fade {
+  0% { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+
+/* GAP-7: Activity ring pulse for overview zoom tier */
+@keyframes propagation-ring-pulse {
+  0% { border-width: 0; opacity: 0.8; }
+  50% { border-width: 3px; opacity: 0.5; }
+  100% { border-width: 0; opacity: 0; }
 }
 
 /* Slide-in from right for toast notifications */

@@ -3,10 +3,18 @@
  * @spec docs/spec/07_FRONTEND_SPEC.md#control-panel
  */
 import { test, expect } from '@playwright/test';
+import { createSimulation } from './helpers';
 
 test.describe('Phase B Modals', () => {
+  let simId: string;
+
+  test.beforeAll(async ({ request }) => {
+    simId = await createSimulation(request, 'E2E Modal Test');
+  });
+
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto(`/simulations/${simId}`);
+    await expect(page.getByTestId('simulation-page')).toBeVisible({ timeout: 10000 });
   });
 
   test('Inject Event modal opens and closes', async ({ page }) => {

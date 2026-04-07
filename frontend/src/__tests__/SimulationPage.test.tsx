@@ -17,8 +17,9 @@ vi.mock('../hooks/useSimulationSocket', () => ({
 vi.mock('cytoscape', () => ({
   default: vi.fn(() => ({
     on: vi.fn(),
-    nodes: () => ({ length: 0, forEach: vi.fn(), toArray: () => [], removeClass: vi.fn() }),
-    edges: () => ({ length: 0, forEach: vi.fn(), removeStyle: vi.fn() }),
+    batch: vi.fn((cb: () => void) => cb()),
+    nodes: () => ({ length: 0, forEach: vi.fn(), toArray: () => [], removeClass: vi.fn(), style: vi.fn() }),
+    edges: () => ({ length: 0, forEach: vi.fn(), removeStyle: vi.fn(), style: vi.fn() }),
     zoom: vi.fn(() => 1),
     width: vi.fn(() => 800),
     height: vi.fn(() => 600),
@@ -40,7 +41,10 @@ vi.mock('../api/client', () => ({
       reset: vi.fn().mockRejectedValue(new Error('no sim')),
       step: vi.fn().mockRejectedValue(new Error('no sim')),
     },
-    projects: { list: vi.fn().mockResolvedValue([]) },
+    projects: {
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue({ scenarios: [] }),
+    },
     scenarios: { list: vi.fn().mockResolvedValue([]) },
   },
 }));

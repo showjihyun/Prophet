@@ -38,11 +38,12 @@ class ClaudeAdapter(LLMAdapter):
     def __init__(
         self,
         api_key: str,
-        default_model: str = "claude-sonnet-4-6",
+        default_model: str | None = None,
     ) -> None:
         """SPEC: docs/spec/05_LLM_SPEC.md#3-provider-implementations"""
+        from app.config import settings
         self._api_key = api_key
-        self._default_model = default_model
+        self._default_model = default_model or settings.anthropic_default_model
 
     async def complete(
         self,

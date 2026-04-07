@@ -43,6 +43,14 @@ export interface SimulationRun {
   created_at: string;
 }
 
+/** A single propagation event for graph animation (GAP-7). */
+export interface PropagationPair {
+  source: string;
+  target: string;
+  action: string;
+  probability: number;
+}
+
 export interface StepResult {
   simulation_id: string;
   step: number;
@@ -54,6 +62,7 @@ export interface StepResult {
   community_metrics: Record<string, CommunityStepMetrics>;
   emergent_events: EmergentEvent[];
   action_distribution: Record<string, number>;
+  propagation_pairs?: PropagationPair[];
   llm_calls_this_step: number;
   step_duration_ms: number;
 }

@@ -62,14 +62,21 @@ export default function AgentInterveneModal({
   agentId,
   agentLabel,
 }: AgentInterveneModalProps) {
+  const addToast = useSimulationStore((s) => s.addToast);
   const [state, setState] = useState<InterventionState>(INITIAL_STATE);
+  const [typeError, setTypeError] = useState("");
+  const [strengthError, setStrengthError] = useState("");
 
   // Reset form state when modal opens.
   // Deferred via queueMicrotask to avoid calling setState synchronously
   // inside the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
     if (isOpen) {
-      queueMicrotask(() => setState(INITIAL_STATE));
+      queueMicrotask(() => {
+        setState(INITIAL_STATE);
+        setTypeError("");
+        setStrengthError("");
+      });
     }
   }, [isOpen]);
 
@@ -91,16 +98,24 @@ export default function AgentInterveneModal({
   );
 
   const handleApply = useCallback(async () => {
-    // Validation
+    // Inline validation
+    let hasError = false;
     if (!state.type) {
-      return;
+      setTypeError("Please select an intervention type");
+      hasError = true;
+    } else {
+      setTypeError("");
+    }
+    if (state.strength < 0 || state.strength > 1) {
+      setStrengthError("Strength must be between 0 and 1");
+      hasError = true;
+    } else {
+      setStrengthError("");
     }
     if (state.duration < 1) {
       return;
     }
-    if (state.strength < 0 || state.strength > 1) {
-      return;
-    }
+    if (hasError) return;
 
     // Call backend API to apply intervention
     const simulation = useSimulationStore.getState().simulation;
@@ -116,8 +131,9 @@ export default function AgentInterveneModal({
       }
     }
 
+    addToast({ type: "info", message: `Intervention applied to Agent #${agentId}` });
     onClose();
-  }, [state, agentId, agentLabel, onClose]);
+  }, [state, agentId, onClose, addToast]);
 
   if (!isOpen) return null;
 
@@ -173,9 +189,9 @@ export default function AgentInterveneModal({
             <select
               data-testid="intervention-type-select"
               value={state.type}
-              onChange={(e) => updateField("type", e.target.value)}
+              onChange={(e) => { updateField("type", e.target.value); setTypeError(""); }}
               className="w-full h-10 rounded-md border px-3 text-sm bg-[var(--card)]"
-              style={{ borderColor: "var(--input)" }}
+              style={{ borderColor: typeError ? "#ef4444" : "var(--input)" }}
             >
               {INTERVENTION_TYPES.map((opt) => (
                 <option key={opt.value} value={opt.value} disabled={opt.value === ""}>
@@ -183,6 +199,9 @@ export default function AgentInterveneModal({
                 </option>
               ))}
             </select>
+            {typeError && (
+              <p className="text-xs text-red-500 mt-0.5">{typeError}</p>
+            )}
           </div>
 
           {/* Target Scope */}
@@ -234,6 +253,7 @@ export default function AgentInterveneModal({
                 onChange={(e) => {
                   const val = parseFloat(e.target.value);
                   updateField("strength", isNaN(val) ? 0 : val);
+                  setStrengthError("");
                 }}
                 className="w-full h-10 rounded-md border px-3 text-sm"
                 style={{
@@ -243,6 +263,9 @@ export default function AgentInterveneModal({
                       : "var(--input)",
                 }}
               />
+              {strengthError && (
+                <p className="text-xs text-red-500 mt-0.5">{strengthError}</p>
+              )}
             </div>
           </div>
 

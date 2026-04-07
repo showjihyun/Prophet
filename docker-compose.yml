@@ -35,9 +35,9 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "ollama", "list"]
+      test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 10
       start_period: 30s
     # Model will be pulled on first API call via backend

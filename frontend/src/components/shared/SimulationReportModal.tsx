@@ -2,8 +2,9 @@
  * SimulationReportModal — Summary report shown when simulation completes.
  * @spec docs/spec/07_FRONTEND_SPEC.md#simulation-report
  */
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Download, RotateCcw, TrendingUp } from "lucide-react";
+import { X, Download, RotateCcw, TrendingUp, HelpCircle } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from "../../api/client";
 import type { StepResult } from "../../types/simulation";
@@ -11,6 +12,100 @@ import type { StepResult } from "../../types/simulation";
 interface Props {
   onClose: () => void;
 }
+
+/**
+ * Help tooltip — appears on hover OR on click (mobile-friendly).
+ *
+ * Anti-flicker design:
+ * - Hover handlers live on the WRAPPER span, not the button, so moving the
+ *   mouse from icon → tooltip stays inside the same hover region.
+ * - The tooltip uses `pointer-events-none` so it never steals hover state
+ *   away from the wrapper (the wrapper drives `hovered`).
+ * - The tooltip is always rendered (visibility toggled via opacity) so
+ *   appearance/disappearance never causes layout reflow.
+ * - `align="right"` positions the tooltip flush to the right edge of the
+ *   icon, used for cards near the modal's right edge so the 256px tooltip
+ *   doesn't overflow the modal and trigger horizontal scrollbar flicker.
+ */
+function HelpTooltip({
+  text,
+  label,
+  align = "center",
+}: {
+  text: string;
+  label: string;
+  align?: "left" | "center" | "right";
+}) {
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const visible = open || hovered;
+
+  const alignClass =
+    align === "right"
+      ? "right-0"
+      : align === "left"
+        ? "left-0"
+        : "left-1/2 -translate-x-1/2";
+
+  return (
+    <span
+      ref={ref}
+      className="relative inline-flex items-center"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <button
+        type="button"
+        aria-label={`What does ${label} mean?`}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="inline-flex items-center justify-center w-3.5 h-3.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+      >
+        <HelpCircle className="w-3.5 h-3.5" />
+      </button>
+      {/* Always rendered — opacity-toggled to avoid layout reflow */}
+      <span
+        role="tooltip"
+        aria-hidden={!visible}
+        className={`absolute z-20 ${alignClass} top-full mt-1.5 w-64 px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--card)] shadow-lg text-[11px] font-normal leading-relaxed text-[var(--foreground)] whitespace-normal pointer-events-none transition-opacity duration-100 ${visible ? "opacity-100" : "opacity-0"}`}
+      >
+        <span className="block font-semibold text-[var(--foreground)] mb-1">{label}</span>
+        {text}
+      </span>
+    </span>
+  );
+}
+
+// English explanations for each metric and section.
+const HELP = {
+  totalSteps:
+    "Number of simulation steps that ran. Each step represents one tick of agent perception, cognition, and action across the entire population.",
+  finalAdoption:
+    "Percentage of agents that have adopted the campaign / message at the end of the simulation. 100% means everyone adopted, 0% means no one did.",
+  finalSentiment:
+    "Average sentiment score of all agents at the final step. Range: -1.0 (strongly negative) to +1.0 (strongly positive). 0 is neutral.",
+  emergentEvents:
+    "Total number of automatically detected behavioral patterns: viral cascade, polarization, echo chamber, collapse, or slow adoption. Higher numbers mean a more dynamic simulation.",
+  topCommunity:
+    "The community with the highest adoption rate at the end of the simulation. The percentage shows how much of that specific community adopted.",
+  adoptionCurve:
+    "Adoption rate over time, sampled across the simulation. Bars show the percentage of agents that had adopted at each sampled step. Steeper rises indicate viral spread.",
+  keyEvents:
+    "Notable behavioral patterns detected during the run, in chronological order. Up to 5 events are shown with their step number and a short description.",
+} as const;
 
 function deriveReport(steps: StepResult[]) {
   if (steps.length === 0) return null;
@@ -114,28 +209,37 @@ export default function SimulationReportModal({ onClose }: Props) {
         <div className="px-6 py-5 flex flex-col gap-5 max-h-[75vh] overflow-y-auto">
           {/* Key Metrics */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <MetricCard label="Total Steps" value={String(report.totalSteps)} />
+            <MetricCard
+              label="Total Steps"
+              value={String(report.totalSteps)}
+              tooltip={HELP.totalSteps}
+            />
             <MetricCard
               label="Final Adoption"
               value={`${report.finalAdoptionRate}%`}
               accent="positive"
+              tooltip={HELP.finalAdoption}
             />
             <MetricCard
               label="Final Sentiment"
               value={report.finalSentiment}
               className={sentimentColor}
+              tooltip={HELP.finalSentiment}
             />
             <MetricCard
               label="Emergent Events"
               value={String(report.totalEmergentEvents)}
               accent={report.totalEmergentEvents > 0 ? "warning" : undefined}
+              tooltip={HELP.emergentEvents}
+              tooltipAlign="right"
             />
           </div>
 
           {/* Top Community */}
           <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-3">
-            <p className="text-xs font-medium text-[var(--muted-foreground)] mb-0.5">
+            <p className="text-xs font-medium text-[var(--muted-foreground)] mb-0.5 flex items-center gap-1.5">
               Top Community by Adoption
+              <HelpTooltip label="Top Community by Adoption" text={HELP.topCommunity} />
             </p>
             <p className="text-sm font-semibold text-[var(--foreground)]">
               {report.topCommunity}{" "}
@@ -147,8 +251,9 @@ export default function SimulationReportModal({ onClose }: Props) {
 
           {/* Adoption Curve */}
           <div>
-            <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2">
+            <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2 flex items-center gap-1.5">
               Adoption Curve
+              <HelpTooltip label="Adoption Curve" text={HELP.adoptionCurve} />
             </p>
             <div className="flex items-end gap-0.5 h-20 w-full">
               {report.curve.map((p, i) => (
@@ -171,8 +276,9 @@ export default function SimulationReportModal({ onClose }: Props) {
           {/* Key Events Timeline */}
           {report.keyEvents.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2">
+              <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2 flex items-center gap-1.5">
                 Key Events
+                <HelpTooltip label="Key Events" text={HELP.keyEvents} />
               </p>
               <div className="flex flex-col gap-2">
                 {report.keyEvents.map((e, i) => (
@@ -184,7 +290,7 @@ export default function SimulationReportModal({ onClose }: Props) {
                       Step {e.step}
                     </span>
                     <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--secondary)] text-[var(--foreground)] uppercase">
-                      {e.type.replace(/_/g, " ")}
+                      {(e.type ?? "event").replace(/_/g, " ")}
                     </span>
                     <span className="text-[var(--muted-foreground)] line-clamp-1">
                       {e.description}
@@ -242,11 +348,15 @@ function MetricCard({
   value,
   accent,
   className,
+  tooltip,
+  tooltipAlign = "center",
 }: {
   label: string;
   value: string;
   accent?: "positive" | "warning";
   className?: string;
+  tooltip?: string;
+  tooltipAlign?: "left" | "center" | "right";
 }) {
   const valueColor =
     accent === "positive"
@@ -257,8 +367,9 @@ function MetricCard({
 
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-3 flex flex-col gap-1">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-        {label}
+      <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)] flex items-center gap-1.5">
+        <span>{label}</span>
+        {tooltip && <HelpTooltip label={label} text={tooltip} align={tooltipAlign} />}
       </p>
       <p className={`text-xl font-bold ${valueColor}`}>{value}</p>
     </div>

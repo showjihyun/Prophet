@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 from app.engine.agent.schema import AgentAction, AgentState
 from app.engine.network.schema import SocialNetwork
-from app.engine.diffusion.schema import PropagationEvent
+from app.engine.diffusion.schema import ContextualPacket, PropagationEvent
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,8 @@ class PropagationModel:
         message_id: UUID,
         step: int,
         seed: int | None = None,
+        campaign_message: str = "",
+        agent_node_map: dict[UUID, int] | None = None,
     ) -> list[PropagationEvent]:
         """Generate propagation events based on agent action.
 
@@ -50,6 +52,14 @@ class PropagationModel:
 
         Only COMMENT/SHARE/REPOST/ADOPT generate events.
         Returns empty list for other actions.
+
+        A ``ContextualPacket`` is attached to each event when ``campaign_message``
+        is provided (non-empty). The packet captures the sender's emotional state
+        and reasoning so downstream agents can model emergent text mutation.
+
+        Args:
+            agent_node_map: Optional pre-built map of agent_id -> node id for O(1)
+                lookups (PERF-01). When provided, avoids O(N) linear node scan.
         """
         if action not in _PROPAGATION_ACTIONS:
             return []
@@ -57,7 +67,11 @@ class PropagationModel:
         rng = random.Random(seed)
         nx_graph = graph.graph
 
-        source_node = self._find_agent_node(source_agent, nx_graph)
+        # PERF-01: use pre-built map for O(1) lookup; fall back to O(N) scan
+        if agent_node_map is not None:
+            source_node = agent_node_map.get(source_agent.agent_id)
+        else:
+            source_node = self._find_agent_node(source_agent, nx_graph)
         if source_node is None:
             return []
 
@@ -80,7 +94,9 @@ class PropagationModel:
             targets = []
 
         events: list[PropagationEvent] = []
-        influence = source_agent.influence_score
+        # Apply a floor so low-influence agents still have a chance to propagate.
+        # influence_score is 0.1–0.9 in typical agents, but guard against edge cases.
+        influence = max(0.1, source_agent.influence_score)
 
         # Emotion factor: excitement - skepticism
         emotion_factor = (
@@ -94,6 +110,26 @@ class PropagationModel:
             AgentAction.REPOST: 0.7,
             AgentAction.ADOPT: 1.0,
         }.get(action, 0.5)
+
+        # Build contextual packet once for all events from this source agent.
+        # Only attached when a campaign_message is available.
+        contextual_packet: ContextualPacket | None = None
+        if campaign_message:
+            emotion_summary = (
+                f"interest={source_agent.emotion.interest:.1f}, "
+                f"trust={source_agent.emotion.trust:.1f}, "
+                f"excitement={source_agent.emotion.excitement:.1f}"
+            )
+            reasoning = (
+                f"Shared because belief={source_agent.belief:.2f}, "
+                f"action={action.value}"
+            )
+            contextual_packet = ContextualPacket(
+                original_content=campaign_message,
+                sender_emotion_summary=emotion_summary,
+                sender_reasoning=reasoning,
+                mutation_depth=0,
+            )
 
         for target_node in targets:
             edge_data = nx_graph[source_node][target_node]
@@ -138,6 +174,7 @@ class PropagationModel:
                             probability=prob,
                             step=step,
                             message_id=message_id,
+                            contextual_packet=contextual_packet,
                         )
                     )
 

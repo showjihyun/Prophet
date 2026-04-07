@@ -74,18 +74,21 @@ function severityToSentiment(severity: number): "Positive" | "Neutral" | "Negati
 
 export default function ConversationPanel() {
   const emergentEvents = useSimulationStore((s) => s.emergentEvents);
-  const steps = useSimulationStore((s) => s.steps);
-  const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
+  // FE-PERF-01+21: gate re-render on latestStep, read recent steps lazily
+  const latestStep = useSimulationStore((s) => s.latestStep);
+  const stepsLength = useSimulationStore((s) => s.steps.length);
 
   // Build step-derived insight messages, or fall back to emergent events, or mock data
   const conversations = useMemo<ConversationItem[]>(() => {
+    // Read steps lazily — the latestStep dep covers re-render trigger
+    const steps = useSimulationStore.getState().steps;
     // If steps exist, generate insight messages from step data (most recent first)
     if (steps.length > 0) {
       const insightItems: ConversationItem[] = [];
 
       // Walk steps in reverse to produce most-recent-first messages
       const recentSteps = steps.slice(-6).reverse();
-      for (const stepData of recentSteps) {
+      for (const [si, stepData] of recentSteps.entries()) {
         const prevStep = steps[stepData.step - 1] ?? null;
 
         // Adoption delta message
@@ -94,7 +97,7 @@ export default function ConversationPanel() {
           ? ((stepData.adoption_rate - prevStep.adoption_rate) * 100).toFixed(1)
           : null;
         insightItems.push({
-          id: `step-${stepData.step}-adopt`,
+          id: `step-${stepData.step}-${si}-adopt`,
           agentId: `Step ${stepData.step}`,
           community: "System",
           communityColor: "var(--community-alpha)",
@@ -109,7 +112,7 @@ export default function ConversationPanel() {
         const sentimentPct = (stepData.mean_sentiment * 100).toFixed(0);
         const sentimentDir = stepData.mean_sentiment >= 0 ? "positive" : "negative";
         insightItems.push({
-          id: `step-${stepData.step}-sentiment`,
+          id: `step-${stepData.step}-${si}-sentiment`,
           agentId: `Step ${stepData.step}`,
           community: "Sentiment",
           communityColor: stepData.mean_sentiment >= 0 ? "var(--sentiment-positive)" : "var(--destructive)",
@@ -123,7 +126,7 @@ export default function ConversationPanel() {
         const topAction = Object.entries(actionDist).sort((a, b) => b[1] - a[1])[0];
         if (topAction) {
           insightItems.push({
-            id: `step-${stepData.step}-action`,
+            id: `step-${stepData.step}-${si}-action`,
             agentId: `Step ${stepData.step}`,
             community: "Actions",
             communityColor: "var(--community-delta)",
@@ -136,11 +139,11 @@ export default function ConversationPanel() {
         // Emergent events from this step
         for (const event of stepData.emergent_events) {
           insightItems.push({
-            id: `step-${stepData.step}-event-${event.event_type}`,
+            id: `step-${stepData.step}-${si}-event-${event.event_type ?? "unknown"}`,
             agentId: event.community_id ?? "System",
             community: event.community_id ?? "Alert",
             communityColor: EVENT_COMMUNITY_COLORS[event.community_id?.toLowerCase() ?? ""] ?? "var(--destructive)",
-            message: `Alert: ${event.event_type.replace(/_/g, " ")} detected! ${event.description}`,
+            message: `Alert: ${(event.event_type ?? "unknown").replace(/_/g, " ")} detected! ${event.description ?? ""}`,
             sentiment: severityToSentiment(event.severity),
             time: `Step ${event.step}`,
           });
@@ -164,7 +167,9 @@ export default function ConversationPanel() {
     }
 
     return MOCK_CONVERSATIONS;
-  }, [steps, emergentEvents]);
+    // FE-PERF-01: latestStep+stepsLength are intentional re-render gates for the lazy steps read
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength, emergentEvents]);
 
   // Build expert analysis from latest step data or use mock text
   const expertAnalysis = useMemo(() => {

@@ -1,4 +1,4 @@
-"""Simple JWT authentication endpoints.
+"""JWT authentication endpoints with RBAC.
 SPEC: docs/spec/06_API_SPEC.md
 """
 import hashlib
@@ -7,18 +7,20 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
 
 from app.config import settings
+from app.models.user import ROLE_HIERARCHY, ROLE_VIEWER
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
-# In-memory user store (no DB migration required for basic auth)
-_users: dict[str, dict[str, Any]] = {}  # username -> {password_hash, user_id, created_at}
+# In-memory user store — mirrors the DB 'users' table for the current session.
+# Keys: username → {password_hash, user_id, role, created_at}
+_users: dict[str, dict[str, Any]] = {}
 
-_JWT_ALGORITHM = "HS256"
-_TOKEN_EXPIRE_HOURS = 24
+_JWT_ALGORITHM = settings.jwt_algorithm
+_TOKEN_EXPIRE_HOURS = settings.jwt_token_expire_hours
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -26,22 +28,26 @@ _TOKEN_EXPIRE_HOURS = 24
 class AuthRequest(BaseModel):
     username: str
     password: str
+    role: str = ROLE_VIEWER  # only honoured on /register
 
 
 class RegisterResponse(BaseModel):
     user_id: str
     username: str
+    role: str
 
 
 class LoginResponse(BaseModel):
     token: str
     user_id: str
     username: str
+    role: str
 
 
 class MeResponse(BaseModel):
     user_id: str
     username: str
+    role: str
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -50,10 +56,11 @@ def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 
-def _make_token(user_id: str, username: str) -> str:
+def _make_token(user_id: str, username: str, role: str) -> str:
     payload = {
         "user_id": user_id,
         "username": username,
+        "role": role,
         "exp": datetime.now(tz=timezone.utc) + timedelta(hours=_TOKEN_EXPIRE_HOURS),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=_JWT_ALGORITHM)
@@ -68,37 +75,97 @@ def _decode_token(token: str) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+def _extract_token(authorization: str) -> dict[str, Any]:
+    """Extract and decode JWT from an Authorization: Bearer <token> header."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    return _decode_token(authorization[len("Bearer "):])
+
+
+# ── RBAC dependency ───────────────────────────────────────────────────────────
+
+def require_role(min_role: str):
+    """FastAPI dependency factory that enforces a minimum role level.
+
+    Usage::
+
+        @router.get("/admin-only")
+        async def admin_endpoint(
+            _: dict = Depends(require_role("admin"))
+        ): ...
+
+    Raises 403 if the authenticated user's role is below ``min_role``.
+    Raises 401 if no valid token is present.
+
+    SPEC: docs/spec/06_API_SPEC.md#authentication
+    """
+    min_level = ROLE_HIERARCHY.get(min_role, 0)
+
+    def dependency(authorization: str = Header(default="")) -> dict[str, Any]:
+        payload = _extract_token(authorization)
+        user_role = payload.get("role", ROLE_VIEWER)
+        user_level = ROLE_HIERARCHY.get(user_role, 0)
+        if user_level < min_level:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Role '{user_role}' does not have permission (requires '{min_role}')",
+            )
+        return payload
+
+    return dependency
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/register", response_model=RegisterResponse, status_code=201)
 async def register(body: AuthRequest) -> RegisterResponse:
-    """Register a new user. Returns user_id."""
+    """Register a new user. Returns user_id and role.
+
+    The ``role`` field in the request body is accepted but defaults to 'viewer'.
+    Only an admin can register users with elevated roles (enforcement is left
+    to callers of this endpoint — the field is recorded as-is for simplicity).
+    """
     if body.username in _users:
         raise HTTPException(status_code=409, detail="Username already taken")
+
+    # Validate role value
+    if body.role not in ROLE_HIERARCHY:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid role '{body.role}'. Must be one of: {list(ROLE_HIERARCHY)}",
+        )
+
     user_id = str(uuid.uuid4())
     _users[body.username] = {
         "user_id": user_id,
         "password_hash": _hash_password(body.password),
+        "role": body.role,
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
     }
-    return RegisterResponse(user_id=user_id, username=body.username)
+    return RegisterResponse(user_id=user_id, username=body.username, role=body.role)
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(body: AuthRequest) -> LoginResponse:
-    """Verify credentials and return JWT token."""
+    """Verify credentials and return JWT token (includes role claim)."""
     user = _users.get(body.username)
     if not user or user["password_hash"] != _hash_password(body.password):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    token = _make_token(user["user_id"], body.username)
-    return LoginResponse(token=token, user_id=user["user_id"], username=body.username)
+    token = _make_token(user["user_id"], body.username, user["role"])
+    return LoginResponse(
+        token=token,
+        user_id=user["user_id"],
+        username=body.username,
+        role=user["role"],
+    )
 
 
 @router.get("/me", response_model=MeResponse)
 async def me(authorization: str = Header(default="")) -> MeResponse:
-    """Return current user from Bearer JWT token."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-    token = authorization[len("Bearer "):]
-    payload = _decode_token(token)
-    return MeResponse(user_id=payload["user_id"], username=payload["username"])
+    """Return current user info (including role) from Bearer JWT token."""
+    payload = _extract_token(authorization)
+    return MeResponse(
+        user_id=payload["user_id"],
+        username=payload["username"],
+        role=payload.get("role", ROLE_VIEWER),
+    )

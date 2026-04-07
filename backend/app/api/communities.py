@@ -86,15 +86,22 @@ def _generate_thread_messages(
     community_id: str,
     thread_index: int,
     n_messages: int,
+    mean_belief: float = 0.0,
+    adoption_rate: float = 0.0,
 ) -> list[ThreadMessage]:
-    """Generate deterministic conversation messages for a thread."""
+    """Generate conversation messages reflecting actual community state.
+
+    Uses mean_belief from simulation data to bias stance distribution,
+    making threads more representative of actual agent behavior.
+    """
     msgs: list[ThreadMessage] = []
     for i in range(n_messages):
         seed = hash((community_id, thread_index, i)) & 0xFFFF
         agent_idx = seed % 12
         agent_id = _agent_label(agent_idx, community_id)
-        # Deterministic stance
-        belief_proxy = (seed % 200 - 100) / 100.0
+        # Stance biased by actual community mean_belief (not pure random)
+        belief_noise = (seed % 60 - 30) / 100.0  # ±0.3 variation
+        belief_proxy = max(-1.0, min(1.0, mean_belief + belief_noise))
         stance = _stance_from_belief(belief_proxy)
         # Content
         if i > 0 and (seed % 3) == 0:
@@ -171,7 +178,10 @@ def _build_threads(
         elif t_idx == 2:
             topic = f"Sentiment analysis: mean belief {mean_belief:+.2f} in community {community_id}"
         n_messages = 4 + (seed % 5)
-        msgs = _generate_thread_messages(community_id, t_idx, n_messages)
+        msgs = _generate_thread_messages(
+            community_id, t_idx, n_messages,
+            mean_belief=mean_belief, adoption_rate=adoption_rate,
+        )
         avg_sentiment = round(mean_belief + (seed % 20 - 10) / 100.0, 2)
         summary = ThreadSummary(
             thread_id=f"{community_id}-thread-{t_idx}",
@@ -248,3 +258,135 @@ async def get_community_thread(
             )
 
     raise HTTPException(status_code=404, detail=f"Thread {thread_id!r} not found in community {community_id!r}")
+
+
+# ---------------------------------------------------------------------------
+# Community Management Endpoints (CRUD)
+# SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel, Field
+
+
+class UpdateCommunityRequest(BaseModel):
+    name: str | None = None
+    personality_profile: dict[str, float] | None = None
+
+
+class CreateCommunityRequest(BaseModel):
+    name: str
+    agent_type: str = "consumer"
+    size: int = Field(ge=1, le=10000)
+    personality_profile: dict[str, float] = {}
+
+
+class ReassignAgentsRequest(BaseModel):
+    agent_ids: list[str]
+    target_community_id: str
+
+
+@router.patch("/{community_id}")
+async def update_community(
+    simulation_id: str,
+    community_id: str,
+    body: UpdateCommunityRequest,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Update community properties (name, personality).
+    SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-1
+    """
+    from uuid import UUID
+    from app.engine.simulation.exceptions import InvalidStateError
+
+    _get_state_or_404(orchestrator, simulation_id)
+    try:
+        result = await orchestrator.update_community(
+            UUID(simulation_id),
+            community_id,
+            name=body.name,
+            personality_profile=body.personality_profile,
+        )
+        return result
+    except InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/", status_code=201)
+async def add_community(
+    simulation_id: str,
+    body: CreateCommunityRequest,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Add a new community with agents to the simulation.
+    SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-2
+    """
+    from uuid import UUID
+    from app.engine.simulation.exceptions import InvalidStateError
+
+    _get_state_or_404(orchestrator, simulation_id)
+    try:
+        result = await orchestrator.add_community(
+            UUID(simulation_id),
+            name=body.name,
+            agent_type=body.agent_type,
+            size=body.size,
+            personality_profile=body.personality_profile or {
+                "openness": 0.5, "skepticism": 0.5, "trend_following": 0.5,
+                "brand_loyalty": 0.5, "social_influence": 0.4,
+            },
+        )
+        return result
+    except InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.delete("/{community_id}")
+async def delete_community(
+    simulation_id: str,
+    community_id: str,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Remove a community and its agents from the simulation.
+    SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-3
+    """
+    from uuid import UUID
+    from app.engine.simulation.exceptions import InvalidStateError
+
+    _get_state_or_404(orchestrator, simulation_id)
+    try:
+        result = await orchestrator.remove_community(UUID(simulation_id), community_id)
+        return result
+    except InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{community_id}/reassign")
+async def reassign_agents(
+    simulation_id: str,
+    community_id: str,
+    body: ReassignAgentsRequest,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> dict:
+    """Reassign agents from this community to another.
+    SPEC: docs/spec/16_COMMUNITY_MGMT_SPEC.md#2-4
+    """
+    from uuid import UUID
+    from app.engine.simulation.exceptions import InvalidStateError
+
+    _get_state_or_404(orchestrator, simulation_id)
+    try:
+        result = await orchestrator.reassign_agents(
+            UUID(simulation_id),
+            community_id,
+            agent_ids=[UUID(aid) for aid in body.agent_ids],
+            target_community_id=body.target_community_id,
+        )
+        return result
+    except InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

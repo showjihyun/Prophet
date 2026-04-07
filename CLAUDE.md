@@ -302,6 +302,11 @@ Prophet/
 - React 18 — `use client` 없음 (Vite SPA)
 - Zustand store는 `src/store/` 에만
 - API 호출은 `src/api/client.ts` 를 통해서만
+- **⛔ 도메인 enum 리터럴 하드코딩 금지** — `SimulationStatus`, `AgentAction` 등의
+  값은 절대 인라인 문자열로 쓰지 않는다. `@/config/constants`의 `SIM_STATUS`,
+  `TERMINAL_SIM_STATUSES`, `STARTABLE_SIM_STATUSES` 등 상수를 사용한다.
+  새 enum 값이 필요하면 `constants.ts`에 먼저 추가한 후 import해서 쓴다.
+  SPEC: `docs/spec/07_FRONTEND_SPEC.md#95-coding-conventions--no-hardcoded-domain-literals`
 
 ### DB
 - 모든 마이그레이션은 Alembic으로 (`uv run alembic revision --autogenerate`)
@@ -330,16 +335,21 @@ Prophet/
 | **VAL** | Validation pipeline VAL-01~08 (33 tests) | ✅ 완료 |
 | **S** | Silent Stub 해소 (Network/LLM/Memory/Inject) | ✅ 완료 |
 | **M** | Mock→Real 페이지 (GlobalMetrics/Opinions/Thread) | ✅ 완료 |
-| **T** | 실패 테스트 41개 수정 + CampaignSetup 29개 추가 | ✅ 완료 |
+| **T** | 실패 테스트 41개 수정 + 4페이지 91개 추가 | ✅ 완료 |
 | **F** | Campaign Setup + Project CRUD + EgoGraph Filter | ✅ 완료 |
+| **N** | Run-All + GraphRAG + DB복원 + Platform + Lint 10.0 | ✅ 완료 |
+| **H** | 09_HARNESS F18-F28 전체 구현 (+43 tests) | ✅ 완료 |
+| **G** | SPEC 정합성 (메서드 rename + Sidebar + AgentInspector + AnalyticsPage) | ✅ 완료 |
 
-> **총 테스트: 795+ GREEN** (Backend 586 + Frontend 180 + E2E 26 대기)
-> - Backend: `uv run pytest tests/` → 586 passed, 1 skipped
-> - Frontend: `npx vitest run` → 180 passed (14 test files)
-> - E2E: `npx playwright test` → 26 tests (Docker 필요)
-> - Docker: 5 services healthy
-> - API: 53 endpoints, 16 pages, 15 routes
-> - Sidebar: 전역 레이아웃 (SimulationPage 제외)
+> **총 테스트: 1,165+ GREEN** (Backend 821 + Frontend 344)
+> - Backend: `uv run pytest tests/` → 821 passed, 2 skipped
+> - Frontend: `npx vitest run` → 344 passed (22 test files)
+> - ESLint: 0 errors, 0 warnings
+> - TypeScript: 0 errors
+> - Health Score: 10.0/10 | QA Score: 97/100
+> - Docker: 5 services (4 healthy, ollama unhealthy)
+> - API: 55+ endpoints, 19 pages, 20 routes
+> - Sidebar: 전역 레이아웃 (SimulationPage/LoginPage 제외)
 
 ### 성능 벤치마크 (2026-03-30)
 
@@ -355,6 +365,11 @@ Prophet/
 
 - **⛔ SPEC 없이 구현하지 않는다** — `docs/spec/`에 SPEC이 없으면 SPEC부터 작성한다. 절대로 SPEC 없이 코드를 생성하지 않는다.
 - **⛔ SPEC 변경 시 테스트 필수 갱신** — Backend/Frontend SPEC이 변경되면 해당 테스트 코드를 반드시 생성/갱신한다.
+- **⛔ SPEC은 비공개 자산 — public commit 금지** — `docs/spec/`, `docs/init/`,
+  `docs/BUSINESS_REPORT.md`, `docs/MARKETING_STRATEGY.md`, `docs/OASIS_vs_Prophet.md`는
+  프로젝트의 IP/모트이므로 `.gitignore`에 등록되어 있다. 이 파일들은 로컬에서만 사용하고
+  GitHub에 push하지 않는다. README.md 등 공개 문서를 작성할 때는 SPEC 문서나 그 내부
+  내용을 인용/링크하지 말 것 — 누구든 SPEC만 보고 Prophet을 재현할 수 있기 때문이다.
 - **⛔ pip 사용 금지** — `uv` 만 사용
 - **SLM fallback 필수** — 모든 Tier 3 (Elite LLM) 기능은 Tier 1 (Mass SLM) fallback 보유
 - **하네스 먼저** — 구현 전 하네스 픽스처/목 먼저 작성

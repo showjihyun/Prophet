@@ -5,6 +5,13 @@
  *
  * Cytoscape.js canvas renderer with force-directed layout,
  * community-colored nodes, and interactive selection.
+ *
+ * Performance optimizations (GAP-5, 10K agent target):
+ *  - textureOnViewport, hideEdgesOnViewport, motionBlur, pixelRatio:1
+ *  - LOD zoom-based label/edge visibility
+ *  - cy.batch() for step-result updates
+ *  - Edge opacity reduction + non-bridge hiding at node count > 2000
+ *  - Real FPS counter via requestAnimationFrame
  */
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -12,17 +19,56 @@ import cytoscape, { type Core, type EventObject } from "cytoscape";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { apiClient, type CytoscapeGraph } from "../../api/client";
 import { useSimulationStore } from "../../store/simulationStore";
+import { COMMUNITIES } from "@/config/constants";
 
 // ---------------------------------------------------------------------------
-// Community palette (must match CSS vars & DESIGN.md §5)
+// Cascade shader animation CSS (injected once at module load).
+// GAP-6: pulse/ripple/glow effects for viral cascade events.
+// Cytoscape canvas does not support CSS on canvas nodes, so node/edge
+// animation uses Cytoscape's animate() API; CSS keyframes only affect DOM
+// overlay elements (the cascade badge glow ring).
 // ---------------------------------------------------------------------------
-const COMMUNITIES = [
-  { id: "A", name: "Alpha", color: "#3b82f6", size: 50 },
-  { id: "B", name: "Beta", color: "#22c55e", size: 40 },
-  { id: "C", name: "Gamma", color: "#f97316", size: 35 },
-  { id: "D", name: "Delta", color: "#a855f7", size: 25 },
-  { id: "E", name: "Bridge", color: "#ef4444", size: 10 },
-] as const;
+const CASCADE_STYLE_ID = "mcasp-cascade-style";
+if (typeof document !== "undefined" && !document.getElementById(CASCADE_STYLE_ID)) {
+  const _cascadeStyleEl = document.createElement("style");
+  _cascadeStyleEl.id = CASCADE_STYLE_ID;
+  _cascadeStyleEl.textContent = `
+    @keyframes cascade-badge-glow {
+      0%,100% { box-shadow: 0 0 0 0 rgba(250,204,21,0); }
+      50%      { box-shadow: 0 0 20px 8px rgba(250,204,21,0.55); }
+    }
+    .cascade-badge-active { animation: cascade-badge-glow 1.6s ease-in-out infinite; }
+  `;
+  document.head.appendChild(_cascadeStyleEl);
+}
+
+/** How long (ms) cascade highlights stay active after a new cascade event. */
+const CASCADE_TTL_MS = 8000;
+
+// ---------------------------------------------------------------------------
+// GAP-7: Propagation animation constants
+// ---------------------------------------------------------------------------
+const ACTION_COLORS: Record<string, string> = {
+  share: "#22c55e",
+  comment: "#3b82f6",
+  like: "#eab308",
+  adopt: "#a855f7",
+};
+
+type AnimationTier = "closeup" | "midrange" | "overview";
+
+function getAnimationTier(zoom: number): AnimationTier {
+  if (zoom >= 0.7) return "closeup";
+  if (zoom >= 0.3) return "midrange";
+  return "overview";
+}
+
+/** Max animations per step by tier. */
+const TIER_LIMITS: Record<AnimationTier, number> = {
+  closeup: 50,
+  midrange: 30,
+  overview: 5,
+};
 
 const COMMUNITY_COLOR: Record<string, string> = Object.fromEntries(
   COMMUNITIES.map((c) => [c.id, c.color]),
@@ -230,6 +276,41 @@ const CY_STYLE: cytoscape.Stylesheet[] = [
       height: 8,
     },
   },
+  // -- Cascade: nodes involved in viral cascade (pulsing golden border) --
+  {
+    selector: ".cascade-node",
+    style: {
+      "border-width": 2,
+      "border-color": "#facc15",
+      "underlay-color": "#facc15",
+      "underlay-padding": 3,
+      "underlay-opacity": 0.2,
+      "underlay-shape": "ellipse",
+    },
+  },
+  // -- Cascade: origin node (larger + bright golden glow) --
+  {
+    selector: ".cascade-origin",
+    style: {
+      width: 14,
+      height: 14,
+      "border-width": 3,
+      "border-color": "#facc15",
+      "underlay-color": "#facc15",
+      "underlay-padding": 6,
+      "underlay-opacity": 0.45,
+      "underlay-shape": "ellipse",
+    },
+  },
+  // -- Cascade: edges with active propagation --
+  {
+    selector: ".cascade-edge",
+    style: {
+      width: 1.5,
+      "line-color": "#facc15",
+      opacity: 0.6,
+    },
+  },
   // -- Default edge (intra-community) --
   {
     selector: "edge",
@@ -281,13 +362,28 @@ export default function GraphPanel() {
   } | null>(null);
   const [nodeCount, setNodeCount] = useState(0);
   const [edgeCount, setEdgeCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const [legendItems, setLegendItems] = useState(LEGEND_ITEMS);
+  const [fps, setFps] = useState(60);
+  const fpsFramesRef = useRef<number[]>([]);
+  const fpsRafRef = useRef<number | null>(null);
+  const lastFpsUpdateRef = useRef(0);
+  const lastAdoptCountRef = useRef(-1);
+  // FE-PERF-06: cached sorted node ids by influence score (rebuilt only on node count change)
+  const sortedNodeIdsRef = useRef<string[] | null>(null);
+  // Track how many cascade events we've already animated to detect new ones
+  const lastCascadeCountRef = useRef(0);
+  const cascadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const emergentEvents = useSimulationStore((s) => s.emergentEvents);
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-01: subscribe only to latestStep, not the whole steps array
+  const latestStep = useSimulationStore((s) => s.latestStep);
   const highlightedCommunity = useSimulationStore((s) => s.highlightedCommunity);
   const setHighlightedCommunity = useSimulationStore((s) => s.setHighlightedCommunity);
+  const propagationAnimEnabled = useSimulationStore((s) => s.propagationAnimationsEnabled);
+  const lastPropStepRef = useRef(-1);
+  const propagationTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // --- Initialize Cytoscape ---
   useEffect(() => {
@@ -296,16 +392,21 @@ export default function GraphPanel() {
 
     async function loadGraph() {
       let graphData: CytoscapeGraph;
+      setIsLoading(true);
       try {
         if (simulationId) {
           graphData = await apiClient.network.get(simulationId);
         } else {
           graphData = generateMockGraphData();
         }
-      } catch {
+      } catch (err) {
+        console.warn("Network fetch failed, using mock data:", err);
         graphData = generateMockGraphData();
       }
-      if (cancelled || !containerRef.current) return;
+      if (cancelled || !containerRef.current) {
+        setIsLoading(false);
+        return;
+      }
 
       // Compute legend from real data
       const commCounts: Record<string, number> = {};
@@ -322,10 +423,14 @@ export default function GraphPanel() {
       );
 
       initCytoscape(graphData);
+      setIsLoading(false);
     }
 
     function initCytoscape(graphData: CytoscapeGraph) {
       if (!containerRef.current) return;
+
+    const n = graphData.nodes.length;
+    const isLarge = n > 500;
 
     const cy = cytoscape({
       container: containerRef.current,
@@ -336,34 +441,77 @@ export default function GraphPanel() {
       style: CY_STYLE,
       layout: {
         name: "cose",
-        idealEdgeLength: 50,
-        nodeOverlap: 8,
+        idealEdgeLength: isLarge ? 80 : 50,
+        nodeOverlap: 20,
         refresh: 20,
         fit: true,
         padding: 40,
-        randomize: false,
-        componentSpacing: 60,
-        nodeRepulsion: 6000,
-        edgeElasticity: 80,
+        randomize: true,
+        componentSpacing: 100,
+        nodeRepulsion: isLarge ? 12000 : 6000,
+        edgeElasticity: 100,
         nestingFactor: 1.2,
-        gravity: 0.3,
-        numIter: 800,
+        gravity: isLarge ? 0.8 : 0.3,
+        numIter: isLarge ? 300 : 800,
         animate: false,
       } as cytoscape.CoseLayoutOptions,
 
-      // Performance options (DESIGN.md §5)
+      // Performance options (GAP-5: 10K agent target)
       textureOnViewport: true,
       hideEdgesOnViewport: true,
+      motionBlur: true,
       pixelRatio: 1,
 
-      // Interaction
-      minZoom: 0.2,
-      maxZoom: 5,
+      // Viewport culling limits
+      minZoom: 0.05,
+      maxZoom: 3.0,
       // wheelSensitivity removed — Cytoscape default (1.0) used
     });
 
-    setNodeCount(cy.nodes().length);
-    setEdgeCount(cy.edges().length);
+    const totalNodes = cy.nodes().length;
+    const totalEdges = cy.edges().length;
+    setNodeCount(totalNodes);
+    setEdgeCount(totalEdges);
+
+    // --- Edge bundling for large graphs (>2000 nodes) ---
+    if (totalNodes > 2000) {
+      cy.batch(() => {
+        cy.edges().style("opacity", 0.05);
+        cy.edges('[edge_type != "bridge"]').style("display", "none");
+      });
+    }
+
+    // --- LOD: zoom-dependent label & edge visibility ---
+    // FE-PERF-05: debounce zoom handler so per-node iteration doesn't run on every wheel tick
+    let lodTimeout: ReturnType<typeof setTimeout> | null = null;
+    function applyLOD() {
+      const z = cy.zoom();
+      cy.batch(() => {
+        if (z < 0.3) {
+          // Far out: no labels, straight-line edges
+          cy.nodes().style("label", "");
+          cy.edges().style("curve-style", "haystack");
+        } else if (z < 0.7) {
+          // Mid: labels only for high-influence nodes
+          cy.nodes().forEach((node) => {
+            const score = node.data("influence_score") as number;
+            node.style("label", score > 0.8 ? "data(label)" : "");
+          });
+          cy.edges().style("curve-style", "haystack");
+        } else {
+          // Close: all labels, full detail
+          cy.nodes().style("label", "data(label)");
+          cy.edges().style("curve-style", "bezier");
+        }
+      });
+    }
+    function debouncedLOD() {
+      if (lodTimeout !== null) clearTimeout(lodTimeout);
+      lodTimeout = setTimeout(applyLOD, 100);
+    }
+    cy.on("zoom", debouncedLOD);
+    // Apply initial LOD state
+    applyLOD();
 
     // --- Edge coloring by source community ---
     cy.edges().forEach((edge) => {
@@ -427,28 +575,75 @@ export default function GraphPanel() {
     };
   }, [simulationId]);
 
+  // --- FPS counter via requestAnimationFrame ---
+  useEffect(() => {
+    let running = true;
+
+    function tick(now: number) {
+      if (!running) return;
+      const frames = fpsFramesRef.current;
+      frames.push(now);
+      // Keep only the last 60 timestamps (one second window at 60fps)
+      while (frames.length > 0 && now - frames[0] > 1000) {
+        frames.shift();
+      }
+      // Throttle state update to once per second to avoid 60 re-renders/s
+      if (now - lastFpsUpdateRef.current > 1000) {
+        setFps(frames.length);
+        lastFpsUpdateRef.current = now;
+      }
+      fpsRafRef.current = requestAnimationFrame(tick);
+    }
+
+    fpsRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      running = false;
+      if (fpsRafRef.current !== null) {
+        cancelAnimationFrame(fpsRafRef.current);
+        fpsRafRef.current = null;
+      }
+    };
+  }, []);
+
   // --- Update node adoption state on each new simulation step ---
+  // Uses cy.batch() to coalesce all DOM/style mutations into one repaint (GAP-5)
+  // FE-PERF-06: reuse pre-sorted node id list to avoid O(n log n) sort per step
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy || steps.length === 0) return;
-    const latestStep = steps[steps.length - 1];
+    if (!cy || !latestStep) return;
     const adoptionRate = latestStep.adoption_rate || 0;
 
     const nodes = cy.nodes();
     const total = nodes.length;
     const adoptCount = Math.floor(total * adoptionRate);
 
-    // Reset live adopted class from all nodes
-    nodes.removeClass("adopted-live");
+    // Skip expensive batch when adoption count has not changed
+    if (adoptCount === lastAdoptCountRef.current) return;
+    lastAdoptCountRef.current = adoptCount;
 
-    // Mark top-N nodes (sorted by influence_score desc) as adopted
-    const sorted = nodes.toArray().sort(
-      (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
-    );
-    sorted.slice(0, adoptCount).forEach((node) => {
-      node.addClass("adopted-live");
+    // Pre-sort once and cache the sorted node id list (refresh only if node count changes)
+    if (
+      sortedNodeIdsRef.current === null
+      || sortedNodeIdsRef.current.length !== total
+    ) {
+      const sorted = nodes.toArray().sort(
+        (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
+      );
+      sortedNodeIdsRef.current = sorted.map((n) => n.id());
+    }
+    const adoptedSet = new Set(sortedNodeIdsRef.current.slice(0, adoptCount));
+
+    // Single batched mutation — one repaint instead of N individual updates
+    cy.batch(() => {
+      nodes.forEach((node) => {
+        if (adoptedSet.has(node.id())) {
+          node.addClass("adopted-live");
+        } else {
+          node.removeClass("adopted-live");
+        }
+      });
     });
-  }, [steps.length]);
+  }, [latestStep]);
 
   // --- Community highlight: dim non-matching nodes when a community is selected ---
   useEffect(() => {
@@ -465,6 +660,352 @@ export default function GraphPanel() {
     });
     cy.edges().style("opacity", 0.05);
   }, [highlightedCommunity]);
+
+  // --- GAP-6: Cascade shader animations via Cytoscape animate() API ---
+  // Triggered when a new cascade event appears in emergentEvents.
+  // - Cascade origin node: larger size + golden glow (cascade-origin class)
+  // - Nodes in cascade: pulsing golden border (cascade-node class)
+  // - Cascade edges: animate opacity 0.3 → 1.0 → 0.3 (cascade-edge class)
+  // All effects auto-clear after CASCADE_TTL_MS.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || emergentEvents.length === 0) return;
+
+    // Only fire when the event count has grown (new event arrived)
+    if (emergentEvents.length <= lastCascadeCountRef.current) return;
+    lastCascadeCountRef.current = emergentEvents.length;
+
+    const latestEvent = emergentEvents[emergentEvents.length - 1];
+    const isCascadeEvent =
+      latestEvent.event_type.toLowerCase().includes("cascade") ||
+      latestEvent.event_type.toLowerCase().includes("viral");
+
+    if (!isCascadeEvent) return;
+
+    // Clear any previous cascade highlight timeout
+    if (cascadeTimeoutRef.current !== null) {
+      clearTimeout(cascadeTimeoutRef.current);
+      cascadeTimeoutRef.current = null;
+    }
+
+    // Remove stale cascade classes before applying new ones
+    cy.batch(() => {
+      cy.elements().removeClass("cascade-node cascade-origin cascade-edge");
+    });
+
+    // Pick origin node: highest-influence node in the graph
+    const nodes = cy.nodes();
+    const originNode = nodes.max((node) => (node.data("influence_score") as number) || 0).ele;
+
+    // FE-PERF-29: reuse pre-sorted node ids; rebuild only on node count change
+    if (
+      sortedNodeIdsRef.current === null
+      || sortedNodeIdsRef.current.length !== nodes.length
+    ) {
+      const sorted = nodes.toArray().sort(
+        (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
+      );
+      sortedNodeIdsRef.current = sorted.map((n) => n.id());
+    }
+    const cascadeCount = Math.max(1, Math.floor(sortedNodeIdsRef.current.length * 0.15));
+    const cascadeNodes = sortedNodeIdsRef.current
+      .slice(0, cascadeCount)
+      .map((id) => cy.getElementById(id))
+      .filter((n) => n.nonempty());
+
+    // Apply classes (triggers CY_STYLE rules defined above)
+    cy.batch(() => {
+      cascadeNodes.forEach((node) => node.addClass("cascade-node"));
+      originNode.addClass("cascade-origin");
+
+      // Mark edges connected to cascade nodes
+      cascadeNodes.forEach((node) => {
+        node.connectedEdges().addClass("cascade-edge");
+      });
+    });
+
+    // Animate origin node: scale border-width 2 → 5 → 2 repeating (pulse effect)
+    // Cytoscape animate() does not support looping natively; we chain two animations.
+    function pulseBorder(node: cytoscape.NodeSingular, iteration: number) {
+      if (iteration > 4 || !cyRef.current) return; // stop after ~8s
+      node.animate(
+        { style: { "border-width": 5 } },
+        {
+          duration: 700,
+          easing: "ease-in-out",
+          complete: () => {
+            node.animate(
+              { style: { "border-width": 2 } },
+              {
+                duration: 700,
+                easing: "ease-in-out",
+                complete: () => pulseBorder(node, iteration + 1),
+              },
+            );
+          },
+        },
+      );
+    }
+    pulseBorder(originNode as cytoscape.NodeSingular, 0);
+
+    // Animate cascade edges: opacity 0.15 → 0.8 → 0.15 (2s cycle × 4)
+    function pulseEdgeOpacity(edges: cytoscape.EdgeCollection, iteration: number) {
+      if (iteration > 3 || !cyRef.current) return;
+      edges.animate(
+        { style: { opacity: 0.8 } },
+        {
+          duration: 1000,
+          easing: "ease-in-out",
+          complete: () => {
+            edges.animate(
+              { style: { opacity: 0.15 } },
+              {
+                duration: 1000,
+                easing: "ease-in-out",
+                complete: () => pulseEdgeOpacity(edges, iteration + 1),
+              },
+            );
+          },
+        },
+      );
+    }
+    const cascadeEdges = cy.edges(".cascade-edge");
+    if (cascadeEdges.length > 0) {
+      pulseEdgeOpacity(cascadeEdges, 0);
+    }
+
+    // Auto-clear after TTL
+    cascadeTimeoutRef.current = setTimeout(() => {
+      if (!cyRef.current) return;
+      cy.batch(() => {
+        cy.elements().removeClass("cascade-node cascade-origin cascade-edge");
+      });
+      cascadeTimeoutRef.current = null;
+    }, CASCADE_TTL_MS);
+  }, [emergentEvents]);
+
+  // Cleanup cascade timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (cascadeTimeoutRef.current !== null) {
+        clearTimeout(cascadeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // --- GAP-7: Propagation animations (zoom-based LOD) ---
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || !latestStep || !propagationAnimEnabled) return;
+
+    // Only animate new steps
+    if (latestStep.step <= lastPropStepRef.current) return;
+    lastPropStepRef.current = latestStep.step;
+
+    const pairs = (latestStep.propagation_pairs ?? []).filter(
+      (p) => p.action !== "ignore" && ACTION_COLORS[p.action],
+    );
+    if (pairs.length === 0) return;
+
+    // Clear previous animation timeouts
+    for (const t of propagationTimeoutsRef.current) clearTimeout(t);
+    propagationTimeoutsRef.current = [];
+
+    const tier = getAnimationTier(cy.zoom());
+    const limit = TIER_LIMITS[tier];
+
+    if (tier === "overview") {
+      // --- Overview: Community hotspot glow + inter-community arcs ---
+      const communityActivity: Record<string, { count: number; dominantAction: string }> = {};
+      const crossCommunity: { srcComm: string; tgtComm: string; action: string }[] = [];
+
+      for (const pair of pairs) {
+        const srcNode = cy.getElementById(pair.source);
+        const tgtNode = cy.getElementById(pair.target);
+        const srcComm = srcNode.nonempty() ? (srcNode.data("community") as string) : null;
+        const tgtComm = tgtNode.nonempty() ? (tgtNode.data("community") as string) : null;
+
+        if (srcComm) {
+          const entry = communityActivity[srcComm] ?? { count: 0, dominantAction: pair.action };
+          entry.count++;
+          communityActivity[srcComm] = entry;
+        }
+        if (srcComm && tgtComm && srcComm !== tgtComm && crossCommunity.length < 3) {
+          crossCommunity.push({ srcComm, tgtComm, action: pair.action });
+        }
+      }
+
+      // Community hotspot glow
+      const activeCommunities = Object.entries(communityActivity)
+        .sort((a, b) => b[1].count - a[1].count)
+        .slice(0, limit);
+
+      cy.batch(() => {
+        for (const [commId, { dominantAction }] of activeCommunities) {
+          const color = ACTION_COLORS[dominantAction] ?? "#22c55e";
+          const nodes = cy.nodes(`[community = "${commId}"]`);
+          nodes.style("underlay-color", color);
+          nodes.style("underlay-opacity", 0.35);
+          nodes.style("underlay-padding", 3);
+          nodes.style("underlay-shape", "ellipse");
+        }
+      });
+
+      // Fade back after 1200ms
+      const glowTimeout = setTimeout(() => {
+        if (!cyRef.current) return;
+        cy.batch(() => {
+          for (const [commId] of activeCommunities) {
+            const nodes = cy.nodes(`[community = "${commId}"]`);
+            nodes.removeStyle("underlay-color underlay-opacity underlay-padding underlay-shape");
+          }
+        });
+      }, 1200);
+      propagationTimeoutsRef.current.push(glowTimeout);
+
+      // Inter-community arcs (CSS overlays)
+      if (containerRef.current && crossCommunity.length > 0) {
+        for (const { srcComm, tgtComm, action } of crossCommunity) {
+          const srcNodes = cy.nodes(`[community = "${srcComm}"]`);
+          const tgtNodes = cy.nodes(`[community = "${tgtComm}"]`);
+          if (srcNodes.empty() || tgtNodes.empty()) continue;
+
+          const srcBB = srcNodes.renderedBoundingBox({});
+          const tgtBB = tgtNodes.renderedBoundingBox({});
+          const srcCx = (srcBB.x1 + srcBB.x2) / 2;
+          const srcCy = (srcBB.y1 + srcBB.y2) / 2;
+          const tgtCx = (tgtBB.x1 + tgtBB.x2) / 2;
+          const tgtCy = (tgtBB.y1 + tgtBB.y2) / 2;
+
+          const arc = document.createElement("div");
+          arc.style.position = "absolute";
+          arc.style.left = `${Math.min(srcCx, tgtCx)}px`;
+          arc.style.top = `${Math.min(srcCy, tgtCy)}px`;
+          arc.style.width = `${Math.abs(tgtCx - srcCx)}px`;
+          arc.style.height = `${Math.abs(tgtCy - srcCy)}px`;
+          arc.style.borderBottom = `2px solid ${ACTION_COLORS[action] ?? "#22c55e"}`;
+          arc.style.borderRadius = "50%";
+          arc.style.pointerEvents = "none";
+          arc.style.animation = "propagation-arc-fade 1.5s ease-out forwards";
+          containerRef.current.appendChild(arc);
+
+          const arcTimeout = setTimeout(() => arc.remove(), 1600);
+          propagationTimeoutsRef.current.push(arcTimeout);
+        }
+      }
+    } else {
+      // --- Close-up / Mid-range: per-edge animations ---
+      const sorted = [...pairs].sort((a, b) => b.probability - a.probability).slice(0, limit);
+
+      for (const pair of sorted) {
+        const color = ACTION_COLORS[pair.action] ?? "#22c55e";
+        const srcNode = cy.getElementById(pair.source);
+        const tgtNode = cy.getElementById(pair.target);
+
+        // Edge flash: find edge between source and target
+        if (srcNode.nonempty() && tgtNode.nonempty()) {
+          const edges = srcNode.edgesWith(tgtNode);
+          if (edges.nonempty()) {
+            const edge = edges[0];
+            const origColor = edge.style("line-color");
+            const origOpacity = edge.numericStyle("opacity");
+            edge.animate(
+              { style: { "line-color": color, opacity: 1, width: 2 } },
+              {
+                duration: 400,
+                easing: "ease-out",
+                complete: () => {
+                  edge.animate(
+                    { style: { "line-color": origColor, opacity: origOpacity, width: 0.5 } },
+                    { duration: 400, easing: "ease-in" },
+                  );
+                },
+              },
+            );
+          }
+
+          // Source pulse
+          srcNode.animate(
+            { style: { "border-width": 4, "border-color": color } },
+            {
+              duration: 300,
+              easing: "ease-out",
+              complete: () => {
+                srcNode.animate(
+                  { style: { "border-width": 0 } },
+                  { duration: 300, easing: "ease-in" },
+                );
+              },
+            },
+          );
+
+          // Target ripple (Close-up only)
+          if (tier === "closeup") {
+            tgtNode.animate(
+              { style: { "underlay-opacity": 0.5, "underlay-color": color, "underlay-padding": 8, "underlay-shape": "ellipse" } },
+              {
+                duration: 350,
+                easing: "ease-out",
+                complete: () => {
+                  tgtNode.animate(
+                    { style: { "underlay-opacity": 0, "underlay-padding": 0 } },
+                    { duration: 350, easing: "ease-in" },
+                  );
+                },
+              },
+            );
+          }
+
+          // Floating particle (Close-up, high probability only)
+          if (tier === "closeup" && pair.probability > 0.5 && srcNode.nonempty() && tgtNode.nonempty()) {
+            const particleId = `particle-${latestStep.step}-${pair.source}-${pair.target}`;
+
+            try {
+              const particle = cy.add({
+                group: "nodes",
+                data: { id: particleId, _isParticle: true },
+                position: { x: srcNode.position("x"), y: srcNode.position("y") },
+              });
+
+              particle.style({
+                width: 4,
+                height: 4,
+                "background-color": color,
+                "border-width": 0,
+                label: "",
+                "overlay-opacity": 0,
+                "events": "no",
+              } as Record<string, unknown>);
+
+              particle.animate(
+                { position: { x: tgtNode.position("x"), y: tgtNode.position("y") } },
+                {
+                  duration: 1000,
+                  easing: "ease-in-out",
+                  complete: () => {
+                    try { cy.remove(particle); } catch { /* already removed */ }
+                  },
+                },
+              );
+
+              // Safety cleanup
+              const particleTimeout = setTimeout(() => {
+                try { if (cy.getElementById(particleId).nonempty()) cy.remove(cy.getElementById(particleId)); } catch { /* ok */ }
+              }, 1200);
+              propagationTimeoutsRef.current.push(particleTimeout);
+            } catch { /* particle creation failed, skip */ }
+          }
+        }
+      }
+    }
+  }, [latestStep, propagationAnimEnabled]);
+
+  // Cleanup propagation timeouts on unmount
+  useEffect(() => {
+    return () => {
+      for (const t of propagationTimeoutsRef.current) clearTimeout(t);
+    };
+  }, []);
 
   // --- Zoom controls ---
   const handleZoomIn = useCallback(() => {
@@ -483,6 +1024,11 @@ export default function GraphPanel() {
     cyRef.current?.fit(undefined, 40);
   }, []);
 
+  // Determine if a cascade is currently active (for badge glow)
+  const cascadeActive = emergentEvents.length > 0 &&
+    (emergentEvents[emergentEvents.length - 1].event_type.toLowerCase().includes("cascade") ||
+     emergentEvents[emergentEvents.length - 1].event_type.toLowerCase().includes("viral"));
+
   return (
     <div
       data-testid="graph-panel"
@@ -495,6 +1041,19 @@ export default function GraphPanel() {
     >
       {/* Cytoscape canvas container */}
       <div ref={containerRef} className="absolute inset-0" />
+
+      {/* Loading overlay — soft fade-in while graph payload is fetched */}
+      {isLoading && (
+        <div
+          data-testid="graph-loading-overlay"
+          className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300"
+        >
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+            <p className="text-xs text-white/70">Loading network…</p>
+          </div>
+        </div>
+      )}
 
       {/* Title Overlay — top-left */}
       <div className="absolute top-4 left-4 z-10 pointer-events-none">
@@ -526,12 +1085,14 @@ export default function GraphPanel() {
         />
       </div>
 
-      {/* Cascade Badge */}
+      {/* Cascade Badge — glows golden when a cascade/viral event is active */}
       <div data-testid="cascade-badge" className="absolute bottom-20 left-6 z-10 pointer-events-none">
         {emergentEvents.length > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--sentiment-positive)] bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)]">
+          <span
+            className={`inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--sentiment-positive)] bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)] ${cascadeActive ? "cascade-badge-active" : ""}`}
+          >
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--sentiment-positive)] animate-pulse-dot" />
-            {emergentEvents[emergentEvents.length - 1].event_type.replace("_", " ")} detected
+            {(emergentEvents[emergentEvents.length - 1]?.event_type ?? "event").replace("_", " ")} detected
           </span>
         )}
       </div>
@@ -598,10 +1159,10 @@ export default function GraphPanel() {
         </div>
       </div>
 
-      {/* Status Bar — bottom-right */}
-      <div data-testid="status-overlay" className="absolute bottom-4 right-4 z-10 pointer-events-none">
-        <span className="text-[11px] font-mono text-white/40">
-          60 FPS · {nodeCount} nodes · {edgeCount} edges · WebGL
+      {/* Performance Indicator — bottom-right (GAP-5) */}
+      <div data-testid="status-overlay" className="absolute bottom-2 right-2 z-10 pointer-events-none">
+        <span className="text-[10px] font-mono text-[var(--muted-foreground,rgba(255,255,255,0.4))]">
+          {nodeCount} nodes · {edgeCount} edges · {fps} FPS
         </span>
       </div>
     </div>

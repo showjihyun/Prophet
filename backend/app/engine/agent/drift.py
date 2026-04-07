@@ -1,6 +1,7 @@
 """Personality Drift — optional personality evolution based on cumulative experience.
 SPEC: docs/spec/01_AGENT_SPEC.md#personality-drift
 """
+from app.config import settings as _settings
 from app.engine.agent.schema import AgentAction, AgentPersonality
 
 
@@ -25,7 +26,7 @@ class PersonalityDrift:
         AgentAction.MUTE:    {"skepticism": 0.01},
     }
 
-    MAX_DRIFT = 0.3
+    MAX_DRIFT = _settings.agent_max_personality_drift
 
     def apply_drift(
         self,

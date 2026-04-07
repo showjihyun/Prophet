@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Play,
   BarChart3,
+  TrendingUp,
   Settings,
   Users,
   Crown,
@@ -19,6 +20,7 @@ import {
   LogOut,
 } from "lucide-react";
 import ThemeToggle from './ThemeToggle';
+import { LS_KEY_TOKEN, LS_KEY_USERNAME } from "@/config/constants";
 
 interface AppSidebarProps {
   activePath?: string;
@@ -30,6 +32,7 @@ const NAV_ITEMS = [
   { icon: Users, label: "Communities", href: "/communities" },
   { icon: Crown, label: "Influencers", href: "/influencers" },
   { icon: BarChart3, label: "Global Insights", href: "/metrics" },
+  { icon: TrendingUp, label: "Analytics", href: "/analytics" },
   { icon: MessageSquare, label: "Opinions", href: "/opinions" },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
@@ -50,11 +53,11 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
-  const [username, setUsername] = useState<string | null>(() => localStorage.getItem("prophet-username"));
+  const [username, setUsername] = useState<string | null>(() => localStorage.getItem(LS_KEY_USERNAME));
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem("prophet-token");
-    localStorage.removeItem("prophet-username");
+    localStorage.removeItem(LS_KEY_TOKEN);
+    localStorage.removeItem(LS_KEY_USERNAME);
     setUsername(null);
     navigate("/login");
   }, [navigate]);

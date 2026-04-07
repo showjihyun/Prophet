@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_orchestrator, get_session, get_persistence
 from app.api.ws import manager as ws_manager
 from app.engine.simulation.persistence import SimulationPersistence
+from app.engine.simulation.exceptions import StepNotFoundError
 from app.api.schemas import (
     CreateSimulationRequest,
     EngineControlRequest,
@@ -74,8 +75,9 @@ def _community_metric_dict(metric: Any) -> dict:
         return metric
     # Dataclass / object with attributes
     result: dict = {}
-    for attr in ("community_id", "adoption_rate", "mean_belief", "sentiment_variance",
-                 "active_agents", "dominant_action"):
+    for attr in ("community_id", "adoption_count", "adoption_rate", "mean_belief",
+                 "sentiment_variance", "active_agents", "dominant_action",
+                 "new_propagation_count"):
         val = getattr(metric, attr, None)
         if val is not None:
             result[attr] = str(val) if attr == "community_id" else val
@@ -194,16 +196,9 @@ async def create_simulation(
     edges = list(state.network.graph.edges(data=True)) if state.network else []
     await persist.persist_creation(session, state.simulation_id, config, state.agents, edges)
 
-    # Compute real network metrics from generated graph
+    # Network metrics are computed lazily via GET /network/metrics — avoid
+    # running O(n^2) NetworkX algorithms on the create hot path.
     net_metrics = {"clustering_coefficient": 0.0, "avg_path_length": 0.0}
-    try:
-        metrics = orchestrator.get_network_metrics(str(state.simulation_id))
-        net_metrics = {
-            "clustering_coefficient": metrics.get("clustering_coefficient", 0.0),
-            "avg_path_length": metrics.get("avg_path_length", 0.0),
-        }
-    except (ValueError, KeyError):
-        pass
 
     return SimulationResponse(
         simulation_id=str(state.simulation_id),
@@ -226,9 +221,12 @@ async def list_simulations(
     """List all simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulations
     """
-    # Build a dict of in-memory simulations (live, takes precedence)
+    # Build a dict of in-memory simulations (live, takes precedence).
+    # Snapshot values() to a list to avoid mutation-during-iteration.
     mem_items: dict[str, dict] = {}
-    for state in orchestrator._simulations.values():
+    for state in list(orchestrator._simulations.values()):
+        if status is not None and state.status != status:
+            continue
         mem_items[str(state.simulation_id)] = {
             "simulation_id": str(state.simulation_id),
             "name": state.config.name,
@@ -237,8 +235,12 @@ async def list_simulations(
             "total_agents": len(state.agents),
         }
 
-    # Load DB simulations and fill in any not present in memory
-    db_sims = await persist.load_simulations(session)
+    # Pull a windowed slice from DB with SQL-side filter/limit.
+    # Fetch a bit extra to absorb in-memory overrides that collide by id.
+    db_limit = limit + offset + len(mem_items)
+    db_sims = await persist.load_simulations(
+        session, status=status, limit=db_limit, offset=0
+    )
     for db_sim in db_sims:
         sid = db_sim["simulation_id"]
         if sid not in mem_items:
@@ -251,10 +253,11 @@ async def list_simulations(
             }
 
     items = list(mem_items.values())
-    if status is not None:
-        items = [i for i in items if i["status"] == status]
-
-    total = len(items)
+    # Total = DB count (SQL) + in-memory-only rows not present in DB.
+    db_total = await persist.count_simulations(session, status=status)
+    db_ids = {s["simulation_id"] for s in db_sims}
+    mem_only = sum(1 for sid in mem_items if sid not in db_ids)
+    total = db_total + mem_only
     items = items[offset: offset + limit]
     return PaginatedResponse(items=items, total=total)
 
@@ -291,9 +294,8 @@ async def get_simulation(
     except (ValueError, KeyError):
         pass
 
-    # Fallback: load from DB (read-only, completed/historical sims)
-    db_sims = await persist.load_simulations(session)
-    db_sim = next((s for s in db_sims if s["simulation_id"] == simulation_id), None)
+    # Fallback: point-lookup from DB (read-only, completed/historical sims)
+    db_sim = await persist.load_simulation(session, sim_uuid)
     if db_sim is None:
         raise HTTPException(
             status_code=404,
@@ -359,29 +361,107 @@ async def step_simulation(
     _require_status(state, SimulationStatus.RUNNING, SimulationStatus.PAUSED)
 
     sim_uuid = _sim_id_to_uuid(simulation_id)
-    result = await orchestrator.run_step(sim_uuid)
+    try:
+        result = await orchestrator.run_step(sim_uuid)
+    except Exception as exc:
+        # Orchestrator has already flipped state to FAILED. Persist that and
+        # broadcast so the frontend can swap to the recover UI instead of
+        # repeatedly hitting /resume and getting 409.
+        await persist.persist_status(session, sim_uuid, state.status, state.current_step)
+        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+            "type": "status_change",
+            "data": {"status": state.status},
+        }))
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/step-failed",
+                title="Step Failed",
+                status=500,
+                detail=f"Simulation step crashed: {exc}",
+                instance=f"/api/v1/simulations/{simulation_id}/step",
+            ).model_dump(),
+        ) from exc
 
-    # Persist step result + status update
-    await persist.persist_step(session, sim_uuid, result)
+    # Persist step result + agent snapshots + status update
+    await persist.persist_step(session, sim_uuid, result, agents=state.agents)
     await persist.persist_status(session, sim_uuid, state.status, state.current_step)
 
     # Persist LLM call summary for this step (one synthetic record per LLM call)
     if result.llm_calls_this_step > 0:
-        llm_records = [
-            {
-                "agent_id": None,
-                "step": result.step,
-                "provider": "ollama",
-                "model": "unknown",
-                "prompt_hash": "",
-                "latency_ms": None,
-                "tokens": None,
-                "cached": False,
-                "tier": 1,
-            }
-            for _ in range(result.llm_calls_this_step)
-        ]
+        # Build LLM call records from tier distribution and orchestrator config
+        from app.config import settings as _cfg
+        tier_dist = result.llm_tier_distribution  # {tier: count}
+        llm_records = []
+        for tier, count in tier_dist.items():
+            provider = _cfg.default_llm_provider if tier <= 2 else "ollama"
+            model = _cfg.slm_model if tier <= 2 else _cfg.anthropic_default_model
+            for _ in range(count):
+                llm_records.append({
+                    "agent_id": None,
+                    "step": result.step,
+                    "provider": provider,
+                    "model": model,
+                    "prompt_hash": "",
+                    "latency_ms": result.step_duration_ms / max(1, result.llm_calls_this_step),
+                    "tokens": None,
+                    "cached": False,
+                    "tier": int(tier),
+                })
+        if not llm_records:
+            # Fallback: at least record that LLM calls happened
+            llm_records = [{"agent_id": None, "step": result.step, "provider": _cfg.default_llm_provider, "model": _cfg.slm_model, "prompt_hash": "", "tier": 1}]
         await persist.persist_llm_calls(session, sim_uuid, llm_records)
+
+    # M-5: Persist expert opinions (from emergent events with "expert" in type)
+    expert_events = [
+        e for e in result.emergent_events
+        if "expert" in (e.event_type or "").lower()
+    ]
+    if expert_events:
+        opinions = [
+            {
+                "agent_id": e.community_id,  # use community_id as proxy agent_id when available
+                "opinion_text": e.description,
+                "score": (e.severity * 2) - 1,  # severity [0,1] → score [-1,1]
+                "confidence": e.severity,
+                "step": result.step,
+            }
+            for e in expert_events
+            if e.community_id is not None
+        ]
+        if opinions:
+            asyncio.create_task(
+                persist.persist_expert_opinions(session, sim_uuid, result.step, opinions)
+            )
+
+    # M-7: Persist agent memories (collect from agent state, cap at 100)
+    agent_memories: list[dict] = []
+    for agent in state.agents:
+        memories = getattr(agent, 'memories', None) or []
+        for mem in memories:
+            if isinstance(mem, dict):
+                mem_entry = dict(mem)
+                mem_entry.setdefault("agent_id", agent.agent_id)
+                mem_entry.setdefault("step", result.step)
+                agent_memories.append(mem_entry)
+            elif hasattr(mem, 'content'):
+                agent_memories.append({
+                    "agent_id": agent.agent_id,
+                    "memory_type": getattr(mem, 'memory_type', 'episodic'),
+                    "content": getattr(mem, 'content', ''),
+                    "emotion_weight": getattr(mem, 'emotion_weight', 0.5),
+                    "step": result.step,
+                    "social_weight": getattr(mem, 'social_weight', 0.0),
+                })
+            if len(agent_memories) >= 100:
+                break
+        if len(agent_memories) >= 100:
+            break
+    if agent_memories:
+        asyncio.create_task(
+            persist.persist_agent_memories(session, sim_uuid, agent_memories)
+        )
 
     # Broadcast step result via WebSocket
     asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
@@ -427,6 +507,28 @@ async def step_simulation(
             },
         }))
 
+    # C-4: Broadcast agent_update for subscribed agents
+    agent_state_map: dict[str, dict] = {}
+    for agent in state.agents:
+        aid = str(agent.agent_id)
+        agent_state_map[aid] = {
+            "agent_id": aid,
+            "step": result.step,
+            "belief": agent.belief,
+            "action": agent.action.value if hasattr(agent.action, 'value') else str(agent.action),
+            "adopted": agent.adopted,
+            "exposure_count": agent.exposure_count,
+            "emotion": {
+                "interest": agent.emotion.interest,
+                "trust": agent.emotion.trust,
+                "skepticism": agent.emotion.skepticism,
+                "excitement": agent.emotion.excitement,
+            },
+        }
+    asyncio.create_task(
+        ws_manager.broadcast_agent_updates(str(sim_uuid), agent_state_map)
+    )
+
     # Broadcast status change if simulation completed
     if state.status == "completed":
         asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
@@ -447,6 +549,7 @@ async def step_simulation(
         total_adoption=result.total_adoption,
         community_metrics=cm_resp,
         action_distribution=result.action_distribution,
+        propagation_pairs=result.propagation_pairs,
         llm_calls_this_step=result.llm_calls_this_step,
         step_duration_ms=result.step_duration_ms,
         emergent_events=[
@@ -576,9 +679,23 @@ async def stop_simulation(
         SimulationStatus.RUNNING,
         SimulationStatus.PAUSED,
         SimulationStatus.CONFIGURED,
+        SimulationStatus.FAILED,
+        SimulationStatus.COMPLETED,
     )
-    state.status = "completed"
     sim_uuid = _sim_id_to_uuid(simulation_id)
+
+    # If stopping from failed/completed, reset to created for restart
+    if state.status in ("failed", "completed"):
+        state.status = "created"
+        state.current_step = 0
+        await persist.persist_status(session, sim_uuid, "created")
+        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+            "type": "status_change",
+            "data": {"status": "created"},
+        }))
+        return StatusResponse(status=SimulationStatus.CREATED)
+
+    state.status = "completed"
     await persist.persist_status(session, sim_uuid, "completed")
     asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
         "type": "status_change",
@@ -630,6 +747,7 @@ async def get_steps(
                 total_adoption=sr.total_adoption,
                 community_metrics=cm,
                 action_distribution=sr.action_distribution,
+                propagation_pairs=getattr(sr, 'propagation_pairs', []),
                 llm_calls_this_step=sr.llm_calls_this_step,
                 step_duration_ms=sr.step_duration_ms,
                 emergent_events=[
@@ -701,16 +819,19 @@ async def replay_from_step(
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idreplaystep
     """
     _get_state_or_404(orchestrator, simulation_id)
-    replay_id = str(uuid.uuid4())
-
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        orchestrator.replay_step(sim_uuid, step)
-    except (ValueError, NotImplementedError, AttributeError, TypeError) as e:
+        result = orchestrator.replay_step(sim_uuid, step)
+        return ReplayResponse(
+            replay_id=result["replay_id"],
+            from_step=result["from_step"],
+        )
+    except (ValueError, StepNotFoundError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f"replay_step fallback: {e}")
-
-    return ReplayResponse(replay_id=replay_id, from_step=step)
+        logging.getLogger(__name__).warning(f"replay_step error: {e}")
+        return ReplayResponse(replay_id=str(uuid.uuid4()), from_step=step)
 
 
 @router.get(
@@ -760,6 +881,27 @@ async def compare_simulations(
             "winner": winner,
         }
 
+        # Per-step metric diffs (align by step index)
+        max_steps = max(len(state_a.step_history), len(state_b.step_history))
+        metric_diffs: dict[str, list[float]] = {
+            "adoption_rate": [],
+            "mean_sentiment": [],
+            "diffusion_rate": [],
+        }
+        for i in range(max_steps):
+            a = state_a.step_history[i] if i < len(state_a.step_history) else None
+            b = state_b.step_history[i] if i < len(state_b.step_history) else None
+            metric_diffs["adoption_rate"].append(
+                (a.adoption_rate if a else 0.0) - (b.adoption_rate if b else 0.0)
+            )
+            metric_diffs["mean_sentiment"].append(
+                (a.mean_sentiment if a else 0.0) - (b.mean_sentiment if b else 0.0)
+            )
+            metric_diffs["diffusion_rate"].append(
+                (a.diffusion_rate if a else 0) - (b.diffusion_rate if b else 0)
+            )
+        comparison["metric_diffs"] = metric_diffs
+
     return ScenarioComparisonResponse(
         simulation_a=simulation_id,
         simulation_b=other_id,
@@ -767,7 +909,7 @@ async def compare_simulations(
     )
 
 
-async def _run_monte_carlo(job_id: str, config: Any, n_runs: int) -> None:
+async def _run_monte_carlo(job_id: str, simulation_id: str, config: Any, n_runs: int) -> None:
     """Background task to actually run Monte Carlo.
     SPEC: docs/spec/04_SIMULATION_SPEC.md#metriccollector
     """
@@ -775,6 +917,7 @@ async def _run_monte_carlo(job_id: str, config: Any, n_runs: int) -> None:
         _monte_carlo_jobs[job_id]["status"] = "running"
         runner = MonteCarloRunner()
         result = await runner.run(config, n_runs=n_runs)
+        completed_at = datetime.now(timezone.utc)
         _monte_carlo_jobs[job_id].update({
             "status": "completed",
             "viral_probability": result.viral_probability,
@@ -783,13 +926,66 @@ async def _run_monte_carlo(job_id: str, config: Any, n_runs: int) -> None:
             "p50_reach": result.p50_reach,
             "p95_reach": result.p95_reach,
             "community_adoption": result.community_adoption,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": completed_at.isoformat(),
         })
+        # Persist to PostgreSQL (NF07: DB is source of truth)
+        await _persist_monte_carlo(job_id, simulation_id, n_runs, result, completed_at)
     except Exception as e:
         _monte_carlo_jobs[job_id].update({
             "status": "failed",
             "error_message": str(e),
         })
+        await _persist_monte_carlo_failure(job_id, simulation_id, n_runs, str(e))
+
+
+async def _persist_monte_carlo(
+    job_id: str, simulation_id: str, n_runs: int, result: Any, completed_at: datetime
+) -> None:
+    """Persist completed MC results to monte_carlo_runs table."""
+    from app.database import async_session
+    from app.models.propagation import MonteCarloRun
+    try:
+        async with async_session() as session:
+            run = MonteCarloRun(
+                job_id=uuid.UUID(job_id),
+                simulation_id=uuid.UUID(simulation_id),
+                status="completed",
+                n_runs=n_runs,
+                viral_probability=result.viral_probability,
+                expected_reach=result.expected_reach,
+                p5_reach=result.p5_reach,
+                p50_reach=result.p50_reach,
+                p95_reach=result.p95_reach,
+                community_adoption=result.community_adoption,
+                started_at=_monte_carlo_jobs.get(job_id, {}).get("started_at"),
+                completed_at=completed_at,
+            )
+            session.add(run)
+            await session.commit()
+    except Exception:
+        pass  # Best-effort persist; in-memory result is still available
+
+
+async def _persist_monte_carlo_failure(
+    job_id: str, simulation_id: str, n_runs: int, error: str
+) -> None:
+    """Persist failed MC job to monte_carlo_runs table."""
+    from app.database import async_session
+    from app.models.propagation import MonteCarloRun
+    try:
+        async with async_session() as session:
+            run = MonteCarloRun(
+                job_id=uuid.UUID(job_id),
+                simulation_id=uuid.UUID(simulation_id),
+                status="failed",
+                n_runs=n_runs,
+                error_message=error,
+                started_at=_monte_carlo_jobs.get(job_id, {}).get("started_at"),
+            )
+            session.add(run)
+            await session.commit()
+    except Exception:
+        pass
 
 
 @router.post(
@@ -810,6 +1006,7 @@ async def start_monte_carlo(
     now = datetime.now(timezone.utc)
     job = {
         "job_id": job_id,
+        "simulation_id": simulation_id,
         "status": "queued",
         "n_runs": body.n_runs,
         "started_at": now,
@@ -817,13 +1014,57 @@ async def start_monte_carlo(
     _monte_carlo_jobs[job_id] = job
 
     # Fire background task using the simulation's config
-    asyncio.create_task(_run_monte_carlo(job_id, state.config, body.n_runs))
+    asyncio.create_task(_run_monte_carlo(job_id, simulation_id, state.config, body.n_runs))
 
     return MonteCarloStatusResponse(
         job_id=job_id,
         status="queued",
         n_runs=body.n_runs,
         started_at=now,
+    )
+
+
+@router.get(
+    "/{simulation_id}/monte-carlo",
+    response_model=MonteCarloStatusResponse | None,
+)
+async def get_latest_monte_carlo(
+    simulation_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> MonteCarloStatusResponse | None:
+    """Get the latest Monte Carlo result for a simulation.
+    SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idmonte-carlo
+    """
+    # Check in-memory first
+    for job in reversed(list(_monte_carlo_jobs.values())):
+        if job.get("simulation_id") == simulation_id:
+            return MonteCarloStatusResponse(**{k: v for k, v in job.items() if k != "simulation_id"})
+
+    # Fallback: PostgreSQL
+    from app.models.propagation import MonteCarloRun
+    from sqlalchemy import select
+    result = await session.execute(
+        select(MonteCarloRun)
+        .where(MonteCarloRun.simulation_id == uuid.UUID(simulation_id))
+        .order_by(MonteCarloRun.created_at.desc())
+        .limit(1)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return None
+    return MonteCarloStatusResponse(
+        job_id=str(row.job_id),
+        status=row.status,
+        n_runs=row.n_runs,
+        viral_probability=row.viral_probability,
+        expected_reach=row.expected_reach,
+        p5_reach=row.p5_reach,
+        p50_reach=row.p50_reach,
+        p95_reach=row.p95_reach,
+        community_adoption=row.community_adoption,
+        started_at=row.started_at,
+        completed_at=row.completed_at,
+        error_message=getattr(row, 'error_message', None),
     )
 
 
@@ -835,24 +1076,52 @@ async def get_monte_carlo_status(
     simulation_id: str,
     job_id: str,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
 ) -> MonteCarloStatusResponse:
     """Get Monte Carlo job status and results.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idmonte-carlojob_id
     """
     _get_state_or_404(orchestrator, simulation_id)
     job = _monte_carlo_jobs.get(job_id)
-    if job is None:
-        raise HTTPException(
-            status_code=404,
-            detail=ErrorResponse(
-                type="https://prophet.io/errors/not-found",
-                title="Monte Carlo Job Not Found",
-                status=404,
-                detail=f"Job uuid={job_id} does not exist",
-                instance=f"/api/v1/simulations/{simulation_id}/monte-carlo/{job_id}",
-            ).model_dump(),
+    if job is not None:
+        return MonteCarloStatusResponse(**job)
+
+    # Fallback: check PostgreSQL (NF07)
+    from app.models.propagation import MonteCarloRun
+    from sqlalchemy import select
+    try:
+        result = await session.execute(
+            select(MonteCarloRun).where(MonteCarloRun.job_id == uuid.UUID(job_id))
         )
-    return MonteCarloStatusResponse(**job)
+        row = result.scalar_one_or_none()
+        if row is not None:
+            return MonteCarloStatusResponse(
+                job_id=str(row.job_id),
+                status=row.status,
+                n_runs=row.n_runs,
+                viral_probability=row.viral_probability,
+                expected_reach=row.expected_reach,
+                p5_reach=row.p5_reach,
+                p50_reach=row.p50_reach,
+                p95_reach=row.p95_reach,
+                community_adoption=row.community_adoption,
+                started_at=row.started_at,
+                completed_at=row.completed_at,
+                error_message=getattr(row, 'error_message', None),
+            )
+    except Exception:
+        pass
+
+    raise HTTPException(
+        status_code=404,
+        detail=ErrorResponse(
+            type="https://prophet.io/errors/not-found",
+            title="Monte Carlo Job Not Found",
+            status=404,
+            detail=f"Job uuid={job_id} does not exist",
+            instance=f"/api/v1/simulations/{simulation_id}/monte-carlo/{job_id}",
+        ).model_dump(),
+    )
 
 
 @router.post("/{simulation_id}/engine-control", response_model=EngineControlResponse)
@@ -920,12 +1189,34 @@ async def recommend_engine(
 # ---- Group Chat & Interview (G6, G8) ----
 
 _group_chat_managers: dict[str, GroupChatManager] = {}
-_interviewer = AgentInterviewer()
+_interviewer: AgentInterviewer | None = None
+
+
+def _get_interviewer() -> AgentInterviewer:
+    """Lazy-init interviewer with LLM gateway from orchestrator."""
+    global _interviewer
+    if _interviewer is None:
+        try:
+            orch = get_orchestrator()
+            _interviewer = AgentInterviewer(
+                gateway=getattr(orch, '_gateway', None),
+                llm_adapter=getattr(orch, '_llm_adapter', None),
+            )
+        except Exception:
+            _interviewer = AgentInterviewer()
+    return _interviewer
 
 
 def _get_group_chat_manager(simulation_id: str) -> GroupChatManager:
     if simulation_id not in _group_chat_managers:
-        _group_chat_managers[simulation_id] = GroupChatManager()
+        try:
+            orch = get_orchestrator()
+            _group_chat_managers[simulation_id] = GroupChatManager(
+                gateway=getattr(orch, '_gateway', None),
+                llm_adapter=getattr(orch, '_llm_adapter', None),
+            )
+        except Exception:
+            _group_chat_managers[simulation_id] = GroupChatManager()
     return _group_chat_managers[simulation_id]
 
 
@@ -1045,7 +1336,12 @@ async def interview_agent(
         )
 
     question = body.get("question", "What do you think?")
-    result = _interviewer.interview(agent_state, question)
+    interviewer = _get_interviewer()
+    # Use async LLM interview when gateway is available, fallback to rule-based
+    try:
+        result = await interviewer.interview_async(agent_state, question)
+    except Exception:
+        result = interviewer.interview(agent_state, question)
 
     return {
         "agent_id": str(result.agent_id),

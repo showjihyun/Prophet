@@ -38,7 +38,7 @@ class EvalResult:
     provider: str | None = None
 
 # Priority order for fallback
-_PROVIDER_PRIORITY = ["ollama", "vllm", "claude", "openai"]
+_PROVIDER_PRIORITY = ["ollama", "vllm", "gemini", "claude", "openai"]
 
 
 class LLMProviderNotFoundError(LLMProviderError):
@@ -281,7 +281,7 @@ class LLMAdapterRegistry:
     # SPEC: docs/spec/05_LLM_SPEC.md#9-error-specification
     # ------------------------------------------------------------------
 
-    async def embed(self, text: str, expected_dim: int = 768) -> list[float]:
+    async def embed(self, text: str, expected_dim: int | None = None) -> list[float]:
         """Generate embedding and validate dimension.
 
         SPEC: docs/spec/05_LLM_SPEC.md#9-error-specification
@@ -289,6 +289,9 @@ class LLMAdapterRegistry:
         Raises ``EmbeddingDimensionError`` if the returned vector length
         does not match *expected_dim*.
         """
+        if expected_dim is None:
+            from app.config import settings
+            expected_dim = settings.embedding_dim
         adapter = self._pick_adapter_for_embed()
         result = await adapter.embed(text)
         if result is not None and len(result) != expected_dim:

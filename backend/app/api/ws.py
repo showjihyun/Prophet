@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -57,6 +58,34 @@ class ConnectionManager:
         subs = self._agent_subscriptions.get(ws_id, set())
         subs.discard(agent_id)
 
+    async def broadcast_agent_updates(
+        self,
+        simulation_id: str,
+        agent_states: dict[str, Any],
+    ) -> None:
+        """Send agent_update messages to clients subscribed to specific agents.
+
+        SPEC: docs/spec/06_API_SPEC.md#7-websocket---wssimulation_id
+
+        Args:
+            agent_states: dict of agent_id -> agent state data
+        """
+        conns = self._connections.get(simulation_id, [])
+        for ws in list(conns):
+            ws_id = str(id(ws))
+            subscribed = self._agent_subscriptions.get(ws_id, set())
+            if not subscribed:
+                continue
+            for agent_id in subscribed:
+                if agent_id in agent_states:
+                    try:
+                        await ws.send_json({
+                            "type": "agent_update",
+                            "data": agent_states[agent_id],
+                        })
+                    except Exception:
+                        pass  # dead connection, cleaned up by broadcast
+
 
 manager = ConnectionManager()
 
@@ -97,23 +126,65 @@ async def simulation_ws(websocket: WebSocket, simulation_id: str) -> None:
             data = msg.get("data", {})
 
             if msg_type == "pause":
-                # Delegate to orchestrator when wired; for now acknowledge
-                await websocket.send_json({
-                    "type": "status_change",
-                    "data": {"status": "paused", "step": 0},
-                })
+                try:
+                    from app.api.deps import get_orchestrator
+                    orch = get_orchestrator()
+                    await orch.pause(UUID(simulation_id))
+                    state = orch.get_state(UUID(simulation_id))
+                    await manager.broadcast(simulation_id, {
+                        "type": "status_change",
+                        "data": {"status": "paused", "step": state.current_step},
+                    })
+                except Exception as exc:
+                    logger.warning("WS pause failed for %s: %s", simulation_id, exc)
+                    await websocket.send_json({
+                        "type": "error",
+                        "data": {"detail": f"Pause failed: {exc}"},
+                    })
 
             elif msg_type == "resume":
-                await websocket.send_json({
-                    "type": "status_change",
-                    "data": {"status": "running", "step": 0},
-                })
+                try:
+                    from app.api.deps import get_orchestrator
+                    orch = get_orchestrator()
+                    await orch.resume(UUID(simulation_id))
+                    state = orch.get_state(UUID(simulation_id))
+                    await manager.broadcast(simulation_id, {
+                        "type": "status_change",
+                        "data": {"status": "running", "step": state.current_step},
+                    })
+                except Exception as exc:
+                    logger.warning("WS resume failed for %s: %s", simulation_id, exc)
+                    await websocket.send_json({
+                        "type": "error",
+                        "data": {"detail": f"Resume failed: {exc}"},
+                    })
 
             elif msg_type == "inject_event":
-                await websocket.send_json({
-                    "type": "status_change",
-                    "data": {"status": "event_injected", "event": data},
-                })
+                try:
+                    from app.api.deps import get_orchestrator
+                    orch = get_orchestrator()
+                    event_type = data.get("event_type", "community_discussion")
+                    payload = data.get("payload", {})
+                    orch.inject_event(
+                        UUID(simulation_id),
+                        event_type=event_type,
+                        payload=payload,
+                    )
+                    state = orch.get_state(UUID(simulation_id))
+                    await manager.broadcast(simulation_id, {
+                        "type": "status_change",
+                        "data": {
+                            "status": "event_injected",
+                            "event_type": event_type,
+                            "step": state.current_step,
+                        },
+                    })
+                except Exception as exc:
+                    logger.warning("WS inject_event failed for %s: %s", simulation_id, exc)
+                    await websocket.send_json({
+                        "type": "error",
+                        "data": {"detail": f"Inject failed: {exc}"},
+                    })
 
             elif msg_type == "subscribe_agent":
                 agent_id = data.get("agent_id", "")

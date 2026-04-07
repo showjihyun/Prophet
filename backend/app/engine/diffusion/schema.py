@@ -90,6 +90,21 @@ class ExposureResult:
 
 
 @dataclass
+class ContextualPacket:
+    """Text context passed between agents during propagation.
+
+    SPEC: docs/spec/03_DIFFUSION_SPEC.md#contextual-packet
+
+    Enables emergent text mutation as messages spread through the network.
+    Each agent adds their emotional interpretation before forwarding.
+    """
+    original_content: str         # Original campaign/event message
+    sender_emotion_summary: str   # e.g., "interest=0.8, trust=0.6"
+    sender_reasoning: str         # SLM-generated 1-line summary of why they shared
+    mutation_depth: int = 0       # How many agents the packet has passed through
+
+
+@dataclass
 class PropagationEvent:
     """A propagation event between two agents.
 
@@ -101,6 +116,7 @@ class PropagationEvent:
     probability: float
     step: int
     message_id: UUID
+    contextual_packet: "ContextualPacket | None" = None
 
 
 @dataclass
@@ -113,6 +129,7 @@ class CascadeConfig:
     Violation: raise ValueError.
     """
     viral_cascade_threshold: float = 0.15
+    slow_adoption_threshold: float = 0.02  # per-step delta below which adoption is "slow"
     slow_adoption_steps: int = 5
     polarization_variance_threshold: float = 0.4
     collapse_drop_rate: float = 0.20
@@ -122,6 +139,10 @@ class CascadeConfig:
         if self.viral_cascade_threshold <= 0:
             raise ValueError(
                 f"viral_cascade_threshold must be > 0, got {self.viral_cascade_threshold}"
+            )
+        if self.slow_adoption_threshold <= 0:
+            raise ValueError(
+                f"slow_adoption_threshold must be > 0, got {self.slow_adoption_threshold}"
             )
         if self.slow_adoption_steps <= 0:
             raise ValueError(
@@ -231,6 +252,7 @@ __all__ = [
     "FeedItem",
     "CampaignEvent",
     "ExposureResult",
+    "ContextualPacket",
     "PropagationEvent",
     "CascadeConfig",
     "EmergentEvent",

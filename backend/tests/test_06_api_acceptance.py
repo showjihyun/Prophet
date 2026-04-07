@@ -160,16 +160,17 @@ class TestAPI04PatchAgentRequiresPause:
 class TestAPI05WebSocket:
     """SPEC: 06_API_SPEC.md §9 API-05"""
 
-    def test_ws_connects(self):
-        """WebSocket can connect and exchange messages."""
+    def test_ws_connects_and_handles_commands(self):
+        """WebSocket can connect and handle commands (error for non-existent sim)."""
         from starlette.testclient import TestClient
 
         test_client = TestClient(app)
         with test_client.websocket_connect("/ws/test-sim") as ws:
+            # Non-existent simulation → orchestrator returns error gracefully
             ws.send_json({"type": "pause"})
             msg = ws.receive_json()
-            assert msg["type"] == "status_change"
-            assert msg["data"]["status"] == "paused"
+            assert msg["type"] == "error"
+            assert "detail" in msg["data"]
 
 
 # ---- API-06: GET /simulations with status filter ----

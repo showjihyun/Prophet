@@ -2,11 +2,26 @@
  * ConversationThreadPage — Agent conversation thread with reactions (UI-15).
  * @spec docs/spec/ui/UI_15_CONVERSATION_THREAD.md
  */
-import { useMemo, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useMemo, useEffect, useState, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import { useSimulationStore } from "../store/simulationStore";
 import { apiClient, type ThreadDetail } from "../api/client";
+
+function useReactions() {
+  const [reacted, setReacted] = useState<Record<string, string>>({});
+  const toggle = useCallback((messageId: string, type: string) => {
+    setReacted((prev) => {
+      if (prev[messageId] === type) {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      }
+      return { ...prev, [messageId]: type };
+    });
+  }, []);
+  return { reacted, toggle };
+}
 
 /* ------------------------------------------------------------------ */
 /* Mock Data                                                           */
@@ -132,10 +147,12 @@ const COMMUNITY_COLORS_ARRAY = [
 ];
 
 export default function ConversationThreadPage() {
+  const navigate = useNavigate();
   const { communityId, threadId: _threadId } = useParams<{ communityId: string; threadId: string }>();
   const simulation = useSimulationStore((st) => st.simulation);
   const steps = useSimulationStore((st) => st.steps);
   const emergentEvents = useSimulationStore((st) => st.emergentEvents);
+  const { reacted, toggle: toggleReaction } = useReactions();
 
   // API-fetched thread detail
   const [apiThread, setApiThread] = useState<ThreadDetail | null>(null);
@@ -198,7 +215,7 @@ export default function ConversationThreadPage() {
         stance,
         relative_time: `Step ${step.step}`,
         content: event
-          ? `[${event.event_type.replace(/_/g, " ").toUpperCase()}] ${event.description} — ${step.llm_calls_this_step} LLM calls, ${adoptPct}% adoption rate.`
+          ? `[${(event.event_type ?? "event").replace(/_/g, " ").toUpperCase()}] ${event.description ?? ""} — ${step.llm_calls_this_step} LLM calls, ${adoptPct}% adoption rate.`
           : `${step.llm_calls_this_step} LLM calls this step. Dominant action: ${actionName} (${adoptPct}% adoption). Sentiment: ${sentiment > 0 ? "+" : ""}${sentiment.toFixed(2)}.`,
         reactions: {
           agree: Math.round(step.adoption_rate * 20),
@@ -225,14 +242,14 @@ export default function ConversationThreadPage() {
     : derivedThread ?? MOCK_THREAD;
 
   const messages: ThreadMsg[] = apiThread
-    ? apiThread.messages.map((m) => {
+    ? apiThread.messages.map((m, idx) => {
         const colorIdx = m.agent_id.charCodeAt(m.agent_id.length - 1) % COMMUNITY_COLORS_ARRAY.length;
         return {
           message_id: m.message_id,
           agent_id: m.agent_id,
           community_color: COMMUNITY_COLORS_ARRAY[colorIdx] ?? "var(--community-alpha)",
           stance: m.stance as ThreadMsg["stance"],
-          relative_time: "",
+          relative_time: `${idx + 1}m ago`,
           content: m.content,
           reactions: m.reactions,
           is_reply: m.is_reply,
@@ -250,7 +267,7 @@ export default function ConversationThreadPage() {
       {/* Nav */}
       <PageNav
         breadcrumbs={[
-          { label: "Korea Election 2026", href: "/projects/p1" },
+          { label: simulation?.name ?? "Simulation", href: "/projects/p1" },
           { label: "Alpha", href: `/opinions/${communityId ?? "alpha"}` },
           { label: "Conversation" },
         ]}
@@ -266,8 +283,7 @@ export default function ConversationThreadPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1
-              className="text-xl font-semibold text-[var(--foreground)] mb-2"
-              style={{ fontFamily: "'Instrument Serif', serif" }}
+              className="text-xl font-semibold font-display text-[var(--foreground)] mb-2"
             >
               {t.topic}
             </h1>
@@ -332,9 +348,12 @@ export default function ConversationThreadPage() {
                   {msg.agent_id.slice(-3)}
                 </div>
 
-                <span className="font-medium text-sm text-[var(--foreground)]">
+                <button
+                  onClick={() => navigate(`/agents/${msg.agent_id}`)}
+                  className="font-medium text-sm text-[var(--foreground)] hover:underline cursor-pointer"
+                >
                   {msg.agent_id}
-                </span>
+                </button>
 
                 <span className={`text-xs px-2 py-0.5 rounded-full ${STANCE_STYLES[msg.stance]}`}>
                   {msg.stance}
@@ -355,28 +374,37 @@ export default function ConversationThreadPage() {
 
               {/* Reactions */}
               <div className="flex items-center gap-4">
-                <button className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--sentiment-positive)] transition-colors">
+                <button
+                  onClick={() => toggleReaction(msg.message_id, "agree")}
+                  className={`flex items-center gap-1.5 text-xs transition-colors ${reacted[msg.message_id] === "agree" ? "text-[var(--sentiment-positive)] font-medium" : "text-[var(--muted-foreground)] hover:text-[var(--sentiment-positive)]"}`}
+                >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z" />
                     <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
                   </svg>
-                  Agree {msg.reactions.agree}
+                  Agree {msg.reactions.agree + (reacted[msg.message_id] === "agree" ? 1 : 0)}
                 </button>
-                <button className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-colors">
+                <button
+                  onClick={() => toggleReaction(msg.message_id, "disagree")}
+                  className={`flex items-center gap-1.5 text-xs transition-colors ${reacted[msg.message_id] === "disagree" ? "text-[var(--destructive)] font-medium" : "text-[var(--muted-foreground)] hover:text-[var(--destructive)]"}`}
+                >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10 15V19a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z" />
                     <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
                   </svg>
-                  Disagree {msg.reactions.disagree}
+                  Disagree {msg.reactions.disagree + (reacted[msg.message_id] === "disagree" ? 1 : 0)}
                 </button>
-                <button className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--sentiment-warning)] transition-colors">
+                <button
+                  onClick={() => toggleReaction(msg.message_id, "nuanced")}
+                  className={`flex items-center gap-1.5 text-xs transition-colors ${reacted[msg.message_id] === "nuanced" ? "text-[var(--sentiment-warning)] font-medium" : "text-[var(--muted-foreground)] hover:text-[var(--sentiment-warning)]"}`}
+                >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <path d="M8 15h8" />
                     <path d="M9 9h.01" />
                     <path d="M15 9h.01" />
                   </svg>
-                  Nuanced {msg.reactions.nuanced}
+                  Nuanced {msg.reactions.nuanced + (reacted[msg.message_id] === "nuanced" ? 1 : 0)}
                 </button>
               </div>
 
