@@ -169,13 +169,34 @@ describe('SimulationMain (UI-01)', () => {
     });
 
     it('renders multiple community rows', () => {
-      // CommunityPanel shows a SkeletonList while running with no steps yet.
-      // Pause the sim so it renders actual rows.
-      useSimulationStore.setState({ status: 'paused' });
+      // CommunityPanel is real-data-only — seed latestStep with a
+      // community_metrics object so it has rows to render. Without this
+      // the panel correctly shows an empty state (no mock fallback).
+      useSimulationStore.setState({
+        status: 'paused',
+         
+        latestStep: {
+          step: 1,
+          adoption_rate: 0.4,
+          mean_sentiment: 0.2,
+          sentiment_variance: 0.1,
+          total_adoption: 400,
+          diffusion_rate: 0.05,
+          action_distribution: { share: 200 },
+          emergent_events: [],
+          llm_calls_this_step: 5,
+          step_duration_ms: 100,
+          community_metrics: {
+            alpha: { mean_belief: 0.5, adoption_rate: 0.4, size: 250, community_id: 'A' },
+            beta: { mean_belief: 0.3, adoption_rate: 0.3, size: 150, community_id: 'B' },
+            gamma: { mean_belief: -0.1, adoption_rate: 0.2, size: 100, community_id: 'C' },
+            delta: { mean_belief: 0.1, adoption_rate: 0.25, size: 120, community_id: 'D' },
+             
+          } as any,
+           
+        } as any,
+      });
       renderPage();
-      // We don't pin the exact set of names — they vary depending on whether
-      // the panel is in mock vs live mode and whether the test seeded
-      // community_metrics. The contract is "the panel renders >=3 rows".
       const panel = screen.getByTestId('community-panel');
       const rows = panel.querySelectorAll('div.cursor-pointer');
       expect(rows.length).toBeGreaterThanOrEqual(3);

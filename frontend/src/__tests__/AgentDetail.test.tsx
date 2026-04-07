@@ -92,7 +92,7 @@ beforeEach(() => {
       current_step: 5,
       max_steps: 365,
       created_at: new Date().toISOString(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
     } as any,
     status: 'running',
     currentStep: 5,

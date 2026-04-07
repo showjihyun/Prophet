@@ -4,9 +4,10 @@
  * @spec docs/spec/ui/UI_08_INFLUENCERS_PAGINATION.md
  * @spec docs/spec/ui/UI_09_INFLUENCERS_FILTER.md
  */
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiClient, type AgentSummary } from "../api/client";
+import { type AgentSummary } from "../api/client";
+import { useAgents } from "../api/queries";
 import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { useSimulationStore } from "../store/simulationStore";
 import {
@@ -86,55 +87,56 @@ export default function TopInfluencersPage() {
   const simulation = useSimulationStore((s) => s.simulation);
   const simulationId = simulation?.simulation_id ?? null;
   const [search, setSearch] = useState("");
-  const [influencers, setInfluencers] = useState<Influencer[]>([]);
-  const [distributionData, setDistributionData] = useState<{ name: string; value: number; fill: string }[]>([]);
-  const [stats, setStats] = useState({ total: 0, avg: 0, active: 0, bridges: 0 });
-  const [loading, setLoading] = useState(false);
+  // TanStack Query — cached agents list, instant on revisit
+  const agentsQuery = useAgents(simulationId, { limit: 200 });
+  const loading = agentsQuery.isLoading;
 
-  // Fetch real agents from API
-  useEffect(() => {
-    if (!simulationId) return;
-    let cancelled = false;
-    // queueMicrotask: defer setState out of effect body to avoid cascading renders
-    queueMicrotask(() => { if (!cancelled) setLoading(true); });
-    apiClient.agents.list(simulationId, { limit: 200 }).then((res) => {
-      if (cancelled) return;
-      const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score);
-      setInfluencers(sorted.map((a, i) => agentToInfluencer(a, i + 1)));
+  // Derive influencers + distribution + stats from query data in a single memo
+  const { influencers, distributionData, stats } = useMemo(() => {
+    if (!agentsQuery.data) {
+      return {
+        influencers: [] as Influencer[],
+        distributionData: [] as { name: string; value: number; fill: string }[],
+        stats: { total: 0, avg: 0, active: 0, bridges: 0 },
+      };
+    }
+    const items: AgentSummary[] = agentsQuery.data.items;
+    const sorted = [...items].sort((a, b) => b.influence_score - a.influence_score);
+    const _influencers = sorted.map((a, i) => agentToInfluencer(a, i + 1));
 
-      // Compute distribution
-      const commCounts: Record<string, number> = {};
-      for (const a of res.items) {
-        const name = COMMUNITY_ID_TO_NAME[a.community_id] ?? a.community_id;
-        commCounts[name] = (commCounts[name] ?? 0) + 1;
-      }
-      setDistributionData(
-        Object.entries(commCounts).map(([name, value]) => ({
-          name,
-          value,
-          fill: COMMUNITY_COLORS[name] ?? "var(--muted-foreground)",
-        })),
-      );
+    // Compute distribution
+    const commCounts: Record<string, number> = {};
+    for (const a of items) {
+      const name = COMMUNITY_ID_TO_NAME[a.community_id] ?? a.community_id;
+      commCounts[name] = (commCounts[name] ?? 0) + 1;
+    }
+    const _distributionData = Object.entries(commCounts).map(([name, value]) => ({
+      name,
+      value,
+      fill: COMMUNITY_COLORS[name] ?? "var(--muted-foreground)",
+    }));
 
-      // Compute stats in a single pass (combines .map + two .filter iterations)
-      let scoreSum = 0;
-      let activeCount = 0;
-      let bridgeCount = 0;
-      for (const a of res.items) {
-        scoreSum += a.influence_score * 100;
-        if (a.action !== "idle") activeCount++;
-        if (a.agent_type === "bridge") bridgeCount++;
-      }
-      const count = res.items.length;
-      setStats({
-        total: res.total,
+    // Compute stats in a single pass
+    let scoreSum = 0;
+    let activeCount = 0;
+    let bridgeCount = 0;
+    for (const a of items) {
+      scoreSum += a.influence_score * 100;
+      if (a.action !== "idle") activeCount++;
+      if (a.agent_type === "bridge") bridgeCount++;
+    }
+    const count = items.length;
+    return {
+      influencers: _influencers,
+      distributionData: _distributionData,
+      stats: {
+        total: agentsQuery.data.total,
         avg: count ? Math.round((scoreSum / count) * 10) / 10 : 0,
         active: activeCount,
         bridges: bridgeCount,
-      });
-    }).catch(() => { /* keep mock */ }).finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [simulationId]);
+      },
+    };
+  }, [agentsQuery.data]);
 
   // Sort state (A1)
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'influence_score', direction: 'desc' });

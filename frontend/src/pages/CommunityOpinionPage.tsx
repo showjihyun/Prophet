@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
-import { apiClient } from "../api/client";
+import { useSimulationSteps } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 
 /* ------------------------------------------------------------------ */
@@ -130,15 +130,13 @@ export default function CommunityOpinionPage() {
   const [sortMode, setSortMode] = useState<SortMode>("mentioned");
   const simId = simulation?.simulation_id ?? null;
 
-  // Fetch steps from API if store is empty
+  // TanStack Query — bulk hydrate the store once when the live array is empty
+  const stepsQuery = useSimulationSteps(steps.length === 0 ? simId : null);
   useEffect(() => {
-    if (simId && steps.length === 0) {
-      apiClient.simulations.getSteps(simId).then((fetched) => {
-        const { appendStep } = useSimulationStore.getState();
-        for (const s of fetched) appendStep(s);
-      }).catch(() => {});
+    if (stepsQuery.data && steps.length === 0) {
+      useSimulationStore.getState().setStepsBulk(stepsQuery.data);
     }
-  }, [simId, steps.length]);
+  }, [stepsQuery.data, steps.length]);
 
   // Derive community meta from store steps
   const derivedMeta = useMemo(() => {

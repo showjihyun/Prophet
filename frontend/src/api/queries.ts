@@ -110,6 +110,14 @@ export function useSimulationSteps(simId: string | null) {
   });
 }
 
+export function useSimulationCompare(simIdA: string | null, simIdB: string | null) {
+  return useQuery({
+    queryKey: ["simulationCompare", simIdA, simIdB] as const,
+    queryFn: () => apiClient.simulations.compare(simIdA!, simIdB!),
+    enabled: !!simIdA && !!simIdB,
+  });
+}
+
 // ───────── Agents ─────────
 
 export function useAgents(simId: string | null, params?: { limit?: number }) {
@@ -175,5 +183,83 @@ export function useLLMImpact(simId: string | null, step: number = 0) {
     queryKey: [...queryKeys.llmImpact(simId), step] as const,
     queryFn: () => apiClient.llm.getImpact(simId!),
     enabled: !!simId,
+  });
+}
+
+// ───────── Community templates ─────────
+
+export function useCommunityTemplates() {
+  return useQuery({
+    queryKey: ["communityTemplates"] as const,
+    queryFn: () => apiClient.communityTemplates.list(),
+  });
+}
+
+export function useCreateCommunityTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof apiClient.communityTemplates.create>[0]) =>
+      apiClient.communityTemplates.create(input),
+    onSuccess: () => {
+      // refetch (not just invalidate) so consumers see fresh data immediately
+      qc.refetchQueries({ queryKey: ["communityTemplates"] });
+    },
+  });
+}
+
+export function useUpdateCommunityTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof apiClient.communityTemplates.update>[1] }) =>
+      apiClient.communityTemplates.update(id, payload),
+    onSuccess: () => {
+      // refetch (not just invalidate) so consumers see fresh data immediately
+      qc.refetchQueries({ queryKey: ["communityTemplates"] });
+    },
+  });
+}
+
+export function useDeleteCommunityTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.communityTemplates.delete(id),
+    onSuccess: () => {
+      // refetch (not just invalidate) so consumers see fresh data immediately
+      qc.refetchQueries({ queryKey: ["communityTemplates"] });
+    },
+  });
+}
+
+// ───────── Community CRUD (per-simulation) ─────────
+
+export function useCreateCommunity(simId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof apiClient.communities.create>[1]) =>
+      apiClient.communities.create(simId!, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.communities(simId) });
+    },
+  });
+}
+
+export function useUpdateCommunity(simId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ communityId, payload }: { communityId: string; payload: Parameters<typeof apiClient.communities.update>[2] }) =>
+      apiClient.communities.update(simId!, communityId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.communities(simId) });
+    },
+  });
+}
+
+export function useDeleteCommunity(simId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (communityId: string) => apiClient.communities.remove(simId!, communityId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.communities(simId) });
+    },
   });
 }

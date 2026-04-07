@@ -20,6 +20,7 @@ import {
 import { ArrowLeft, TrendingUp, AlertTriangle, BarChart3, Zap } from "lucide-react";
 import { useSimulationStore } from "../store/simulationStore";
 import { apiClient } from "../api/client";
+import { useSimulationSteps } from "../api/queries";
 import { LS_KEY_MC_PREFIX } from "@/config/constants";
 import type { StepResult, EmergentEvent } from "../types/simulation";
 
@@ -134,36 +135,25 @@ export default function AnalyticsPage() {
   const storeStepsLength = useSimulationStore((s) => s.steps.length);
   const latestStep = useSimulationStore((s) => s.latestStep);
 
-  const [fetchedSteps, setFetchedSteps] = useState<StepResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // TanStack Query — only fetches when the live store is empty.
+  // Cached across navigations, so reopening Analytics is instant.
+  const stepsQuery = useSimulationSteps(
+    storeStepsLength === 0 ? simulation?.simulation_id ?? null : null,
+  );
+  const fetchedSteps = stepsQuery.data ?? [];
+  const loading = stepsQuery.isLoading;
+  const error = stepsQuery.error
+    ? stepsQuery.error instanceof Error
+      ? stepsQuery.error.message
+      : "Failed to load steps"
+    : null;
 
-  // Derive steps: prefer store (live), fall back to locally fetched
-  // Memoized so chart helpers don't re-run unless data actually changed.
+  // Derive steps: prefer store (live), fall back to query-fetched
   const steps = useMemo<StepResult[]>(() => {
     const live = useSimulationStore.getState().steps;
     return live.length > 0 ? live : fetchedSteps;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestStep, storeStepsLength, fetchedSteps]);
-
-  // Fetch steps from API only when store is empty
-  useEffect(() => {
-    if (storeStepsLength > 0) return;
-    if (!simulation) return;
-
-    const simulationId = simulation.simulation_id;
-    queueMicrotask(() => setLoading(true));
-    apiClient.simulations
-      .getSteps(simulationId)
-      .then((fetched) => {
-        setFetchedSteps(fetched);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load steps");
-        setLoading(false);
-      });
-  }, [simulation, storeStepsLength]);
 
   // FE-PERF-MEDIUM: memoize all recharts data so charts don't re-build on every parent render
   const adoptionData = useMemo(() => buildAdoptionData(steps), [steps]);

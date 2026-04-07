@@ -2,11 +2,16 @@
  * CommunitiesDetailPage — Communities overview with cards and connection matrix.
  * @spec docs/spec/ui/UI_02_COMMUNITIES_DETAIL.md
  */
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
-import { apiClient, type CommunityInfo } from "../api/client";
+import { type CommunityInfo } from "../api/client";
+import {
+  useCommunities,
+  useCreateCommunity,
+  useUpdateCommunity,
+  useDeleteCommunity,
+} from "../api/queries";
 import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { useSimulationStore } from "../store/simulationStore";
 import { SIM_STATUS } from "@/config/constants";
@@ -135,12 +140,20 @@ export default function CommunitiesDetailPage() {
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   // FE-PERF-M3: use canonical latestStep selector
   const latestStep = useSimulationStore((s) => s.latestStep);
-  const [communities, setCommunities] = useState(COMMUNITIES);
-  const [loading, setLoading] = useState(false);
   const simStatus = useSimulationStore((s) => s.status);
   const canEdit = simulationId != null && (simStatus === SIM_STATUS.PAUSED || simStatus === SIM_STATUS.CONFIGURED || simStatus === SIM_STATUS.CREATED);
   // Use getState() so addToast subscription doesn't trigger re-renders
   const addToast = (t: { type: 'info' | 'success' | 'warning' | 'error'; message: string }) => useSimulationStore.getState().addToast(t);
+
+  // TanStack Query — list + 3 mutations with auto-invalidation
+  const communitiesQuery = useCommunities(simulationId);
+  const communities = communitiesQuery.data?.communities && communitiesQuery.data.communities.length > 0
+    ? communitiesQuery.data.communities.map(apiToLocal)
+    : COMMUNITIES;
+  const loading = communitiesQuery.isLoading;
+  const createCommunity = useCreateCommunity(simulationId);
+  const updateCommunity = useUpdateCommunity(simulationId);
+  const deleteCommunity = useDeleteCommunity(simulationId);
 
   const handleAddCommunity = async () => {
     if (!simulationId) return;
@@ -150,11 +163,8 @@ export default function CommunitiesDetailPage() {
     const size = parseInt(sizeStr ?? "100", 10);
     if (isNaN(size) || size < 10 || size > 5000) return;
     try {
-      await apiClient.communities.create(simulationId, { name: name.trim(), size });
+      await createCommunity.mutateAsync({ name: name.trim(), size });
       addToast({ type: "success", message: `Community "${name.trim()}" added with ${size} agents` });
-      // Refresh
-      const res = await apiClient.communities.list(simulationId);
-      if (res.communities.length > 0) setCommunities(res.communities.map(apiToLocal));
     } catch (e) {
       addToast({ type: "error", message: `Failed to add community: ${e}` });
     }
@@ -164,10 +174,8 @@ export default function CommunitiesDetailPage() {
     if (!simulationId) return;
     if (!window.confirm(`Delete community "${communityName}"? All its agents will be removed.`)) return;
     try {
-      const result = await apiClient.communities.remove(simulationId, communityId) as { agents_removed: number };
+      const result = await deleteCommunity.mutateAsync(communityId) as { agents_removed: number };
       addToast({ type: "success", message: `Removed "${communityName}" (${result.agents_removed} agents)` });
-      const res = await apiClient.communities.list(simulationId);
-      if (res.communities.length > 0) setCommunities(res.communities.map(apiToLocal));
     } catch (e) {
       addToast({ type: "error", message: `Failed to delete: ${e}` });
     }
@@ -178,30 +186,12 @@ export default function CommunitiesDetailPage() {
     const name = window.prompt("New community name:");
     if (!name?.trim()) return;
     try {
-      await apiClient.communities.update(simulationId, communityId, { name: name.trim() });
+      await updateCommunity.mutateAsync({ communityId, payload: { name: name.trim() } });
       addToast({ type: "success", message: `Community renamed to "${name.trim()}"` });
-      const res = await apiClient.communities.list(simulationId);
-      if (res.communities.length > 0) setCommunities(res.communities.map(apiToLocal));
     } catch (e) {
       addToast({ type: "error", message: `Failed to update: ${e}` });
     }
   };
-
-  useEffect(() => {
-    if (!simulationId) return;
-    let cancelled = false;
-    const fetchCommunities = async () => {
-      try {
-        const res = await apiClient.communities.list(simulationId);
-        if (!cancelled && res.communities.length > 0) {
-          setCommunities(res.communities.map(apiToLocal));
-        }
-      } catch { /* keep mock */ }
-      if (!cancelled) setLoading(false);
-    };
-    fetchCommunities();
-    return () => { cancelled = true; };
-  }, [simulationId, latestStep?.step]);
 
   const totalAgents = communities.reduce((s, c) => s + c.agents, 0);
   const avgSentiment = latestStep?.mean_sentiment ?? 0.72;

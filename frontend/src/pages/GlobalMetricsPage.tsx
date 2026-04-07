@@ -17,6 +17,7 @@ import {
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
 import { apiClient } from "../api/client";
+import { useSimulationSteps } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 import type { CommunityStepMetrics } from "../types/simulation";
 
@@ -38,15 +39,15 @@ export default function GlobalMetricsPage() {
   const latestStep = useSimulationStore((s) => s.latestStep);
   const simId = simulation?.simulation_id ?? null;
 
-  // Fetch steps from API if store is empty but simulation exists
+  // TanStack Query — only enabled when the live store is empty.
+  // Cached across navigations.
+  const stepsQuery = useSimulationSteps(stepsLength === 0 ? simId : null);
+  // Hydrate the store once when fetched data arrives.
   useEffect(() => {
-    if (simId && stepsLength === 0) {
-      apiClient.simulations.getSteps(simId).then((fetched) => {
-        // FE-PERF-H2: bulk update — single store commit instead of N appendStep calls
-        useSimulationStore.getState().setStepsBulk(fetched);
-      }).catch(() => {});
+    if (stepsQuery.data && stepsLength === 0) {
+      useSimulationStore.getState().setStepsBulk(stepsQuery.data);
     }
-  }, [simId, stepsLength]);
+  }, [stepsQuery.data, stepsLength]);
 
   const totalAgents = useMemo(() => {
     if (!latestStep?.community_metrics) return 0;

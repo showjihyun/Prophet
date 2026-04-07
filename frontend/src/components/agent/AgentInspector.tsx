@@ -7,6 +7,7 @@ import { X, User, Cpu, Activity, Brain, Clock } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from "../../api/client";
 import type { AgentDetail } from "../../api/client";
+import { useAgent } from "../../api/queries";
 
 interface AgentInspectorProps {
   agentId: string;
@@ -106,31 +107,33 @@ export default function AgentInspector({
   const latestStep = useSimulationStore((s) => s.latestStep);
   const addToast = useSimulationStore((s) => s.addToast);
 
-  const [fetchState, setFetchState] = useState<FetchState>({ status: "loading" });
   const [editPersonality, setEditPersonality] = useState<Record<string, number>>({});
   const [editEmotion, setEditEmotion] = useState<Record<string, number>>({});
   const [editBelief, setEditBelief] = useState<number>(0);
   const [saving, setSaving] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch agent detail on mount / agentId change
+  // TanStack Query — cached agent detail. Re-opening the same agent
+  // is instant; clicking a different agent uses a fresh query.
+  const agentQuery = useAgent(simulationId, agentId);
+  const agentData = agentQuery.data as AgentDetail | undefined;
+
+  // Sync edit state when query data arrives
   useEffect(() => {
-    setFetchState({ status: "loading" });
-    apiClient.agents
-      .get(simulationId, agentId)
-      .then((data) => {
-        setFetchState({ status: "success", data });
-        setEditPersonality({ ...data.personality });
-        setEditEmotion({ ...data.emotion });
-        setEditBelief(data.belief ?? 0);
-      })
-      .catch((err) =>
-        setFetchState({
-          status: "error",
-          message: err instanceof Error ? err.message : "Failed to load agent",
-        })
-      );
-  }, [simulationId, agentId]);
+    if (agentData) {
+      setEditPersonality({ ...agentData.personality });
+      setEditEmotion({ ...agentData.emotion });
+      setEditBelief(agentData.belief ?? 0);
+    }
+  }, [agentData]);
+
+  const fetchState: FetchState = agentQuery.isLoading
+    ? { status: "loading" }
+    : agentQuery.error
+      ? { status: "error", message: agentQuery.error instanceof Error ? agentQuery.error.message : "Failed to load agent" }
+      : agentData
+        ? { status: "success", data: agentData }
+        : { status: "loading" };
 
   // Close drawer when clicking outside
   useEffect(() => {

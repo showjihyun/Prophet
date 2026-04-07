@@ -2,10 +2,16 @@
  * CommunityManagePage — CRUD interface for community templates.
  * @spec docs/spec/07_FRONTEND_SPEC.md#community-manage-page
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
-import { apiClient, type CommunityTemplate, type CommunityTemplateInput } from "../api/client";
+import { type CommunityTemplate, type CommunityTemplateInput } from "../api/client";
+import {
+  useCommunityTemplates,
+  useCreateCommunityTemplate,
+  useUpdateCommunityTemplate,
+  useDeleteCommunityTemplate,
+} from "../api/queries";
 
 const PERSONALITY_FIELDS = [
   "openness",
@@ -66,29 +72,23 @@ function templateToForm(t: CommunityTemplate): TemplateFormState {
 
 export default function CommunityManagePage() {
   const navigate = useNavigate();
-  const [templates, setTemplates] = useState<CommunityTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState<TemplateFormState>(DEFAULT_FORM);
-  const [saving, setSaving] = useState(false);
 
-  const loadTemplates = () => {
-    setLoading(true);
-    apiClient.communityTemplates
-      .list()
-      .then((res) => {
-        setTemplates(res.templates);
-        setError(null);
-      })
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    loadTemplates();
-  }, []);
+  // TanStack Query — list + 3 mutations with auto-invalidation
+  const templatesQuery = useCommunityTemplates();
+  const templates: CommunityTemplate[] = templatesQuery.data?.templates ?? [];
+  const loading = templatesQuery.isLoading;
+  // Combine query error + mutation errors so all surface in the same banner
+  const queryError = templatesQuery.error ? String(templatesQuery.error) : null;
+  const error = mutationError ?? queryError;
+  const setError = setMutationError;
+  const createTemplate = useCreateCommunityTemplate();
+  const updateTemplate = useUpdateCommunityTemplate();
+  const deleteTemplate = useDeleteCommunityTemplate();
+  const saving = createTemplate.isPending || updateTemplate.isPending;
 
   const startEdit = (t: CommunityTemplate) => {
     setEditingId(t.template_id);
@@ -109,7 +109,6 @@ export default function CommunityManagePage() {
   };
 
   const handleSave = async () => {
-    setSaving(true);
     const payload: CommunityTemplateInput = {
       name: form.name,
       agent_type: form.agent_type,
@@ -119,24 +118,20 @@ export default function CommunityManagePage() {
     };
     try {
       if (editingId) {
-        await apiClient.communityTemplates.update(editingId, payload);
+        await updateTemplate.mutateAsync({ id: editingId, payload });
       } else {
-        await apiClient.communityTemplates.create(payload);
+        await createTemplate.mutateAsync(payload);
       }
       cancelForm();
-      loadTemplates();
     } catch (e) {
       setError(String(e));
-    } finally {
-      setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this template?")) return;
     try {
-      await apiClient.communityTemplates.delete(id);
-      loadTemplates();
+      await deleteTemplate.mutateAsync(id);
     } catch (e) {
       setError(String(e));
     }

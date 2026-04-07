@@ -346,10 +346,14 @@ describe('CommunityManagePage (07_FRONTEND_SPEC)', () => {
       mockList.mockResolvedValue({ templates: MOCK_TEMPLATES });
       vi.spyOn(window, 'confirm').mockReturnValue(true);
       renderPage();
-      await waitFor(() => expect(mockList).toHaveBeenCalledTimes(1));
+      // Wait for the Delete button to actually render (templates resolved
+      // AND React committed the new state).
+      const deleteButtons = await screen.findAllByRole('button', { name: /^Delete$/i });
+      expect(deleteButtons.length).toBeGreaterThan(0);
 
-      fireEvent.click(screen.getAllByRole('button', { name: /^Delete$/i })[0]);
+      fireEvent.click(deleteButtons[0]);
 
+      // After successful delete, the mutation refetches the list.
       await waitFor(() => expect(mockList).toHaveBeenCalledTimes(2));
       vi.restoreAllMocks();
     });
