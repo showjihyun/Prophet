@@ -24,20 +24,24 @@ const MOCK_WAVE_DATA = [
 
 export default function TimelinePanel() {
   const currentStep = useSimulationStore((s) => s.currentStep);
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-01: gate on latestStep + length, read array lazily
+  const latestStep = useSimulationStore((s) => s.latestStep);
+  const stepsLength = useSimulationStore((s) => s.steps.length);
   const simulation = useSimulationStore((s) => s.simulation);
   const speed = useSimulationStore((s) => s.speed);
   const maxSteps = simulation?.max_steps ?? 365;
 
   // Derive wave data from actual steps or use mock (cap at last 100 steps for perf)
   const waveData = useMemo(() => {
+    const steps = useSimulationStore.getState().steps;
     if (steps.length === 0) return MOCK_WAVE_DATA;
     // Use diffusion_rate from each step as bar height (scale to 0-100)
     const recentSteps = steps.slice(-100);
     const rates = recentSteps.map((s) => s.diffusion_rate * 100);
     const maxRate = Math.max(...rates, 1);
     return rates.map((r) => Math.round((r / maxRate) * 90));
-  }, [steps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength]);
 
   return (
     <div
@@ -61,7 +65,7 @@ export default function TimelinePanel() {
           {waveData.map((height, i) => {
             const colorIdx = i % COMMUNITY_COLORS.length;
             const normalizedHeight = (height / 90) * 100;
-            const isCurrentStep = steps.length > 0 && i === steps.length - 1;
+            const isCurrentStep = stepsLength > 0 && i === stepsLength - 1;
             return (
               <div
                 key={i}

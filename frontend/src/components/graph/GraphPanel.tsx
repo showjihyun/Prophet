@@ -368,13 +368,16 @@ export default function GraphPanel() {
   const fpsRafRef = useRef<number | null>(null);
   const lastFpsUpdateRef = useRef(0);
   const lastAdoptCountRef = useRef(-1);
+  // FE-PERF-06: cached sorted node ids by influence score (rebuilt only on node count change)
+  const sortedNodeIdsRef = useRef<string[] | null>(null);
   // Track how many cascade events we've already animated to detect new ones
   const lastCascadeCountRef = useRef(0);
   const cascadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const emergentEvents = useSimulationStore((s) => s.emergentEvents);
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-01: subscribe only to latestStep, not the whole steps array
+  const latestStep = useSimulationStore((s) => s.latestStep);
   const highlightedCommunity = useSimulationStore((s) => s.highlightedCommunity);
   const setHighlightedCommunity = useSimulationStore((s) => s.setHighlightedCommunity);
   const propagationAnimEnabled = useSimulationStore((s) => s.propagationAnimationsEnabled);
@@ -473,6 +476,8 @@ export default function GraphPanel() {
     }
 
     // --- LOD: zoom-dependent label & edge visibility ---
+    // FE-PERF-05: debounce zoom handler so per-node iteration doesn't run on every wheel tick
+    let lodTimeout: ReturnType<typeof setTimeout> | null = null;
     function applyLOD() {
       const z = cy.zoom();
       cy.batch(() => {
@@ -494,7 +499,11 @@ export default function GraphPanel() {
         }
       });
     }
-    cy.on("zoom", applyLOD);
+    function debouncedLOD() {
+      if (lodTimeout !== null) clearTimeout(lodTimeout);
+      lodTimeout = setTimeout(applyLOD, 100);
+    }
+    cy.on("zoom", debouncedLOD);
     // Apply initial LOD state
     applyLOD();
 
@@ -592,25 +601,31 @@ export default function GraphPanel() {
 
   // --- Update node adoption state on each new simulation step ---
   // Uses cy.batch() to coalesce all DOM/style mutations into one repaint (GAP-5)
+  // FE-PERF-06: reuse pre-sorted node id list to avoid O(n log n) sort per step
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy || steps.length === 0) return;
-    const latestStep = steps[steps.length - 1];
+    if (!cy || !latestStep) return;
     const adoptionRate = latestStep.adoption_rate || 0;
 
     const nodes = cy.nodes();
     const total = nodes.length;
     const adoptCount = Math.floor(total * adoptionRate);
 
-    // Skip expensive sort+batch when adoption count has not changed
+    // Skip expensive batch when adoption count has not changed
     if (adoptCount === lastAdoptCountRef.current) return;
     lastAdoptCountRef.current = adoptCount;
 
-    // Pre-sort outside batch to keep batch closure lightweight
-    const sorted = nodes.toArray().sort(
-      (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
-    );
-    const adoptedSet = new Set(sorted.slice(0, adoptCount).map((n) => n.id()));
+    // Pre-sort once and cache the sorted node id list (refresh only if node count changes)
+    if (
+      sortedNodeIdsRef.current === null
+      || sortedNodeIdsRef.current.length !== total
+    ) {
+      const sorted = nodes.toArray().sort(
+        (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
+      );
+      sortedNodeIdsRef.current = sorted.map((n) => n.id());
+    }
+    const adoptedSet = new Set(sortedNodeIdsRef.current.slice(0, adoptCount));
 
     // Single batched mutation — one repaint instead of N individual updates
     cy.batch(() => {
@@ -622,7 +637,7 @@ export default function GraphPanel() {
         }
       });
     });
-  }, [steps]);
+  }, [latestStep]);
 
   // --- Community highlight: dim non-matching nodes when a community is selected ---
   useEffect(() => {
@@ -676,12 +691,21 @@ export default function GraphPanel() {
     const nodes = cy.nodes();
     const originNode = nodes.max((node) => (node.data("influence_score") as number) || 0).ele;
 
-    // Pick cascade participant nodes: top ~15% by influence score
-    const sortedNodes = nodes.toArray().sort(
-      (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
-    );
-    const cascadeCount = Math.max(1, Math.floor(sortedNodes.length * 0.15));
-    const cascadeNodes = sortedNodes.slice(0, cascadeCount);
+    // FE-PERF-29: reuse pre-sorted node ids; rebuild only on node count change
+    if (
+      sortedNodeIdsRef.current === null
+      || sortedNodeIdsRef.current.length !== nodes.length
+    ) {
+      const sorted = nodes.toArray().sort(
+        (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
+      );
+      sortedNodeIdsRef.current = sorted.map((n) => n.id());
+    }
+    const cascadeCount = Math.max(1, Math.floor(sortedNodeIdsRef.current.length * 0.15));
+    const cascadeNodes = sortedNodeIdsRef.current
+      .slice(0, cascadeCount)
+      .map((id) => cy.getElementById(id))
+      .filter((n) => n.nonempty());
 
     // Apply classes (triggers CY_STYLE rules defined above)
     cy.batch(() => {
@@ -766,9 +790,8 @@ export default function GraphPanel() {
   // --- GAP-7: Propagation animations (zoom-based LOD) ---
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy || steps.length === 0 || !propagationAnimEnabled) return;
+    if (!cy || !latestStep || !propagationAnimEnabled) return;
 
-    const latestStep = steps[steps.length - 1];
     // Only animate new steps
     if (latestStep.step <= lastPropStepRef.current) return;
     lastPropStepRef.current = latestStep.step;
@@ -929,8 +952,6 @@ export default function GraphPanel() {
 
           // Floating particle (Close-up, high probability only)
           if (tier === "closeup" && pair.probability > 0.5 && srcNode.nonempty() && tgtNode.nonempty()) {
-            const srcPos = srcNode.renderedPosition();
-            const tgtPos = tgtNode.renderedPosition();
             const particleId = `particle-${latestStep.step}-${pair.source}-${pair.target}`;
 
             try {
@@ -971,7 +992,7 @@ export default function GraphPanel() {
         }
       }
     }
-  }, [steps, propagationAnimEnabled]);
+  }, [latestStep, propagationAnimEnabled]);
 
   // Cleanup propagation timeouts on unmount
   useEffect(() => {

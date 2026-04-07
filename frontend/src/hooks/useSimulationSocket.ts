@@ -21,6 +21,8 @@ export function useSimulationSocket(simulationId: string | null) {
   const [connected, setConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<WSMessage | null>(null);
   const [retryExhausted, setRetryExhausted] = useState(false);
+  // FE-PERF-11: counter increments on manual reconnect to force effect re-run
+  const [reconnectTick, setReconnectTick] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -79,7 +81,7 @@ export function useSimulationSocket(simulationId: string | null) {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [simulationId]);
+  }, [simulationId, reconnectTick]);
 
   const send = useCallback((message: unknown) => {
     wsRef.current?.send(JSON.stringify(message));
@@ -90,8 +92,8 @@ export function useSimulationSocket(simulationId: string | null) {
     setRetryExhausted(false);
     wsRef.current?.close();
     wsRef.current = null;
-    // The useEffect will re-trigger on simulationId change;
-    // for manual reconnect, we force a fresh connection via state reset.
+    // FE-PERF-11: bump tick → useEffect re-runs and opens a fresh socket
+    setReconnectTick((n) => n + 1);
   }, [simulationId]);
 
   return { connected, lastMessage, send, retryExhausted, reconnect };

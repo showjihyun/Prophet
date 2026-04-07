@@ -70,6 +70,7 @@ interface SimulationStore {
   // Actions
   setSimulation: (sim: SimulationRun) => void;
   appendStep: (step: StepResult) => void;
+  setStepsBulk: (steps: StepResult[]) => void;
   appendEmergentEvent: (event: EmergentEvent) => void;
   setStatus: (status: SimulationStatus) => void;
   selectAgent: (agentId: string | null) => void;
@@ -141,16 +142,43 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
     set({ simulation: sim, status: sim.status });
   },
   appendStep: (step) =>
-    set((state) => ({
-      steps: [...state.steps, step],
-      latestStep: step,
-      currentStep: step.step,
-      lastStepReceived: step.step,
-    })),
+    set((state) => {
+      // FE-PERF-02: sliding window — cap at MAX_STEPS_IN_MEMORY
+      const MAX_STEPS_IN_MEMORY = 100;
+      const nextSteps = state.steps.length >= MAX_STEPS_IN_MEMORY
+        ? [...state.steps.slice(-(MAX_STEPS_IN_MEMORY - 1)), step]
+        : [...state.steps, step];
+      return {
+        steps: nextSteps,
+        latestStep: step,
+        currentStep: step.step,
+        lastStepReceived: step.step,
+      };
+    }),
+  // FE-PERF-03: bulk set — single store update for loading history
+  setStepsBulk: (steps) =>
+    set(() => {
+      const MAX_STEPS_IN_MEMORY = 100;
+      const trimmed = steps.length > MAX_STEPS_IN_MEMORY
+        ? steps.slice(-MAX_STEPS_IN_MEMORY)
+        : steps;
+      const last = trimmed[trimmed.length - 1] ?? null;
+      return {
+        steps: trimmed,
+        latestStep: last,
+        currentStep: last?.step ?? 0,
+        lastStepReceived: last?.step ?? 0,
+      };
+    }),
   appendEmergentEvent: (event) =>
-    set((state) => ({
-      emergentEvents: [...state.emergentEvents, event],
-    })),
+    set((state) => {
+      // FE-PERF-17: cap emergentEvents at 50 most recent
+      const MAX_EMERGENT_EVENTS = 50;
+      const nextEvents = state.emergentEvents.length >= MAX_EMERGENT_EVENTS
+        ? [...state.emergentEvents.slice(-(MAX_EMERGENT_EVENTS - 1)), event]
+        : [...state.emergentEvents, event];
+      return { emergentEvents: nextEvents };
+    }),
   setStatus: (status) => set({ status }),
   selectAgent: (agentId) =>
     set({ selectedAgentId: agentId, isAgentInspectorOpen: agentId !== null }),

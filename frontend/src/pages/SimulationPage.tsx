@@ -36,7 +36,8 @@ export default function SimulationPage() {
   const setStatus = useSimulationStore((s) => s.setStatus);
   const isLLMDashboardOpen = useSimulationStore((s) => s.isLLMDashboardOpen);
   const status = useSimulationStore((s) => s.status);
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-01: subscribe to length only, not the full array
+  const stepsLength = useSimulationStore((s) => s.steps.length);
   const addToast = useSimulationStore((s) => s.addToast);
   const selectedAgentId = useSimulationStore((s) => s.selectedAgentId);
   const isAgentInspectorOpen = useSimulationStore((s) => s.isAgentInspectorOpen);
@@ -93,10 +94,10 @@ export default function SimulationPage() {
   // setState is deferred via queueMicrotask to avoid calling it synchronously
   // inside the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (status === 'completed' && steps.length > 0) {
+    if (status === 'completed' && stepsLength > 0) {
       queueMicrotask(() => setReportOpen(true));
     }
-  }, [status, steps.length]);
+  }, [status, stepsLength]);
 
   if (!simulation) {
     return (

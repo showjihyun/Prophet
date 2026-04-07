@@ -74,11 +74,14 @@ function severityToSentiment(severity: number): "Positive" | "Neutral" | "Negati
 
 export default function ConversationPanel() {
   const emergentEvents = useSimulationStore((s) => s.emergentEvents);
-  const steps = useSimulationStore((s) => s.steps);
-  const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
+  // FE-PERF-01+21: gate re-render on latestStep, read recent steps lazily
+  const latestStep = useSimulationStore((s) => s.latestStep);
+  const stepsLength = useSimulationStore((s) => s.steps.length);
 
   // Build step-derived insight messages, or fall back to emergent events, or mock data
   const conversations = useMemo<ConversationItem[]>(() => {
+    // Read steps lazily — the latestStep dep covers re-render trigger
+    const steps = useSimulationStore.getState().steps;
     // If steps exist, generate insight messages from step data (most recent first)
     if (steps.length > 0) {
       const insightItems: ConversationItem[] = [];
@@ -164,7 +167,9 @@ export default function ConversationPanel() {
     }
 
     return MOCK_CONVERSATIONS;
-  }, [steps, emergentEvents]);
+    // FE-PERF-01: latestStep+stepsLength are intentional re-render gates for the lazy steps read
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength, emergentEvents]);
 
   // Build expert analysis from latest step data or use mock text
   const expertAnalysis = useMemo(() => {

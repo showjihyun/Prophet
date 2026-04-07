@@ -81,10 +81,9 @@ export default function ControlPanel() {
     return prevSimulations.filter((s) => s.name.toLowerCase().includes(q) || s.simulation_id.includes(q)).slice(0, 20);
   }, [prevSimulations, prevSimSearch]);
   const [prevSimOpen, setPrevSimOpen] = useState(false);
-  // appendStep aliased for "load previous" handler readability
-  const setSteps = appendStep;
-
   const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // FE-PERF-10: prevent request pileup at high speeds (in-flight guard)
+  const stepInFlightRef = useRef(false);
 
   // Stable refs for simulation ID and max_steps — updated on every render so the
   // interval callback always sees current values without being a dependency itself.
@@ -111,6 +110,9 @@ export default function ControlPanel() {
     const runStep = async () => {
       const simId = simIdRef.current;
       if (!simId) return;
+      // FE-PERF-10: skip tick if previous step request is still pending
+      if (stepInFlightRef.current) return;
+      stepInFlightRef.current = true;
       try {
         const result = await apiClient.simulations.step(simId);
         appendStep(result);
@@ -121,6 +123,8 @@ export default function ControlPanel() {
       } catch {
         // Step failed — pause
         setStatus("paused");
+      } finally {
+        stepInFlightRef.current = false;
       }
     };
 
@@ -243,9 +247,8 @@ export default function ControlPanel() {
       const sim = await apiClient.simulations.get(simId);
       setSimulation(sim);
       const stepsData = await apiClient.simulations.getSteps(simId);
-      for (const step of stepsData) {
-        setSteps(step);
-      }
+      // FE-PERF-03: single bulk update instead of O(n^2) per-step loop
+      useSimulationStore.getState().setStepsBulk(stepsData);
     } catch { /* ignore */ }
   };
 

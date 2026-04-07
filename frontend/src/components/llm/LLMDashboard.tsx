@@ -71,7 +71,9 @@ function StatTile({
 
 export default function LLMDashboard() {
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-01: subscribe only to derived primitives
+  const stepsLength = useSimulationStore((s) => s.steps.length);
+  const lastLLMCalls = useSimulationStore((s) => s.latestStep?.llm_calls_this_step ?? 0);
 
   const [stats, setStats] = useState<LLMStats>(EMPTY_STATS);
   const [impact, setImpact] = useState<LLMImpact | null>(null);
@@ -99,7 +101,7 @@ export default function LLMDashboard() {
   // Refetch whenever a new step arrives
   useEffect(() => {
     if (simulationId) fetchData();
-  }, [simulationId, steps.length, fetchData]);
+  }, [simulationId, stepsLength, fetchData]);
 
   if (!simulationId) {
     return (
@@ -172,7 +174,7 @@ export default function LLMDashboard() {
         <StatTile
           label="Total Calls"
           value={stats.total_calls.toLocaleString()}
-          sub={`+${steps.length > 0 ? steps[steps.length - 1]?.llm_calls_this_step ?? 0 : 0} last step`}
+          sub={`+${lastLLMCalls} last step`}
         />
         <StatTile
           label="Cache Hit Rate"

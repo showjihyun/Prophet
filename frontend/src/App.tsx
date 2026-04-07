@@ -9,12 +9,13 @@ import AppSidebar from "./components/shared/AppSidebar";
 import { LoadingSpinner } from "./components/shared/LoadingSpinner";
 
 // Eager: most-used entry points loaded immediately
-import SimulationPage from "./pages/SimulationPage";
 import LoginPage from "./pages/LoginPage";
 import ProjectsListPage from "./pages/ProjectsListPage";
 import ProjectScenariosPage from "./pages/ProjectScenariosPage";
 
 // Lazy: all other pages code-split into separate chunks
+// FE-PERF-08: SimulationPage lazy-loaded to keep Cytoscape (~400KB) out of initial bundle
+const SimulationPage = lazy(() => import("./pages/SimulationPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const ComparisonPage = lazy(() => import("./pages/ComparisonPage"));
 const GlobalMetricsPage = lazy(() => import("./pages/GlobalMetricsPage"));

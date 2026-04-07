@@ -2,7 +2,7 @@
  * AgentInspector — Right drawer showing agent details when a node is clicked.
  * @spec docs/spec/07_FRONTEND_SPEC.md#agentinspector-right-drawer
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, User, Cpu, Activity, Brain, Clock } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from "../../api/client";
@@ -102,7 +102,8 @@ export default function AgentInspector({
   isPaused,
 }: AgentInspectorProps) {
   const selectAgent = useSimulationStore((s) => s.selectAgent);
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-01: gate on latestStep, read recent steps lazily
+  const latestStep = useSimulationStore((s) => s.latestStep);
   const addToast = useSimulationStore((s) => s.addToast);
 
   const [fetchState, setFetchState] = useState<FetchState>({ status: "loading" });
@@ -142,11 +143,15 @@ export default function AgentInspector({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [selectAgent]);
 
-  // Build last-5 action history from steps
-  const actionHistory = steps
-    .slice(-5)
-    .reverse()
-    .map((s) => ({ step: s.step, action: s.action_distribution }));
+  // Build last-5 action history from steps (FE-PERF-01: memoized, gated on latestStep)
+  const actionHistory = useMemo(() => {
+    const steps = useSimulationStore.getState().steps;
+    return steps
+      .slice(-5)
+      .reverse()
+      .map((s) => ({ step: s.step, action: s.action_distribution }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep]);
 
   async function handleSave() {
     if (!isPaused) return;
