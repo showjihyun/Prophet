@@ -144,13 +144,13 @@ and go straight to a PR.
 
 ### 2. Sync your fork with upstream
 
-Always start from the latest `master`:
+Always start from the latest `main`:
 
 ```bash
 git fetch upstream
-git checkout master
-git merge upstream/master         # or: git rebase upstream/master
-git push origin master            # keep your fork in sync too
+git checkout main
+git merge upstream/main         # or: git rebase upstream/main
+git push origin main            # keep your fork in sync too
 ```
 
 ### 3. Create a branch
@@ -194,7 +194,7 @@ git push -u origin feat/my-thing
 ### 8. Open the PR
 
 ```bash
-gh pr create --repo showjihyun/Prophet --base master \
+gh pr create --repo showjihyun/Prophet --base main \
   --title "feat: my thing" \
   --body "Closes #123. ..."
 ```
@@ -207,7 +207,7 @@ early feedback before finishing" — they tell reviewers "don't merge yet, but
 look at the approach":
 
 ```bash
-gh pr create --draft --base master --title "feat: my thing (WIP)" --body "..."
+gh pr create --draft --base main --title "feat: my thing (WIP)" --body "..."
 ```
 
 When ready for real review, click **"Ready for review"** in the PR UI.
@@ -250,16 +250,16 @@ If you can't figure it out:
 
 ---
 
-## What if `master` moves while my PR is open?
+## What if `main` moves while my PR is open?
 
 Pull the latest upstream into your branch:
 
 ```bash
 git fetch upstream
 git checkout feat/my-thing
-git merge upstream/master         # safer for newcomers
+git merge upstream/main         # safer for newcomers
 # OR
-git rebase upstream/master        # cleaner history (advanced)
+git rebase upstream/main        # cleaner history (advanced)
 git push                          # if you rebased: --force-with-lease
 ```
 

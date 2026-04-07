@@ -3,7 +3,7 @@
 Version: 1.1 | Date: 2026-04-07 | Status: ACTIVE
 
 This document defines the branching, PR, and merge workflow for Prophet.
-The goal is a **linear, readable master history** with clear feature
+The goal is a **linear, readable main history** with clear feature
 boundaries and minimal merge friction.
 
 ## Audience
@@ -17,14 +17,14 @@ boundaries and minimal merge friction.
 > The conventions below (branch naming, stacked PRs, `--force-with-lease`)
 > are enforced for **maintainer branches inside the upstream repo only**.
 > Contributor PRs from forks can use any branch name they want — we squash-merge,
-> so the branch name never reaches `master` history anyway.
+> so the branch name never reaches `main` history anyway.
 
 ---
 
 ## TL;DR
 
 ```
-master (protected, always deployable)
+main (protected, always deployable)
   │
   ├── feat/<topic>     ← short-lived feature branches
   ├── fix/<topic>      ← short-lived bug fix branches
@@ -35,11 +35,11 @@ master (protected, always deployable)
 ```
 
 **Rules:**
-1. `master` only changes via squash-merged PR
-2. All work happens on short-lived branches off latest `master`
+1. `main` only changes via squash-merged PR
+2. All work happens on short-lived branches off latest `main`
 3. Branch lives for one feature, deleted after merge
 4. Tests + lint + typecheck must pass before merge
-5. Squash merge keeps `master` history linear (one commit per PR)
+5. Squash merge keeps `main` history linear (one commit per PR)
 
 ---
 
@@ -50,8 +50,8 @@ master (protected, always deployable)
 | **Maintainers / core team** with push access | Direct branch in upstream repo | This document |
 | **External contributors** without push access | Fork → branch in fork → PR back to upstream | [`CONTRIBUTING.md`](../CONTRIBUTING.md#pull-request-workflow) |
 
-The two workflows produce identical PRs from `master`'s point of view —
-both end in a squash merge of one PR onto `master`. The difference is just
+The two workflows produce identical PRs from `main`'s point of view —
+both end in a squash merge of one PR onto `main`. The difference is just
 *where* the working branch lives (upstream repo vs. a fork).
 
 If you're a maintainer reviewing a fork PR, the standard `gh pr checkout
@@ -64,9 +64,9 @@ If you're a maintainer reviewing a fork PR, the standard `gh pr checkout
 ### 1. Start a new piece of work
 
 ```bash
-# Always start from latest master
-git checkout master
-git pull origin master
+# Always start from latest main
+git checkout main
+git pull origin main
 git checkout -b feat/my-topic
 ```
 
@@ -84,7 +84,7 @@ git commit -m "test: cover edge case"
 
 ```bash
 git push -u origin feat/my-topic
-gh pr create --base master --title "feat: my topic" --body "..."
+gh pr create --base main --title "feat: my topic" --body "..."
 ```
 
 ### 4. Merge (squash)
@@ -93,14 +93,14 @@ gh pr create --base master --title "feat: my topic" --body "..."
 gh pr merge <number> --squash --delete-branch
 ```
 
-The squash combines all WIP commits into a single commit on `master` with
-the PR title as the message. This gives `master` a clean, scannable history.
+The squash combines all WIP commits into a single commit on `main` with
+the PR title as the message. This gives `main` a clean, scannable history.
 
 ### 5. Sync local
 
 ```bash
-git checkout master
-git pull origin master
+git checkout main
+git pull origin main
 git branch -d feat/my-topic   # local cleanup
 ```
 
@@ -186,27 +186,27 @@ We use **squash merge** for every PR. Reasons:
 
 | Reason | Why it matters |
 |--------|---------------|
-| Linear history on master | `git log master` reads like a changelog |
+| Linear history on main | `git log main` reads like a changelog |
 | One commit = one feature | Easy to revert, bisect, cherry-pick |
-| WIP messages don't pollute master | Local commits stay readable for reviewers but merge cleanly |
-| No merge commits | No "Merge branch 'master' into feat/x" noise |
+| WIP messages don't pollute main | Local commits stay readable for reviewers but merge cleanly |
+| No merge commits | No "Merge branch 'main' into feat/x" noise |
 
 **Never** use:
-- `git merge feat/x master --no-ff` (creates merge commits)
-- `git rebase master && git push --force` on a shared branch (rewrites history others may have pulled)
+- `git merge feat/x main --no-ff` (creates merge commits)
+- `git rebase main && git push --force` on a shared branch (rewrites history others may have pulled)
 
-The only acceptable way master changes is `gh pr merge --squash`.
+The only acceptable way main changes is `gh pr merge --squash`.
 
 ---
 
 ## Conflict Resolution
 
-### Scenario A — Master moves while your PR is open
+### Scenario A — `main` moves while your PR is open
 
 ```bash
 git checkout feat/my-topic
 git fetch origin
-git rebase origin/master      # rebase your branch on top of new master
+git rebase origin/main      # rebase your branch on top of new main
 # resolve conflicts, then:
 git rebase --continue
 git push --force-with-lease   # safe force push (refuses if remote moved)
@@ -217,9 +217,9 @@ git push --force-with-lease   # safe force push (refuses if remote moved)
 ### Scenario B — Your branch was off the wrong base
 
 ```bash
-# Branched off feat/parent instead of master, but parent already merged
+# Branched off feat/parent instead of main, but parent already merged
 git checkout feat/my-topic
-git rebase --onto master feat/parent feat/my-topic
+git rebase --onto main feat/parent feat/my-topic
 git push --force-with-lease
 ```
 
@@ -230,10 +230,10 @@ If a rebase has conflicts on every commit because the parent was squash-merged:
 ```bash
 git rebase --abort
 
-# Recreate the branch from clean master
-git checkout master
+# Recreate the branch from clean main
+git checkout main
 git pull
-git checkout -B feat/my-topic master
+git checkout -B feat/my-topic main
 
 # Cherry-pick only your unique commits
 git cherry-pick <sha1> <sha2> ...
@@ -247,14 +247,14 @@ was squash-merged.
 
 ## Protected Branches
 
-`master` should be protected on GitHub with these rules:
+`main` should be protected on GitHub with these rules:
 
 - ✅ Require PR before merging
 - ✅ Require status checks (tests, typecheck, lint) to pass
 - ✅ Require branches to be up to date before merging
 - ✅ Require linear history (squash merge only)
 - ❌ Allow force pushes — never
-- ❌ Allow direct commits to master — never
+- ❌ Allow direct commits to main — never
 - ✅ Auto-delete head branches after merge
 
 ---
@@ -264,14 +264,14 @@ was squash-merged.
 ### Example 1 — Solo feature
 
 ```bash
-git checkout master && git pull
+git checkout main && git pull
 git checkout -b feat/agent-tooltips
 # work, commit often
 git push -u origin feat/agent-tooltips
-gh pr create --base master --title "feat: agent tooltips on graph hover"
+gh pr create --base main --title "feat: agent tooltips on graph hover"
 # review, get green CI
 gh pr merge --squash --delete-branch
-git checkout master && git pull
+git checkout main && git pull
 git branch -d feat/agent-tooltips
 ```
 
@@ -279,22 +279,22 @@ git branch -d feat/agent-tooltips
 
 ```bash
 # PR 1: data layer
-git checkout master && git pull
+git checkout main && git pull
 git checkout -b feat/graph-3d-1-data
 # work, push, open PR
-gh pr create --base master --title "feat(graph-3d): data layer"
+gh pr create --base main --title "feat(graph-3d): data layer"
 
 # PR 2: builds on PR 1
 git checkout -b feat/graph-3d-2-renderer feat/graph-3d-1-data
 # work, push, open PR with base = feat/graph-3d-1-data
 gh pr create --base feat/graph-3d-1-data --title "feat(graph-3d): renderer"
 
-# When PR 1 merges to master, rebase PR 2 onto master
+# When PR 1 merges to main, rebase PR 2 onto main
 git checkout feat/graph-3d-2-renderer
 git fetch origin
-git rebase --onto master feat/graph-3d-1-data
+git rebase --onto main feat/graph-3d-1-data
 git push --force-with-lease
-gh pr edit --base master
+gh pr edit --base main
 ```
 
 ### Example 3 — Hotfix during active feature work
@@ -302,12 +302,12 @@ gh pr edit --base master
 ```bash
 # Currently on feat/big-thing — hotfix needed
 git stash
-git checkout master && git pull
+git checkout main && git pull
 git checkout -b fix/critical-bug
 # fix, commit, PR, merge fast
-git checkout master && git pull
+git checkout main && git pull
 git checkout feat/big-thing
-git rebase master      # bring hotfix into your feature branch
+git rebase main      # bring hotfix into your feature branch
 git stash pop
 ```
 
@@ -317,12 +317,12 @@ git stash pop
 
 | ❌ Don't | ✅ Do instead |
 |---------|-------------|
-| Commit directly to master | Open a PR, even for one-line fixes |
+| Commit directly to main | Open a PR, even for one-line fixes |
 | Long-lived `develop` branch | Trunk-based with short feature branches |
-| Merge commits on master | Squash merge only |
+| Merge commits on main | Squash merge only |
 | Force-push shared branches without warning | `--force-with-lease` only, communicate first |
 | Mix unrelated changes in one PR | One topic per PR |
-| Branch off another feature branch unnecessarily | Branch off master; use stacked PRs only when there's a real dependency |
+| Branch off another feature branch unnecessarily | Branch off main; use stacked PRs only when there's a real dependency |
 | Rebase a PR after review started | Add commits on top; squash will clean it up at merge |
 | Delete branch before PR merges | Wait for `--delete-branch` flag on the merge command |
 
@@ -331,13 +331,13 @@ git stash pop
 ## Current Branch State (snapshot 2026-04-07)
 
 ```
-master                  ← e0f45f9 (PR #1 squash merge: core fixes)
-└── feat/graph-3d       ← 0e7ba32 (1 WIP commit on top of master)
+main                  ← e0f45f9 (PR #1 squash merge: core fixes)
+└── feat/graph-3d       ← 0e7ba32 (1 WIP commit on top of main)
 ```
 
-PR #1 (`feat/core-fixes`) was squash-merged to master and the branch was
+PR #1 (`feat/core-fixes`) was squash-merged to main and the branch was
 deleted from origin and local. `feat/graph-3d` was rebased to start from
-the new master with only its unique WIP commit, then pushed.
+the new main with only its unique WIP commit, then pushed.
 
 ---
 
@@ -345,7 +345,7 @@ the new master with only its unique WIP commit, then pushed.
 
 ```bash
 # Start new work
-git checkout master && git pull
+git checkout main && git pull
 git checkout -b feat/<topic>
 
 # During work
@@ -353,17 +353,17 @@ git add -p && git commit -m "wip: ..."
 
 # Open PR
 git push -u origin feat/<topic>
-gh pr create --base master --title "feat: ..." --body "..."
+gh pr create --base main --title "feat: ..." --body "..."
 
-# Sync with master mid-PR
+# Sync with main mid-PR
 git fetch origin
-git rebase origin/master
+git rebase origin/main
 git push --force-with-lease
 
 # Merge
 gh pr merge <num> --squash --delete-branch
 
 # After merge
-git checkout master && git pull
+git checkout main && git pull
 git branch -d feat/<topic>
 ```
