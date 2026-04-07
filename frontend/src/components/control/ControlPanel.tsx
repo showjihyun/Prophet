@@ -271,15 +271,19 @@ export default function ControlPanel() {
   const isRunning = status === "running";
 
   const handlePlay = async () => {
+    if (!simulation?.simulation_id) return;
     try {
-      if (simulation?.simulation_id) {
-        if (status === 'configured' || status === 'created') {
-          await apiClient.simulations.start(simulation.simulation_id);
-        } else {
-          await apiClient.simulations.resume(simulation.simulation_id);
-        }
-        setStatus('running');
+      const simId = simulation.simulation_id;
+      if (status === 'configured' || status === 'created') {
+        await apiClient.simulations.start(simId);
+      } else if (status === 'failed' || status === 'completed') {
+        // Recover from terminal state: reset → start
+        await apiClient.simulations.stop(simId);
+        await apiClient.simulations.start(simId);
+      } else {
+        await apiClient.simulations.resume(simId);
       }
+      setStatus('running');
     } catch { /* status unchanged on failure */ }
   };
 
