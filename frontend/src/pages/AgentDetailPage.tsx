@@ -2,9 +2,10 @@
  * AgentDetailPage — Agent profile, personality, activity chart, and interactions.
  * @spec docs/spec/ui/UI_04_AGENT_DETAIL.md
  */
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { apiClient, type AgentDetail, type MemoryRecord } from "../api/client";
+import { type AgentDetail, type MemoryRecord } from "../api/client";
+import { useAgent, useAgentMemory, useNetwork } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 import { SIM_STATUS } from "@/config/constants";
 
@@ -181,111 +182,82 @@ export default function AgentDetailPage() {
   // Agent state is nullable — we render a loading state until the real
   // record arrives from the API. (We used to seed with mock data on first
   // paint, which leaked fake info into the UI before the real record loaded.)
-  const [agent, setAgent] = useState<AgentView | null>(null);
-  const [agentLoading, setAgentLoading] = useState<boolean>(true);
-  const [agentNotFound, setAgentNotFound] = useState<boolean>(false);
-  // Connections start empty; populated when network data loads (no mock fallback).
-  const [connections, setConnections] = useState<ConnectionItem[]>([]);
+  // TanStack Query — agent + network + memory in parallel, all cached.
+  // Navigating to another page and back returns instantly without refetch
+  // (network and agent are heavy reads). React Query also dedupes if
+  // multiple components ask for the same data simultaneously.
+  const agentQuery = useAgent(simulationId, agentId ?? null);
+  const networkQuery = useNetwork(simulationId);
+  const memoryQuery = useAgentMemory(simulationId, agentId ?? null);
 
-  // Fetch real agent data + the network graph in parallel. The network
-  // payload carries `community_name` which is friendlier than the raw
-  // community_id UUID returned by the agent endpoint. We fall back to
-  // the agent endpoint alone if network is unavailable.
-  useEffect(() => {
-    if (!simulationId || !agentId) {
-      setAgentLoading(false);
-      return;
+  const agentLoading = agentQuery.isLoading;
+  const agentNotFound = agentQuery.isError;
+
+  // Derive view-model from query data. useMemo because apiToAgent walks
+  // network nodes to find the friendly community_name.
+  const agent = useMemo<AgentView | null>(() => {
+    if (!agentQuery.data) return null;
+    let communityName: string | undefined;
+    if (networkQuery.data) {
+      const node = networkQuery.data.nodes.find(
+        (n) => String(n.data.agent_id) === agentId,
+      );
+      const name = node?.data.community_name;
+      if (typeof name === "string" && name.length > 0) {
+        communityName = name;
+      }
     }
-    let cancelled = false;
-    setAgentLoading(true);
-    setAgentNotFound(false);
+    return apiToAgent(agentQuery.data as AgentDetail, communityName);
+  }, [agentQuery.data, networkQuery.data, agentId]);
 
-    Promise.all([
-      apiClient.agents.get(simulationId, agentId),
-      apiClient.network.get(simulationId).catch(() => null),
-    ])
-      .then(([detail, network]) => {
-        if (cancelled) return;
-        let communityName: string | undefined;
-        if (network) {
-          const node = network.nodes.find(
-            (n) => String(n.data.agent_id) === agentId,
-          );
-          const name = node?.data.community_name;
-          if (typeof name === "string" && name.length > 0) {
-            communityName = name;
-          }
-        }
-        setAgent(apiToAgent(detail, communityName));
-        setAgentNotFound(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setAgent(null);
-        setAgentNotFound(true);
-      })
-      .finally(() => {
-        if (!cancelled) setAgentLoading(false);
-      });
+  // Derive connections from the cached network graph
+  const connections = useMemo<ConnectionItem[]>(() => {
+    const graph = networkQuery.data;
+    if (!graph || !agentId) return [];
+    const connected = graph.edges
+      .filter((e) => String(e.data.source) === agentId || String(e.data.target) === agentId)
+      .slice(0, 20);
+    return connected.map((e, i) => {
+      const peerId =
+        String(e.data.source) === agentId
+          ? String(e.data.target)
+          : String(e.data.source);
+      const peerNode = graph.nodes.find((n) => String(n.data.id) === peerId);
+      const community = (peerNode?.data.community as string) ?? "Unknown";
+      return {
+        id: `c${i}`,
+        name: `Agent ${peerId}`,
+        community,
+        color: COMMUNITY_COLORS[community] ?? "#888",
+        trust: (e.data.weight as number) ?? 0.5,
+        influence: (peerNode?.data.influence_score as number) ?? 0.5,
+      };
+    });
+  }, [networkQuery.data, agentId]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [simulationId, agentId]);
-
-  // Fetch real connections from network graph
-  useEffect(() => {
-    if (!simulationId || !agentId) return;
-    apiClient.network.get(simulationId).then((graph) => {
-      const connected = graph.edges
-        .filter((e) => String(e.data.source) === agentId || String(e.data.target) === agentId)
-        .slice(0, 20);
-      const conns: ConnectionItem[] = connected.map((e, i) => {
-        const peerId =
-          String(e.data.source) === agentId
-            ? String(e.data.target)
-            : String(e.data.source);
-        const peerNode = graph.nodes.find((n) => String(n.data.id) === peerId);
-        const community = (peerNode?.data.community as string) ?? "Unknown";
-        return {
-          id: `c${i}`,
-          name: `Agent ${peerId}`,
-          community,
-          color: COMMUNITY_COLORS[community] ?? "#888",
-          trust: (e.data.weight as number) ?? 0.5,
-          influence: (peerNode?.data.influence_score as number) ?? 0.5,
-        };
-      });
-      if (conns.length > 0) setConnections(conns);
-    }).catch(() => {});
-  }, [simulationId, agentId]);
-
-  // Fetch real agent messages (memory records) from API
-  const [apiMessages, setApiMessages] = useState<MessageItem[]>([]);
-  useEffect(() => {
-    if (!simulationId || !agentId) return;
-    apiClient.agents.getMemory(simulationId, agentId).then((res) => {
-      const msgs: MessageItem[] = (res.memories ?? []).map((m: MemoryRecord, i: number) => {
-        const type: MessageItem["type"] =
-          m.memory_type === "episodic" ? "share" :
-          m.memory_type === "semantic" ? "comment" : "share";
-        const sentiment: MessageItem["sentiment"] =
-          m.importance > 0.6 ? "positive" :
-          m.importance < 0.3 ? "negative" : "neutral";
-        return {
-          id: `mem-${i}`,
-          type,
-          content: m.content,
-          timestamp: m.timestamp != null ? `Step ${m.timestamp}` : "—",
-          sentiment,
-          reach: Math.round(m.importance * 100),
-          reactions: { like: 0, comment: 0, repost: 0 },
-          replyTo: m.source_agent_id ? `Agent ${m.source_agent_id}` : undefined,
-        };
-      });
-      if (msgs.length > 0) setApiMessages(msgs);
-    }).catch(() => {});
-  }, [simulationId, agentId]);
+  // Derive messages from the cached memory query
+  const apiMessages = useMemo<MessageItem[]>(() => {
+    const res = memoryQuery.data;
+    if (!res) return [];
+    return (res.memories ?? []).map((m: MemoryRecord, i: number) => {
+      const type: MessageItem["type"] =
+        m.memory_type === "episodic" ? "share" :
+        m.memory_type === "semantic" ? "comment" : "share";
+      const sentiment: MessageItem["sentiment"] =
+        m.importance > 0.6 ? "positive" :
+        m.importance < 0.3 ? "negative" : "neutral";
+      return {
+        id: `mem-${i}`,
+        type,
+        content: m.content,
+        timestamp: m.timestamp != null ? `Step ${m.timestamp}` : "—",
+        sentiment,
+        reach: Math.round(m.importance * 100),
+        reactions: { like: 0, comment: 0, repost: 0 },
+        replyTo: m.source_agent_id ? `Agent ${m.source_agent_id}` : undefined,
+      };
+    });
+  }, [memoryQuery.data]);
 
   // Derive sentiment chart data from store steps (last 7), fallback to SENTIMENT_DATA
   const sentimentData = useMemo(() => {

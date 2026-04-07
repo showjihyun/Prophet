@@ -5,10 +5,9 @@
  * Real-time metrics: Active Agents, Sentiment Distribution,
  * Polarization Index, Cascade Stats, Top Influencers.
  */
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSimulationStore } from "../../store/simulationStore";
-import { apiClient } from "../../api/client";
+import { useAgents } from "../../api/queries";
 import HelpTooltip from "../shared/HelpTooltip";
 
 const COMMUNITY_COLORS: Record<string, string> = {
@@ -46,24 +45,22 @@ export default function MetricsPanel() {
   const navigate = useNavigate();
   const latestStep = useSimulationStore((s) => s.latestStep);
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
-  const stepNum = latestStep?.step ?? 0;
-  const [topInfluencers, setTopInfluencers] = useState(MOCK_TOP_INFLUENCERS);
 
-  // Fetch top influencers from API — throttled to every 10 steps
-  useEffect(() => {
-    if (!simulationId) return;
-    if (stepNum > 0 && stepNum % 10 !== 0) return; // throttle: skip non-multiples of 10
-    apiClient.agents.list(simulationId, { limit: 4 }).then((res) => {
-      const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score).slice(0, 4);
-      setTopInfluencers(
-        sorted.map((a) => ({
+  // TanStack Query — fetched once per simulation, deduplicated across
+  // any other consumer asking for the same `agents` list. Throttling-by-10
+  // is no longer necessary because the cache already prevents duplicate
+  // fetches; if a fresh value is needed, the query is refetched lazily.
+  const agentsQuery = useAgents(simulationId, { limit: 4 });
+  const topInfluencers = agentsQuery.data
+    ? [...agentsQuery.data.items]
+        .sort((a, b) => b.influence_score - a.influence_score)
+        .slice(0, 4)
+        .map((a) => ({
           id: a.agent_id,
           community: COMMUNITY_ID_TO_NAME[a.community_id] ?? a.community_id,
           score: Math.round(a.influence_score * 100 * 10) / 10,
-        })),
-      );
-    }).catch(() => { /* keep mock */ });
-  }, [simulationId, Math.floor(stepNum / 10)]); // eslint-disable-line react-hooks/exhaustive-deps
+        }))
+    : MOCK_TOP_INFLUENCERS;
 
   // Derive metrics from latest step or fall back to mock
   const activeAgents = latestStep?.total_adoption ?? MOCK_METRICS.activeAgents;
