@@ -673,7 +673,19 @@ async def stop_simulation(
     """Stop and mark as completed.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstop
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+
+    # Historical sims (DB-only after restart): no in-memory state to stop.
+    # Update DB status directly so the frontend recovery flow (stop → start)
+    # does not break with a 404.
+    try:
+        state = _get_state_or_404(orchestrator, simulation_id)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        await persist.persist_status(session, sim_uuid, "completed")
+        return StatusResponse(status=SimulationStatus.COMPLETED)
+
     _require_status(
         state,
         SimulationStatus.RUNNING,
@@ -682,7 +694,6 @@ async def stop_simulation(
         SimulationStatus.FAILED,
         SimulationStatus.COMPLETED,
     )
-    sim_uuid = _sim_id_to_uuid(simulation_id)
 
     # If stopping from failed/completed, reset to created for restart
     if state.status in ("failed", "completed"):
@@ -822,16 +833,30 @@ async def replay_from_step(
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
         result = orchestrator.replay_step(sim_uuid, step)
-        return ReplayResponse(
-            replay_id=result["replay_id"],
-            from_step=result["from_step"],
-        )
     except (ValueError, StepNotFoundError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        # Real failure — surface it as a 500 so the UI can tell the user
+        # the replay did NOT happen. Previously this returned a fake
+        # replay_id + the requested step, making the frontend believe the
+        # branch succeeded when nothing had been created.
         import logging
-        logging.getLogger(__name__).warning(f"replay_step error: {e}")
-        return ReplayResponse(replay_id=str(uuid.uuid4()), from_step=step)
+        logging.getLogger(__name__).exception("replay_step failed for %s", simulation_id)
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/replay-failed",
+                title="Replay Failed",
+                status=500,
+                detail=f"Simulation replay from step {step} failed: {e}",
+                instance=f"/api/v1/simulations/{simulation_id}/replay/{step}",
+            ).model_dump(),
+        ) from e
+
+    return ReplayResponse(
+        replay_id=result["replay_id"],
+        from_step=result["from_step"],
+    )
 
 
 @router.get(
@@ -846,8 +871,22 @@ async def compare_simulations(
     """Compare two simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idcompareother_simulation_id
     """
-    state_a = _get_state_or_404(orchestrator, simulation_id)
-    state_b = _get_state_or_404(orchestrator, other_id)
+    # Validate UUIDs first — invalid IDs should always 404.
+    _sim_id_to_uuid(simulation_id)
+    _sim_id_to_uuid(other_id)
+    # Historical sims (DB-only after restart) have no in-memory step_history.
+    # Return an empty comparison rather than 404.
+    try:
+        state_a = _get_state_or_404(orchestrator, simulation_id)
+        state_b = _get_state_or_404(orchestrator, other_id)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        return ScenarioComparisonResponse(
+            simulation_a=simulation_id,
+            simulation_b=other_id,
+            comparison={},
+        )
 
     last_a = state_a.step_history[-1] if state_a.step_history else None
     last_b = state_b.step_history[-1] if state_b.step_history else None
@@ -1081,7 +1120,8 @@ async def get_monte_carlo_status(
     """Get Monte Carlo job status and results.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idmonte-carlojob_id
     """
-    _get_state_or_404(orchestrator, simulation_id)
+    # No _get_state_or_404 — the job lookup uses in-memory dict or DB
+    # fallback, neither requires live orchestrator state.
     job = _monte_carlo_jobs.get(job_id)
     if job is not None:
         return MonteCarloStatusResponse(**job)
@@ -1360,11 +1400,57 @@ async def export_simulation(
     simulation_id: str,
     format: str = Query("json", pattern="^(json|csv)$"),
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    persist: SimulationPersistence = Depends(get_persistence),
 ) -> StreamingResponse:
     """Export simulation results as JSON or CSV download.
     SPEC: docs/spec/06_API_SPEC.md#simulation-endpoints
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+
+    # Try in-memory first, fall back to DB for historical sims.
+    step_rows: list[dict[str, Any]] = []
+    sim_name = simulation_id
+    sim_status = "unknown"
+    sim_step = 0
+    sim_max_steps = 0
+    total_agents = 0
+    try:
+        state = orchestrator.get_state(sim_uuid)
+        sim_name = state.config.name
+        sim_status = state.status
+        sim_step = state.current_step
+        sim_max_steps = state.config.max_steps
+        total_agents = len(state.agents)
+        for s in state.step_history:
+            step_rows.append({
+                "step": s.step,
+                "adoption_rate": s.adoption_rate,
+                "mean_sentiment": s.mean_sentiment,
+                "diffusion_rate": s.diffusion_rate,
+                "sentiment_variance": s.sentiment_variance,
+                "total_adoption": s.total_adoption,
+                "llm_calls_this_step": s.llm_calls_this_step,
+            })
+    except (ValueError, KeyError):
+        # Historical sim — load from DB
+        db_sim = await persist.load_simulation(session, sim_uuid)
+        if db_sim:
+            sim_name = db_sim.get("name", simulation_id)
+            sim_status = db_sim.get("status", "completed")
+            sim_step = db_sim.get("current_step", 0)
+            sim_max_steps = db_sim.get("max_steps", 0)
+        db_steps = await persist.load_steps(session, sim_uuid)
+        for sr in db_steps:
+            step_rows.append({
+                "step": sr.get("step", 0),
+                "adoption_rate": sr.get("adoption_rate", 0.0),
+                "mean_sentiment": sr.get("mean_sentiment", 0.0),
+                "diffusion_rate": sr.get("diffusion_rate", 0.0),
+                "sentiment_variance": sr.get("sentiment_variance", 0.0),
+                "total_adoption": sr.get("total_adoption", 0),
+                "llm_calls_this_step": sr.get("llm_calls_this_step", 0),
+            })
 
     if format == "csv":
         output = io.StringIO()
@@ -1373,14 +1459,11 @@ async def export_simulation(
             "step", "adoption_rate", "mean_sentiment", "diffusion_rate",
             "sentiment_variance", "llm_calls",
         ])
-        for step in state.step_history:
+        for row in step_rows:
             writer.writerow([
-                step.step,
-                step.adoption_rate,
-                step.mean_sentiment,
-                step.diffusion_rate,
-                step.sentiment_variance,
-                step.llm_calls_this_step,
+                row["step"], row["adoption_rate"], row["mean_sentiment"],
+                row["diffusion_rate"], row["sentiment_variance"],
+                row["llm_calls_this_step"],
             ])
         output.seek(0)
         return StreamingResponse(
@@ -1392,23 +1475,20 @@ async def export_simulation(
         )
     else:
         data = {
-            "simulation_id": str(state.simulation_id),
-            "config": {
-                "name": state.config.name,
-                "max_steps": state.config.max_steps,
-            },
-            "status": state.status,
-            "current_step": state.current_step,
-            "total_agents": len(state.agents),
+            "simulation_id": simulation_id,
+            "config": {"name": sim_name, "max_steps": sim_max_steps},
+            "status": sim_status,
+            "current_step": sim_step,
+            "total_agents": total_agents,
             "steps": [
                 {
-                    "step": s.step,
-                    "adoption_rate": s.adoption_rate,
-                    "mean_sentiment": s.mean_sentiment,
-                    "diffusion_rate": s.diffusion_rate,
-                    "total_adoption": s.total_adoption,
+                    "step": r["step"],
+                    "adoption_rate": r["adoption_rate"],
+                    "mean_sentiment": r["mean_sentiment"],
+                    "diffusion_rate": r["diffusion_rate"],
+                    "total_adoption": r["total_adoption"],
                 }
-                for s in state.step_history
+                for r in step_rows
             ],
         }
         content = json.dumps(data, indent=2, default=str)

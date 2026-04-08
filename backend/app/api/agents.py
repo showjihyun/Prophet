@@ -17,7 +17,7 @@ from app.api.schemas import (
     PaginatedResponse,
     SimulationStatus,
 )
-from app.api.simulations import _get_state_or_404, _require_status
+from app.api.simulations import _get_state_or_404, _require_status, _sim_id_to_uuid
 
 router = APIRouter(
     prefix="/api/v1/simulations/{simulation_id}/agents",
@@ -38,24 +38,37 @@ async def list_agents(
     """List agents with current state.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagents
     """
-    _get_state_or_404(orchestrator, simulation_id)
-
+    # Validate UUID format first — invalid IDs should always 404.
+    _sim_id_to_uuid(simulation_id)
+    # Historical sims (DB-only, no in-memory state after restart) return an
+    # empty list instead of 404 — the frontend handles empty gracefully.
     try:
-        result = orchestrator.list_agents(
-            simulation_id,
-            community_id=community_id,
-            action=action,
-            adopted=adopted,
-            limit=limit,
-            offset=offset,
-        )
-        if isinstance(result, dict):
-            return PaginatedResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
+        _get_state_or_404(orchestrator, simulation_id)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        return PaginatedResponse(items=[], total=0)
 
-    # Fallback: empty list
-    return PaginatedResponse(items=[], total=0)
+    result = orchestrator.list_agents(
+        simulation_id,
+        community_id=community_id,
+        action=action,
+        adopted=adopted,
+        limit=limit,
+        offset=offset,
+    )
+    if not isinstance(result, dict):
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/orchestrator-contract",
+                title="Orchestrator Contract Violation",
+                status=500,
+                detail="list_agents returned a non-dict payload",
+                instance=f"/api/v1/simulations/{simulation_id}/agents",
+            ).model_dump(),
+        )
+    return PaginatedResponse(**result)
 
 
 @router.get("/{agent_id}", response_model=AgentDetailResponse)
@@ -67,25 +80,42 @@ async def get_agent(
     """Get full agent state at current step.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagentsagent_id
     """
-    _get_state_or_404(orchestrator, simulation_id)
+    _sim_id_to_uuid(simulation_id)
+    # Historical sims (DB-only after restart) have no in-memory agent state.
+    try:
+        _get_state_or_404(orchestrator, simulation_id)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/historical-simulation",
+                title="Agent Data Unavailable",
+                status=404,
+                detail=f"Agent detail unavailable — simulation {simulation_id} is historical (server was restarted). Re-run the simulation to view agent data.",
+                instance=f"/api/v1/simulations/{simulation_id}/agents/{agent_id}",
+            ).model_dump(),
+        )
 
+    # Orchestrator raises ValueError with "not found" text when the agent
+    # doesn't exist. Everything else is a real bug and must surface.
     try:
         result = orchestrator.get_agent(simulation_id, agent_id)
-        if isinstance(result, dict):
-            return AgentDetailResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
-
-    raise HTTPException(
-        status_code=404,
-        detail=ErrorResponse(
-            type="https://prophet.io/errors/not-found",
-            title="Agent Not Found",
-            status=404,
-            detail=f"Agent uuid={agent_id} not found in simulation {simulation_id}",
-            instance=f"/api/v1/simulations/{simulation_id}/agents/{agent_id}",
-        ).model_dump(),
-    )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/not-found",
+                title="Agent Not Found",
+                status=404,
+                detail=str(e),
+                instance=f"/api/v1/simulations/{simulation_id}/agents/{agent_id}",
+            ).model_dump(),
+        ) from e
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=500, detail="get_agent returned non-dict")
+    return AgentDetailResponse(**result)
 
 
 @router.patch("/{agent_id}", response_model=AgentDetailResponse)
@@ -103,21 +133,20 @@ async def patch_agent(
 
     try:
         result = orchestrator.patch_agent(simulation_id, agent_id, body.model_dump(exclude_none=True))
-        if isinstance(result, dict):
-            return AgentDetailResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
-
-    raise HTTPException(
-        status_code=404,
-        detail=ErrorResponse(
-            type="https://prophet.io/errors/not-found",
-            title="Agent Not Found",
-            status=404,
-            detail=f"Agent uuid={agent_id} not found in simulation {simulation_id}",
-            instance=f"/api/v1/simulations/{simulation_id}/agents/{agent_id}",
-        ).model_dump(),
-    )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/not-found",
+                title="Agent Not Found",
+                status=404,
+                detail=str(e),
+                instance=f"/api/v1/simulations/{simulation_id}/agents/{agent_id}",
+            ).model_dump(),
+        ) from e
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=500, detail="patch_agent returned non-dict")
+    return AgentDetailResponse(**result)
 
 
 @router.get("/{agent_id}/memory", response_model=MemoryRecordResponse)
@@ -131,15 +160,29 @@ async def get_agent_memory(
     """Get agent memory records.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idagentsagent_idmemory
     """
-    _get_state_or_404(orchestrator, simulation_id)
+    _sim_id_to_uuid(simulation_id)
+    try:
+        _get_state_or_404(orchestrator, simulation_id)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        return MemoryRecordResponse(memories=[])
 
     try:
         result = orchestrator.get_agent_memory(
             simulation_id, agent_id, memory_type=memory_type, limit=limit
         )
-        if isinstance(result, dict):
-            return MemoryRecordResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
-
-    return MemoryRecordResponse(memories=[])
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/not-found",
+                title="Agent Not Found",
+                status=404,
+                detail=str(e),
+                instance=f"/api/v1/simulations/{simulation_id}/agents/{agent_id}/memory",
+            ).model_dump(),
+        ) from e
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=500, detail="get_agent_memory returned non-dict")
+    return MemoryRecordResponse(**result)

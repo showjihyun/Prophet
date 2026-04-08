@@ -209,14 +209,13 @@ async def list_communities(
     """
     _get_state_or_404(orchestrator, simulation_id)
 
-    try:
-        result = orchestrator.list_communities(simulation_id)
-        if isinstance(result, dict):
-            return CommunitiesListResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
-
-    return CommunitiesListResponse(communities=[])
+    # Real errors (TypeError, AttributeError from orchestrator bugs) MUST
+    # surface as 500. Only ValueError ("sim not found") is a clean path
+    # that returns empty — and _get_state_or_404 already handles that.
+    result = orchestrator.list_communities(simulation_id)
+    if not isinstance(result, dict):
+        return CommunitiesListResponse(communities=[])
+    return CommunitiesListResponse(**result)
 
 
 @router.get("/{community_id}/threads", response_model=ThreadsListResponse)

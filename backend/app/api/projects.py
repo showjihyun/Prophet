@@ -3,9 +3,12 @@ SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
@@ -348,17 +351,28 @@ async def run_scenario(
 
     state = orchestrator.create_simulation(sim_config)
 
-    # Persist simulation to DB
+    # Persist simulation to DB (best-effort; errors are logged + swallowed
+    # inside persist_creation)
     edges = list(state.network.graph.edges(data=True)) if state.network else []
     await persist.persist_creation(session, state.simulation_id, sim_config, state.agents, edges)
 
-    # Start the simulation
-    orchestrator.start(state.simulation_id)
-
-    # Update scenario with simulation_id and running status
-    scenario.simulation_id = state.simulation_id
-    scenario.status = "running"
-    await session.commit()
+    # Only start and link the simulation when the DB row actually exists.
+    # Without this check, a silent `persist_creation` failure would create
+    # a ghost simulation running in memory with no DB backing — steps
+    # complete but are invisible to all DB-backed queries (list/export/compare).
+    if await persist.simulation_row_exists(session, state.simulation_id):
+        orchestrator.start(state.simulation_id)
+        scenario.simulation_id = state.simulation_id
+        scenario.status = "running"
+        await session.commit()
+    else:
+        # Abort: clean up the in-memory state so it doesn't consume resources.
+        orchestrator.delete_simulation(state.simulation_id)
+        logger.warning(
+            "run_scenario: persist_creation failed for %s — aborting simulation "
+            "(no DB row, no FK link). The in-memory state has been cleaned up.",
+            state.simulation_id,
+        )
 
     return {"simulation_id": str(state.simulation_id), "status": "running"}
 
