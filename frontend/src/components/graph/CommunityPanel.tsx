@@ -19,6 +19,8 @@ interface CommunityItem {
   color: string;
   agents: number;
   sentiment: { positive: number; neutral: number; negative: number };
+  /** True when this row is rendered before any real step data has arrived. */
+  isPlaceholder?: boolean;
 }
 
 const COMMUNITY_COLOR_MAP: Record<string, string> = {
@@ -29,41 +31,51 @@ const COMMUNITY_COLOR_MAP: Record<string, string> = {
   bridge: "var(--community-bridge)",
 };
 
-const MOCK_COMMUNITIES: CommunityItem[] = [
+// PLACEHOLDER_COMMUNITIES — shown ONLY when no real community_metrics
+// have arrived yet. Lets the user see the palette + the panel structure
+// before stepping the simulation. As soon as `latestStep.community_metrics`
+// becomes available, real values replace these. Each row carries
+// `isPlaceholder: true` so the UI can dim them.
+const PLACEHOLDER_COMMUNITIES: CommunityItem[] = [
   {
     id: "alpha",
     name: "Alpha",
     color: "var(--community-alpha)",
-    agents: 1500,
-    sentiment: { positive: 62, neutral: 25, negative: 13 },
+    agents: 0,
+    sentiment: { positive: 0, neutral: 0, negative: 0 },
+    isPlaceholder: true,
   },
   {
     id: "beta",
     name: "Beta",
     color: "var(--community-beta)",
-    agents: 1200,
-    sentiment: { positive: 55, neutral: 30, negative: 15 },
+    agents: 0,
+    sentiment: { positive: 0, neutral: 0, negative: 0 },
+    isPlaceholder: true,
   },
   {
     id: "gamma",
     name: "Gamma",
     color: "var(--community-gamma)",
-    agents: 1100,
-    sentiment: { positive: 40, neutral: 35, negative: 25 },
+    agents: 0,
+    sentiment: { positive: 0, neutral: 0, negative: 0 },
+    isPlaceholder: true,
   },
   {
     id: "delta",
     name: "Delta",
     color: "var(--community-delta)",
-    agents: 1400,
-    sentiment: { positive: 48, neutral: 32, negative: 20 },
+    agents: 0,
+    sentiment: { positive: 0, neutral: 0, negative: 0 },
+    isPlaceholder: true,
   },
   {
     id: "bridge",
     name: "Bridge",
     color: "var(--community-bridge)",
-    agents: 300,
-    sentiment: { positive: 35, neutral: 40, negative: 25 },
+    agents: 0,
+    sentiment: { positive: 0, neutral: 0, negative: 0 },
+    isPlaceholder: true,
   },
 ];
 
@@ -80,9 +92,12 @@ export default function CommunityPanel() {
   const hasSteps = useSimulationStore((s) => s.steps.length > 0);
   const isLoading = hasSimulation && status === SIM_STATUS.RUNNING && !hasSteps;
 
-  // Build communities from live data or fall back to mock
+  // Build communities from live data, or fall back to PLACEHOLDER_COMMUNITIES
+  // when no step has arrived yet. Placeholders show the palette + structure
+  // so the panel never feels empty; they're visually dimmed and replaced as
+  // soon as real metrics arrive.
   const communities = useMemo<CommunityItem[]>(() => {
-    if (!latestStep?.community_metrics) return MOCK_COMMUNITIES;
+    if (!latestStep?.community_metrics) return PLACEHOLDER_COMMUNITIES;
 
     return Object.entries(latestStep.community_metrics).map(([id, metrics]) => {
       const belief = metrics.mean_belief ?? 0;
@@ -142,6 +157,11 @@ export default function CommunityPanel() {
       {/* Community List */}
       <div className="flex-1 overflow-y-auto">
         {isLoading && <SkeletonList rows={5} />}
+        {!isLoading && filtered.length === 0 && (
+          <div className="px-4 py-6 text-[11px] text-[var(--muted-foreground)] leading-relaxed">
+            No matching communities.
+          </div>
+        )}
         {!isLoading && filtered.map((community) => (
           <CommunityRow
             key={community.id}
@@ -171,12 +191,14 @@ function CommunityRow({
   isHighlighted: boolean;
   onClick: () => void;
 }) {
+  const isPlaceholder = community.isPlaceholder === true;
   return (
     <div
       onClick={onClick}
+      title={isPlaceholder ? "Awaiting first step — values will populate when the simulation runs" : undefined}
       className={`interactive flex items-center gap-3 px-4 cursor-pointer transition-colors hover:bg-[var(--secondary)] ${
         isHighlighted ? "bg-[var(--secondary)]" : ""
-      }`}
+      } ${isPlaceholder ? "opacity-50" : ""}`}
       style={{ height: "var(--community-item-height, 48px)" }}
     >
       {/* Color dot */}
@@ -191,25 +213,31 @@ function CommunityRow({
           {community.name}
         </div>
         <div className="text-[11px] text-[var(--muted-foreground)]">
-          {(community.agents ?? 0).toLocaleString()} agents
+          {isPlaceholder
+            ? "— agents"
+            : `${(community.agents ?? 0).toLocaleString()} agents`}
         </div>
       </div>
 
-      {/* Sentiment bar */}
+      {/* Sentiment bar — neutral grey track when placeholder */}
       <div className="w-16 shrink-0">
-        <div className="flex h-1.5 rounded-full overflow-hidden">
-          <div
-            className="bg-[var(--sentiment-positive)]"
-            style={{ width: `${community.sentiment.positive}%` }}
-          />
-          <div
-            className="bg-[var(--sentiment-neutral)]"
-            style={{ width: `${community.sentiment.neutral}%` }}
-          />
-          <div
-            className="bg-[var(--sentiment-negative)]"
-            style={{ width: `${community.sentiment.negative}%` }}
-          />
+        <div className="flex h-1.5 rounded-full overflow-hidden bg-[var(--secondary)]">
+          {!isPlaceholder && (
+            <>
+              <div
+                className="bg-[var(--sentiment-positive)]"
+                style={{ width: `${community.sentiment.positive}%` }}
+              />
+              <div
+                className="bg-[var(--sentiment-neutral)]"
+                style={{ width: `${community.sentiment.neutral}%` }}
+              />
+              <div
+                className="bg-[var(--sentiment-negative)]"
+                style={{ width: `${community.sentiment.negative}%` }}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>
