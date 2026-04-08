@@ -28,71 +28,18 @@ interface ConversationData {
   relative_time: string;
 }
 
-const COMMUNITY_META: Record<
-  string,
-  { name: string; color: string; agents: number; sentiment: number; conversations: number; positive_pct: number }
-> = {
-  alpha: { name: "Community Alpha", color: "var(--community-alpha)", agents: 2148, sentiment: 0.52, conversations: 312, positive_pct: 67 },
-  beta: { name: "Community Beta", color: "var(--community-beta)", agents: 1808, sentiment: 0.41, conversations: 256, positive_pct: 58 },
-  gamma: { name: "Community Gamma", color: "var(--community-gamma)", agents: 1414, sentiment: -0.16, conversations: 289, positive_pct: 30 },
-  delta: { name: "Community Delta", color: "var(--community-delta)", agents: 998, sentiment: -0.35, conversations: 194, positive_pct: 22 },
-  bridge: { name: "Bridge Agents", color: "var(--community-bridge)", agents: 1308, sentiment: 0.05, conversations: 182, positive_pct: 31 },
+// COMMUNITY_META / MOCK_CLUSTERS / MOCK_CONVERSATIONS removed — all
+// community data is derived from the real simulation store + API now.
+// Colors and display names come from the shared COMMUNITIES config; numeric
+// counts come from `latestStep.community_metrics`. Missing data shows an
+// explicit empty state instead of a hardcoded Election Reform debate.
+const COMMUNITY_COLOR_BY_KEY: Record<string, string> = {
+  alpha: "var(--community-alpha)",
+  beta: "var(--community-beta)",
+  gamma: "var(--community-gamma)",
+  delta: "var(--community-delta)",
+  bridge: "var(--community-bridge)",
 };
-
-const MOCK_CLUSTERS: ClusterData[] = [
-  {
-    cluster_id: "c1",
-    topic_name: "Election Reform Policy",
-    description: "Discussions around progressive electoral reform, proportional representation, and voting system changes.",
-    agent_count: 847,
-    stances: { support: 62, neutral: 24, oppose: 14 },
-  },
-  {
-    cluster_id: "c2",
-    topic_name: "Economic Inequality",
-    description: "Debates about wealth distribution, tax policy, and social safety net programs.",
-    agent_count: 612,
-    stances: { support: 45, neutral: 31, oppose: 24 },
-  },
-  {
-    cluster_id: "c3",
-    topic_name: "Climate & Energy Policy",
-    description: "Conversations on carbon reduction, renewable energy transitions, and environmental regulations.",
-    agent_count: 489,
-    stances: { support: 38, neutral: 35, oppose: 27 },
-  },
-];
-
-const MOCK_CONVERSATIONS: ConversationData[] = [
-  {
-    thread_id: "t1",
-    topic_title: "Debate on progressive taxation reform impact",
-    participant_ids: ["A-0042", "B-0091", "A-0187", "G-0055"],
-    message_count: 12,
-    relative_time: "2h ago",
-  },
-  {
-    thread_id: "t2",
-    topic_title: "Economic policy fairness across income brackets",
-    participant_ids: ["A-0334", "D-0067", "B-0203"],
-    message_count: 8,
-    relative_time: "3h ago",
-  },
-  {
-    thread_id: "t3",
-    topic_title: "Climate energy transition debate",
-    participant_ids: ["G-0178", "A-0042", "B-0091", "D-0145", "G-0055"],
-    message_count: 15,
-    relative_time: "1h ago",
-  },
-  {
-    thread_id: "t4",
-    topic_title: "Electoral transparency and voter access",
-    participant_ids: ["A-0187", "B-0112"],
-    message_count: 6,
-    relative_time: "4h ago",
-  },
-];
 
 /* ------------------------------------------------------------------ */
 /* Stance Bar                                                          */
@@ -188,17 +135,28 @@ export default function CommunityOpinionPage() {
     }));
   }, [steps]);
 
-  const meta = derivedMeta ?? COMMUNITY_META[communityId ?? "alpha"] ?? COMMUNITY_META.alpha;
+  // Real-data-only: derive meta from store, or fall back to a minimal
+  // placeholder keyed on the URL communityId (name + color only, counts = 0).
+  const meta =
+    derivedMeta ?? {
+      name: `Community ${(communityId ?? "").charAt(0).toUpperCase()}${(communityId ?? "").slice(1)}`.trim() || "Community",
+      color: COMMUNITY_COLOR_BY_KEY[(communityId ?? "").toLowerCase()] ?? "var(--muted-foreground)",
+      agents: 0,
+      sentiment: 0,
+      conversations: 0,
+      positive_pct: 0,
+    };
   const sortedClusters = useMemo(() => {
-    const src = derivedClusters.length > 0 ? derivedClusters : MOCK_CLUSTERS;
-    const copy = [...src];
+    const copy = [...derivedClusters];
     if (sortMode === "contested") copy.sort((a, b) => Math.abs(a.stances.support - a.stances.oppose) - Math.abs(b.stances.support - b.stances.oppose));
     else if (sortMode === "newest") copy.reverse();
     else copy.sort((a, b) => b.agent_count - a.agent_count);
     return copy;
   }, [derivedClusters, sortMode]);
   const clusters = sortedClusters;
-  const conversations = derivedConversations.length > 0 ? derivedConversations : MOCK_CONVERSATIONS;
+  const conversations = derivedConversations;
+  // "Demo" no longer means "mock data" — it means "no step data has arrived,
+  // so the opinion page is showing an empty state."
   const isDemo = derivedClusters.length === 0;
 
   const sentColor = meta.sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : meta.sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";

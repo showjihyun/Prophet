@@ -7,6 +7,7 @@
  */
 import { useMemo } from "react";
 import { useSimulationStore } from "../../store/simulationStore";
+import HelpTooltip from "../shared/HelpTooltip";
 
 const COMMUNITY_COLORS = [
   "var(--community-alpha)",
@@ -16,11 +17,8 @@ const COMMUNITY_COLORS = [
   "var(--community-bridge)",
 ];
 
-// Mock diffusion wave data: 24 bars with varying heights
-const MOCK_WAVE_DATA = [
-  12, 18, 25, 35, 42, 55, 48, 62, 70, 65, 78, 85,
-  80, 72, 68, 75, 82, 90, 88, 78, 65, 55, 42, 30,
-];
+// MOCK_WAVE_DATA removed — the wave is purely derived from real
+// `step.diffusion_rate` history. With no steps, the chart area is empty.
 
 export default function TimelinePanel() {
   const currentStep = useSimulationStore((s) => s.currentStep);
@@ -31,11 +29,11 @@ export default function TimelinePanel() {
   const speed = useSimulationStore((s) => s.speed);
   const maxSteps = simulation?.max_steps ?? 365;
 
-  // Derive wave data from actual steps or use mock (cap at last 100 steps for perf)
+  // Real-data-only: derive wave data from actual steps (cap at last 100
+  // steps for perf). Empty array when there are no steps yet.
   const waveData = useMemo(() => {
     const steps = useSimulationStore.getState().steps;
-    if (steps.length === 0) return MOCK_WAVE_DATA;
-    // Use diffusion_rate from each step as bar height (scale to 0-100)
+    if (steps.length === 0) return [];
     const recentSteps = steps.slice(-100);
     const rates = recentSteps.map((s) => s.diffusion_rate * 100);
     const maxRate = Math.max(...rates, 1);
@@ -52,16 +50,22 @@ export default function TimelinePanel() {
       {/* Left: Day counter */}
       <div data-testid="timeline-controls" className="flex items-center gap-2 shrink-0">
         <span className="text-xs font-medium text-[var(--foreground)] whitespace-nowrap">
-          Day {currentStep || 47} of {maxSteps}
+          Day {currentStep} of {maxSteps}
         </span>
       </div>
 
       {/* Center: Diffusion Wave bars */}
       <div data-testid="diffusion-wave-chart" className="flex-1 flex flex-col min-w-0">
-        <div className="text-[10px] text-[var(--muted-foreground)] font-medium mb-1">
+        <div className="text-[10px] text-[var(--muted-foreground)] font-medium mb-1 flex items-center gap-1">
           Diffusion Wave Timeline
+          <HelpTooltip term="diffusionWaveTimeline" />
         </div>
         <div className="flex items-end gap-[3px] h-16">
+          {waveData.length === 0 && (
+            <div className="flex-1 flex items-center text-[10px] text-[var(--muted-foreground)] pl-1">
+              No diffusion data yet — run the simulation to populate the wave.
+            </div>
+          )}
           {waveData.map((height, i) => {
             const colorIdx = i % COMMUNITY_COLORS.length;
             const normalizedHeight = (height / 90) * 100;

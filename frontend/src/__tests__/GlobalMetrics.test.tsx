@@ -39,6 +39,12 @@ vi.mock('@/api/client', () => ({
       getSteps: vi.fn().mockResolvedValue([]),
       export: vi.fn(),
     },
+    llm: {
+      getStats: vi.fn().mockResolvedValue({
+        total_calls: 100,
+        tier_breakdown: { '1': 60, '2': 30, '3': 10 },
+      }),
+    },
   },
 }));
 

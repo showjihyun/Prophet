@@ -56,6 +56,7 @@ describe("GLOSSARY", () => {
       "influenceScore",
       "community",
       "viralCascade",
+      "diffusionWaveTimeline",
     ];
 
     it.each(REQUIRED_TERMS)("'%s' exists in the glossary", (term) => {

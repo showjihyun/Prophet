@@ -142,8 +142,10 @@ function apiToAgent(
 
   return {
     id: a.agent_id,
-    // Show first 4 hex chars of the UUID — stable, never empty.
-    agentNumber: a.agent_id.replace(/-/g, "").slice(0, 4),
+    // Show first 8 hex chars of the UUID (standard short-id convention).
+    // 4 chars was too short and felt "clipped"; 8 gives enough entropy
+    // to be unique across 1k+ agents while staying compact.
+    agentNumber: a.agent_id.replace(/-/g, "").slice(0, 8),
     community,
     communityColor,
     influence: Math.round(a.influence_score * 1000) / 10,
@@ -626,7 +628,7 @@ export default function AgentDetailPage() {
                     "radial-gradient(ellipse at center, #0f172a 0%, #020617 100%)",
                 }}
               >
-                <EgoGraph agentId={String(agent.agentNumber)} />
+                <EgoGraph agentId={agent.id} />
                 <div className="absolute top-3 left-4 z-10 pointer-events-none">
                   <span className="text-white text-sm font-semibold">
                     Ego Network Graph

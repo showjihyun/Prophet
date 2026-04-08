@@ -12,18 +12,8 @@ import { useSimulationStore } from "../store/simulationStore";
 const FactionMapView = lazy(() => import("../components/graph/FactionMapView"));
 
 /* ------------------------------------------------------------------ */
-/* Mock Data                                                           */
+/* Types                                                               */
 /* ------------------------------------------------------------------ */
-
-const MOCK_SUMMARY = {
-  avg_sentiment: +0.34,
-  polarization: 0.72,
-  total_conversations: 1247,
-  active_cascades: 847,
-  day: 47,
-  total_agents: 10000,
-  community_count: 5,
-};
 
 interface CommunityOpinion {
   community_id: string;
@@ -37,63 +27,10 @@ interface CommunityOpinion {
   color: string;
 }
 
-const MOCK_COMMUNITIES: CommunityOpinion[] = [
-  {
-    community_id: "alpha",
-    community_name: "Community Alpha",
-    agent_count: 2148,
-    avg_sentiment: 0.52,
-    conversation_count: 312,
-    dominant_stance: "positive",
-    dominant_pct: 67,
-    sentiment_distribution: { positive: 67, neutral: 21, negative: 12 },
-    color: "var(--community-alpha)",
-  },
-  {
-    community_id: "beta",
-    community_name: "Community Beta",
-    agent_count: 1808,
-    avg_sentiment: 0.41,
-    conversation_count: 256,
-    dominant_stance: "positive",
-    dominant_pct: 58,
-    sentiment_distribution: { positive: 58, neutral: 27, negative: 15 },
-    color: "var(--community-beta)",
-  },
-  {
-    community_id: "gamma",
-    community_name: "Community Gamma",
-    agent_count: 1414,
-    avg_sentiment: -0.16,
-    conversation_count: 289,
-    dominant_stance: "mixed",
-    dominant_pct: 42,
-    sentiment_distribution: { positive: 30, neutral: 42, negative: 28 },
-    color: "var(--community-gamma)",
-  },
-  {
-    community_id: "delta",
-    community_name: "Community Delta",
-    agent_count: 998,
-    avg_sentiment: -0.35,
-    conversation_count: 194,
-    dominant_stance: "negative",
-    dominant_pct: 36,
-    sentiment_distribution: { positive: 22, neutral: 42, negative: 36 },
-    color: "var(--community-delta)",
-  },
-  {
-    community_id: "bridge",
-    community_name: "Bridge Agents",
-    agent_count: 1308,
-    avg_sentiment: 0.05,
-    conversation_count: 182,
-    dominant_stance: "mixed",
-    dominant_pct: 38,
-    sentiment_distribution: { positive: 31, neutral: 38, negative: 31 },
-    color: "var(--community-bridge)",
-  },
-];
+// MOCK_SUMMARY / MOCK_COMMUNITIES removed — the page renders only real
+// data derived from `latestStep` and the simulation store. When no step
+// has arrived, an explicit empty state is shown instead of a fabricated
+// "10,000 agents / day 47 / 1,247 conversations" snapshot.
 
 /* ------------------------------------------------------------------ */
 /* Sentiment Bar                                                       */
@@ -232,7 +169,7 @@ export default function ScenarioOpinionsPage() {
     });
   }, [steps]);
 
-  const communities = derivedCommunities.length > 0 ? derivedCommunities : MOCK_COMMUNITIES;
+  const communities = derivedCommunities;
 
   const derivedSummary = useMemo(() => {
     const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
@@ -254,7 +191,16 @@ export default function ScenarioOpinionsPage() {
     };
   }, [steps, simulation]);
 
-  const s = derivedSummary ?? MOCK_SUMMARY;
+  // Real-data-only: all zeros until a step arrives.
+  const s = derivedSummary ?? {
+    avg_sentiment: 0,
+    polarization: 0,
+    total_conversations: 0,
+    active_cascades: 0,
+    day: 0,
+    total_agents: 0,
+    community_count: 0,
+  };
   const isDemo = derivedCommunities.length === 0;
 
   return (

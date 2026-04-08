@@ -45,6 +45,10 @@ export const GLOSSARY = {
     label: "Diffusion Rate",
     text: "Number of new adoptions per step. A measure of how fast the message is spreading right now. High and rising = viral; flat or falling = stalling.",
   },
+  diffusionWaveTimeline: {
+    label: "Diffusion Wave Timeline",
+    text: "A bar chart showing the diffusion rate of each simulation step over time. Each bar's height represents how many new agents adopted the campaign in that step. Color cycles through community colors. Taller bars mean faster spreading; a declining wave indicates saturation or resistance.",
+  },
   propagation: {
     label: "Propagation",
     text: "When one agent's action (share, comment, adopt) influences a neighbor, a propagation event is recorded. These edges drive how messages flow through the network.",
