@@ -486,7 +486,19 @@ class LLMGateway:
         except Exception as fallback_exc:
             logger.warning("Fallback LLM adapter failed: %s — using rule-engine", fallback_exc)
 
-        # Last resort: rule-engine stub
+        # Last resort: rule-engine stub. This path MUST be tracked so the
+        # operator can see when the 3-tier LLM promise was actually met vs
+        # silently downgraded. The response is flagged with
+        # `is_fallback_stub=True` so downstream code (and the UI) can
+        # distinguish it from a genuine LLM completion.
+        # SPEC: docs/spec/05_LLM_SPEC.md#fallback-transparency
+        self._stats["fallback_stub_count"] = (
+            self._stats.get("fallback_stub_count", 0) + 1
+        )
+        logger.error(
+            "LLM gateway using rule-engine stub for tier %d — all adapters failed",
+            tier,
+        )
         return LLMResponse(
             provider="fallback",
             model="rule-engine",
@@ -495,6 +507,7 @@ class LLMGateway:
             prompt_tokens=0,
             completion_tokens=0,
             latency_ms=0,
+            is_fallback_stub=True,
         )
 
     def _apply_budget_downgrade(

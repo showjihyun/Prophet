@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import replace
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -108,6 +108,49 @@ def _build_environment_events(
             )
         )
     return env_events
+
+
+def _compute_community_link_counts(
+    network: "SocialNetwork",
+) -> tuple[dict[UUID, int], dict[UUID, int]]:
+    """Compute intra-community and cross-community edge counts from the live graph.
+
+    Returns (internal_links, external_links) where each maps community_id to edge count.
+    Used by CascadeDetector for echo chamber detection.
+    SPEC: docs/spec/03_DIFFUSION_SPEC.md#cascadedetector
+    """
+    G = network.graph
+    internal: dict[UUID, int] = {}
+    external: dict[UUID, int] = {}
+
+    # Build node -> community_id lookup (defensive: test fixtures may use
+    # non-UUID community identifiers like short strings)
+    node_community: dict = {}
+    for node, data in G.nodes(data=True):
+        cid_raw = data.get("community_id")
+        if cid_raw is not None:
+            if isinstance(cid_raw, UUID):
+                node_community[node] = cid_raw
+            else:
+                try:
+                    node_community[node] = UUID(str(cid_raw))
+                except (ValueError, AttributeError):
+                    node_community[node] = cid_raw  # keep as-is (str key)
+        else:
+            node_community[node] = None
+
+    for u, v in G.edges():
+        cid_u = node_community.get(u)
+        cid_v = node_community.get(v)
+        if cid_u is None or cid_v is None:
+            continue
+        if cid_u == cid_v:
+            internal[cid_u] = internal.get(cid_u, 0) + 1
+        else:
+            external[cid_u] = external.get(cid_u, 0) + 1
+            external[cid_v] = external.get(cid_v, 0) + 1
+
+    return internal, external
 
 
 def _build_graph_context(
@@ -409,7 +452,11 @@ class StepRunner:
                 )
                 community_sentiments[cid] = cs
 
-        # Cascade detection
+        # Cascade detection — compute real intra/inter-community edge counts.
+        # Offload to thread pool: O(N+E) graph traversal blocks the event loop.
+        internal_link_counts, external_link_counts = await asyncio.get_event_loop().run_in_executor(
+            None, _compute_community_link_counts, state.network,
+        )
         total_agents = len(updated_agents)
         adopted_count = sum(1 for a in updated_agents if a.adopted)
         adoption_rate = adopted_count / total_agents if total_agents > 0 else 0.0
@@ -428,8 +475,8 @@ class StepRunner:
             community_adoption_rates={
                 cid: cs.adoption_rate for cid, cs in community_sentiments.items()
             },
-            internal_links={cid: 10 for cid in community_ids},
-            external_links={cid: 1 for cid in community_ids},
+            internal_links=internal_link_counts,
+            external_links=external_link_counts,
             adopted_agent_ids=[a.agent_id for a in updated_agents if a.adopted],
         )
 
@@ -487,11 +534,15 @@ class StepRunner:
         else:
             diffusion_rate = float(adopted_count)
 
-        # Community metrics
+        # Community metrics — pre-bucket agents by community (O(N) once)
+        _agents_by_community: dict[UUID, list] = defaultdict(list)
+        for _a in updated_agents:
+            _agents_by_community[_a.community_id].append(_a)
+
         community_metrics: dict[str, CommunityStepMetrics] = {}
         for cid in community_ids:
             cs = community_sentiments[cid]
-            comm_agents = [a for a in updated_agents if a.community_id == cid]
+            comm_agents = _agents_by_community[cid]
             comm_adopted = sum(1 for a in comm_agents if a.adopted)
             comm_rate = comm_adopted / len(comm_agents) if comm_agents else 0.0
 

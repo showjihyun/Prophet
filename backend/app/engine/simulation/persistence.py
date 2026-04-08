@@ -49,9 +49,20 @@ class SimulationPersistence:
         agents: list[Any],
         network_edges: list[tuple[Any, Any, dict]],
     ) -> None:
-        """Persist a newly created simulation to DB."""
+        """Persist a newly created simulation to DB.
+
+        IMPORTANT: We mix ORM `session.add` with bulk Core `session.execute(insert)`.
+        The bulk Core path bypasses the ORM unit-of-work and triggers an
+        autoflush of pending ORM objects, but autoflush ordering does NOT
+        always honour FK dependencies — Campaign can flush before Simulation
+        and produce a `campaigns_simulation_id_fkey` violation. To avoid this,
+        we explicitly flush the Simulation row first so its INSERT lands
+        before anything that references it. Failures here re-raise so the
+        caller knows the row is gone (otherwise downstream code happily
+        updates `scenarios.simulation_id` to a non-existent UUID).
+        """
         try:
-            # 1. Simulation row
+            # 1. Simulation row — flush IMMEDIATELY so child FKs resolve.
             sim_row = Simulation(
                 simulation_id=sim_id,
                 name=config.name,
@@ -63,6 +74,7 @@ class SimulationPersistence:
                 random_seed=config.random_seed,
             )
             session.add(sim_row)
+            await session.flush()
 
             # 2. Campaign row
             if config.campaign:
@@ -78,6 +90,7 @@ class SimulationPersistence:
                     utility=config.campaign.utility,
                 )
                 session.add(campaign_row)
+                await session.flush()
 
             # 3. Community rows — single-pass size count (was O(n²))
             community_sizes: dict[str, int] = {}
@@ -155,6 +168,10 @@ class SimulationPersistence:
         except Exception:
             await session.rollback()
             logger.exception("Failed to persist simulation creation %s", sim_id)
+            # Swallow (legacy fire-and-forget): the API layer treats DB
+            # persistence as best-effort. Callers that need the row to exist
+            # for FK references (e.g. run_scenario linking scenario.simulation_id)
+            # MUST verify existence separately via `simulation_row_exists`.
 
     async def persist_status(
         self,
@@ -451,6 +468,27 @@ class SimulationPersistence:
             "max_steps": r.max_steps,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         }
+
+    async def simulation_row_exists(
+        self, session: AsyncSession, sim_id: uuid.UUID
+    ) -> bool:
+        """Return True iff the `simulations` row for `sim_id` is in the DB.
+
+        Used by callers that need to update a foreign key referencing
+        this row (e.g. `run_scenario` linking `scenarios.simulation_id`).
+        A False result means the earlier `persist_creation` call silently
+        failed and no FK update should be attempted.
+        """
+        try:
+            result = await session.execute(
+                select(Simulation.simulation_id).where(
+                    Simulation.simulation_id == sim_id
+                )
+            )
+            return result.scalar_one_or_none() is not None
+        except Exception:
+            logger.exception("Failed to check simulation existence %s", sim_id)
+            return False
 
     async def load_simulation(
         self, session: AsyncSession, sim_id: uuid.UUID

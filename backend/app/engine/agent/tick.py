@@ -16,6 +16,7 @@ from app.engine.agent.decision import DecisionLayer
 from app.engine.agent.influence import (
     InfluenceLayer, MessageStrength, PropagationEvent, build_contextual_packet,
 )
+from app.engine.agent.drift import PersonalityDrift
 
 
 @dataclass
@@ -76,6 +77,7 @@ class AgentTick:
         self._cognition = CognitionLayer(llm_adapter=llm_adapter, gateway=gateway)
         self._decision = DecisionLayer()
         self._influence = InfluenceLayer()
+        self._drift = PersonalityDrift()
         self._llm_adapter = llm_adapter
         self._gateway = gateway
 
@@ -87,6 +89,7 @@ class AgentTick:
         cognition_tier: int = 1,
         seed: int = 0,
         graph_context: GraphContext | None = None,
+        campaign_controversy: float = 0.0,
     ) -> AgentTickResult:
         """Full agent execution for one simulation step.
 
@@ -177,7 +180,7 @@ class AgentTick:
         if action in {AgentAction.COMMENT, AgentAction.SHARE, AgentAction.REPOST, AgentAction.ADOPT}:
             ms = MessageStrength(
                 novelty=min(media_signal, 1.0),
-                controversy=0.0,
+                controversy=campaign_controversy,
                 utility=max(0.0, min(1.0, cognition.evaluation_score / 2.0)),
             )
             neighbor_ids: list[UUID] = []
@@ -212,16 +215,23 @@ class AgentTick:
             emotion_weight=emotion_mean, step=agent.step, embedding=embedding,
         )
 
-        # Step 9: State Update — Belief Update Formula
+        # Step 9: Personality Drift — evolve personality based on action taken
+        new_personality, new_cumulative_drift = self._drift.apply_drift(
+            agent.personality, action, agent.cumulative_drift,
+        )
+
+        # Step 10: State Update — Belief Update Formula
         new_belief = max(-1.0, min(1.0, agent.belief + cognition.evaluation_score * 0.1))
 
         updated_state = replace(
             agent,
+            personality=new_personality,
             emotion=emotion,
             action=action,
             belief=new_belief,
             adopted=agent.adopted or (action == AgentAction.ADOPT),
             llm_tier_used=cognition.tier_used,
+            cumulative_drift=new_cumulative_drift,
         )
 
         return AgentTickResult(
@@ -242,6 +252,7 @@ class AgentTick:
         seed: int = 0,
         graph_context: GraphContext | None = None,
         campaign: object | None = None,
+        campaign_controversy: float = 0.0,
     ) -> AgentTickResult:
         """Async agent execution for Tier 3 agents using embedding-based memory and real LLM.
 
@@ -327,7 +338,7 @@ class AgentTick:
         if action in {AgentAction.COMMENT, AgentAction.SHARE, AgentAction.REPOST, AgentAction.ADOPT}:
             ms = MessageStrength(
                 novelty=min(media_signal, 1.0),
-                controversy=0.0,
+                controversy=campaign_controversy,
                 utility=max(0.0, min(1.0, cognition.evaluation_score / 2.0)),
             )
             neighbor_ids: list[UUID] = []
@@ -354,16 +365,23 @@ class AgentTick:
             embedding=embedding,
         )
 
-        # Step 9: State Update — Belief Update Formula
+        # Step 9: Personality Drift — evolve personality based on action taken
+        new_personality, new_cumulative_drift = self._drift.apply_drift(
+            agent.personality, action, agent.cumulative_drift,
+        )
+
+        # Step 10: State Update — Belief Update Formula
         new_belief = max(-1.0, min(1.0, agent.belief + cognition.evaluation_score * 0.1))
 
         updated_state = replace(
             agent,
+            personality=new_personality,
             emotion=emotion,
             action=action,
             belief=new_belief,
             adopted=agent.adopted or (action == AgentAction.ADOPT),
             llm_tier_used=cognition.tier_used,
+            cumulative_drift=new_cumulative_drift,
         )
 
         return AgentTickResult(

@@ -46,6 +46,11 @@ class LLMResponse:
     completion_tokens: int
     latency_ms: float
     cached: bool = False
+    # True when the gateway returned a rule-engine stub because every
+    # configured LLM adapter failed. Callers + UI layers can read this to
+    # warn the user that the output is NOT from a real LLM.
+    # SPEC: docs/spec/05_LLM_SPEC.md#fallback-transparency
+    is_fallback_stub: bool = False
 
 
 @dataclass

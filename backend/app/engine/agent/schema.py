@@ -139,6 +139,7 @@ class AgentState:
     influence_score: float
     llm_tier_used: int | None
     activity_vector: list[float] = field(default_factory=lambda: [0.5] * 24)
+    cumulative_drift: dict[str, float] = field(default_factory=dict)
 
 
 __all__ = [

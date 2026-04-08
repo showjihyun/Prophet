@@ -25,6 +25,20 @@ async def lifespan(app: FastAPI):
         await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""))
         await conn.run_sync(Base.metadata.create_all)
+
+        # Any simulation whose row says `running` but whose in-memory runtime
+        # state was wiped by this process restart is effectively dead: the
+        # orchestrator only holds the NetworkX graph + per-step runner in RAM,
+        # never on disk. Without that runtime state, POST /step, /stop, /network
+        # all return 404 and the UI is stuck on a "running" sim that can never
+        # be stopped. Flip those rows to `failed` so the frontend shows the
+        # right state and the user can recover.
+        await conn.execute(
+            sqlalchemy.text(
+                "UPDATE simulations SET status = 'failed' "
+                "WHERE status IN ('running', 'paused')"
+            )
+        )
     yield
     await engine.dispose()
 

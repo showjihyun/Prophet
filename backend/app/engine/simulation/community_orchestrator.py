@@ -214,6 +214,7 @@ class CommunityOrchestrator:
         # Tier 3 agents are run via async_tick() which uses embedding-based memory
         # and real LLM cognition (GraphRAG path). Tier 1/2 use the fast sync tick().
         campaign_obj = campaign_events[0] if campaign_events else None
+        campaign_controversy = getattr(campaign_obj, "controversy", 0.0)
 
         async def _run_agent_tick(agent: AgentState, tier: int) -> AgentTickResult:
             """Dispatch to async_tick for Tier 3 (embeddings + LLM) or sync tick for Tier 1/2."""
@@ -227,6 +228,7 @@ class CommunityOrchestrator:
                         seed=seed,
                         graph_context=graph_context,
                         campaign=campaign_obj,
+                        campaign_controversy=campaign_controversy,
                     )
                 except Exception:
                     # Graceful fallback to sync tick on any async failure
@@ -239,6 +241,7 @@ class CommunityOrchestrator:
                 cognition_tier=tier,
                 seed=seed,
                 graph_context=graph_context,
+                campaign_controversy=campaign_controversy,
             )
 
         def _process_result(result: AgentTickResult) -> None:
