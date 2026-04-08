@@ -56,6 +56,13 @@ skills-lock.json
 .kiro/
 .gstack/
 
+# Tool artifacts (gstack reports, Playwright MCP logs, Pencil design files)
+.gstack-reports/
+.playwright-mcp/
+mcasp_pencil
+mcasp_pencil.pen
+*.pen
+
 # Internal documentation — kept local, not pushed to public GitHub
 # (SPEC documents are the project's IP/moat — see CLAUDE.md coding rules)
 docs/spec/
