@@ -263,3 +263,218 @@ export function useDeleteCommunity(simId: string | null) {
     },
   });
 }
+
+// ───────── Community threads (conversations) ─────────
+
+export function useCommunityThreads(simId: string | null, communityId: string | null) {
+  return useQuery({
+    queryKey: ["simulation", simId, "community", communityId, "threads"] as const,
+    queryFn: () => apiClient.communityThreads.list(simId!, communityId!),
+    enabled: !!simId && !!communityId,
+  });
+}
+
+export function useCommunityThread(
+  simId: string | null,
+  communityId: string | null,
+  threadId: string | null,
+) {
+  return useQuery({
+    queryKey: ["simulation", simId, "community", communityId, "thread", threadId] as const,
+    queryFn: () => apiClient.communityThreads.get(simId!, communityId!, threadId!),
+    enabled: !!simId && !!communityId && !!threadId,
+  });
+}
+
+// ───────── Project scenarios ─────────
+
+export function useCreateScenario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, data }: {
+      projectId: string;
+      data: Parameters<typeof apiClient.projects.createScenario>[1];
+    }) => apiClient.projects.createScenario(projectId, data),
+    onSuccess: (_data, { projectId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+    },
+  });
+}
+
+export function useRunScenario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, scenarioId }: { projectId: string; scenarioId: string }) =>
+      apiClient.projects.runScenario(projectId, scenarioId),
+    onSuccess: (_data, { projectId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+    },
+  });
+}
+
+export function useDeleteScenario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, scenarioId }: { projectId: string; scenarioId: string }) =>
+      apiClient.projects.deleteScenario(projectId, scenarioId),
+    onSuccess: (_data, { projectId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+    },
+  });
+}
+
+// ───────── Simulation lifecycle mutations ─────────
+//
+// Imperative dispatches (start/pause/step/stop/runAll). Main benefit of
+// useMutation here is isPending for UI gating + auto invalidation on the
+// simulation key.
+
+export function useCreateSimulation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: Parameters<typeof apiClient.simulations.create>[0]) =>
+      apiClient.simulations.create(config),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.simulations });
+    },
+  });
+}
+
+export function useStartSimulation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (simId: string) => apiClient.simulations.start(simId),
+    onSuccess: (_data, simId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.simulation(simId) });
+    },
+  });
+}
+
+export function usePauseSimulation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (simId: string) => apiClient.simulations.pause(simId),
+    onSuccess: (_data, simId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.simulation(simId) });
+    },
+  });
+}
+
+export function useResumeSimulation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (simId: string) => apiClient.simulations.resume(simId),
+    onSuccess: (_data, simId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.simulation(simId) });
+    },
+  });
+}
+
+export function useStopSimulation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (simId: string) => apiClient.simulations.stop(simId),
+    onSuccess: (_data, simId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.simulation(simId) });
+    },
+  });
+}
+
+export function useStepSimulation() {
+  return useMutation({
+    mutationFn: (simId: string) => apiClient.simulations.step(simId),
+  });
+}
+
+export function useRunAllSimulation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (simId: string) => apiClient.simulations.runAll(simId),
+    onSuccess: (_data, simId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.simulation(simId) });
+    },
+  });
+}
+
+// ───────── Campaign / intervention dispatches ─────────
+
+export function useInjectEvent() {
+  return useMutation({
+    mutationFn: ({ simId, event }: {
+      simId: string;
+      event: Parameters<typeof apiClient.simulations.injectEvent>[1];
+    }) => apiClient.simulations.injectEvent(simId, event),
+  });
+}
+
+export function useReplay() {
+  return useMutation({
+    mutationFn: ({ simId, step }: { simId: string; step: number }) =>
+      apiClient.simulations.replay(simId, step),
+  });
+}
+
+export function useMonteCarlo() {
+  return useMutation({
+    mutationFn: ({ simId, opts }: {
+      simId: string;
+      opts: Parameters<typeof apiClient.simulations.monteCarlo>[1];
+    }) => apiClient.simulations.monteCarlo(simId, opts),
+  });
+}
+
+export function useMonteCarloJob(
+  simId: string | null,
+  jobId: string | null,
+  pollMs: number | false = false,
+) {
+  return useQuery({
+    queryKey: ["simulation", simId, "monteCarlo", jobId] as const,
+    queryFn: () => apiClient.simulations.getMonteCarloJob(simId!, jobId!),
+    enabled: !!simId && !!jobId,
+    refetchInterval: pollMs,
+  });
+}
+
+export function useEngineControl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ simId, body }: {
+      simId: string;
+      body: Parameters<typeof apiClient.simulations.engineControl>[1];
+    }) => apiClient.simulations.engineControl(simId, body),
+    onSuccess: (_data, { simId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.simulation(simId) });
+    },
+  });
+}
+
+export function useModifyAgent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ simId, agentId, body }: {
+      simId: string;
+      agentId: string;
+      body: Parameters<typeof apiClient.agents.modify>[2];
+    }) => apiClient.agents.modify(simId, agentId, body),
+    onSuccess: (_data, { simId, agentId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.agent(simId, agentId) });
+    },
+  });
+}
+
+// ───────── Auth ─────────
+
+export function useLogin() {
+  return useMutation({
+    mutationFn: ({ username, password }: { username: string; password: string }) =>
+      apiClient.auth.login(username, password),
+  });
+}
+
+export function useRegister() {
+  return useMutation({
+    mutationFn: ({ username, password }: { username: string; password: string }) =>
+      apiClient.auth.register(username, password),
+  });
+}

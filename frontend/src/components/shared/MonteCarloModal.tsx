@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, BarChart3, Loader2 } from "lucide-react";
 import { apiClient } from "../../api/client";
+import { useMonteCarlo } from "../../api/queries";
 import { useSimulationStore } from "../../store/simulationStore";
 import { LS_KEY_MC_PREFIX, DEFAULT_MONTE_CARLO_RUNS, MONTE_CARLO_MIN_RUNS, MONTE_CARLO_MAX_RUNS, MONTE_CARLO_STEP } from "@/config/constants";
 
@@ -97,14 +98,15 @@ export default function MonteCarloModal({ isOpen, onClose }: MonteCarloModalProp
     [simulation],
   );
 
+  const monteCarlo = useMonteCarlo();
   const handleStart = useCallback(async () => {
     if (!simulation?.simulation_id) return;
     setPhase("running");
     setError(null);
     try {
-      const res = await apiClient.simulations.monteCarlo(simulation.simulation_id, {
-        n_runs: nRuns,
-        llm_enabled: llmEnabled,
+      const res = await monteCarlo.mutateAsync({
+        simId: simulation.simulation_id,
+        opts: { n_runs: nRuns, llm_enabled: llmEnabled },
       });
       if (cancelledRef.current) return;
       setResult({ job_id: res.job_id, status: "queued", n_runs: nRuns });
@@ -113,7 +115,7 @@ export default function MonteCarloModal({ isOpen, onClose }: MonteCarloModalProp
       setPhase("failed");
       setError(err instanceof Error ? err.message : "Failed to start Monte Carlo");
     }
-  }, [simulation, nRuns, llmEnabled, pollJob]);
+  }, [simulation, nRuns, llmEnabled, pollJob, monteCarlo]);
 
   if (!isOpen) return null;
 

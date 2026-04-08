@@ -5,8 +5,8 @@
  */
 import { useState, useCallback } from "react";
 import { Cpu, DollarSign, Gauge, Brain, Zap } from "lucide-react";
-import { apiClient } from "../../api/client";
 import { useSimulationStore } from "../../store/simulationStore";
+import { useEngineControl } from "../../api/queries";
 import type { TierDistribution, EngineImpactReport } from "../../types/simulation";
 import { SIM_STATUS } from "@/config/constants";
 
@@ -21,7 +21,8 @@ export default function EngineControlPanel() {
   const slmLlmRatio = useSimulationStore((s) => s.slmLlmRatio);
   const setSlmLlmRatio = useSimulationStore((s) => s.setSlmLlmRatio);
   const [budgetUsd, setBudgetUsd] = useState(50);
-  const [applying, setApplying] = useState(false);
+  const engineControl = useEngineControl();
+  const applying = engineControl.isPending;
   const [error, setError] = useState<string | null>(null);
   const [impact, setImpact] = useState<EngineImpactReport | null>(null);
   const [tierDist, setTierDist] = useState<TierDistribution | null>(null);
@@ -30,21 +31,18 @@ export default function EngineControlPanel() {
 
   const handleApply = useCallback(async () => {
     if (!simulation?.simulation_id || !isPaused) return;
-    setApplying(true);
     setError(null);
     try {
-      const res = (await apiClient.simulations.engineControl(simulation.simulation_id, {
-        slm_llm_ratio: slmLlmRatio,
-        budget_usd: budgetUsd,
+      const res = (await engineControl.mutateAsync({
+        simId: simulation.simulation_id,
+        body: { slm_llm_ratio: slmLlmRatio, budget_usd: budgetUsd },
       })) as EngineControlResponse;
       setImpact(res.impact_assessment);
       setTierDist(res.tier_distribution);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to apply");
-    } finally {
-      setApplying(false);
     }
-  }, [simulation, slmLlmRatio, budgetUsd, isPaused]);
+  }, [simulation, slmLlmRatio, budgetUsd, isPaused, engineControl]);
 
   // Derive labels from ratio
   const slmPct = Math.round(slmLlmRatio * 100);

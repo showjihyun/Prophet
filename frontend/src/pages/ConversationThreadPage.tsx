@@ -2,11 +2,12 @@
  * ConversationThreadPage — Agent conversation thread with reactions (UI-15).
  * @spec docs/spec/ui/UI_15_CONVERSATION_THREAD.md
  */
-import { useMemo, useEffect, useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import { useSimulationStore } from "../store/simulationStore";
-import { apiClient, type ThreadDetail } from "../api/client";
+import { type ThreadDetail } from "../api/client";
+import { useCommunityThread } from "../api/queries";
 
 function useReactions() {
   const [reacted, setReacted] = useState<Record<string, string>>({});
@@ -154,23 +155,14 @@ export default function ConversationThreadPage() {
   const emergentEvents = useSimulationStore((st) => st.emergentEvents);
   const { reacted, toggle: toggleReaction } = useReactions();
 
-  // API-fetched thread detail
-  const [apiThread, setApiThread] = useState<ThreadDetail | null>(null);
-  const [apiLoading, setApiLoading] = useState(false);
-
-  useEffect(() => {
-    if (!simulation?.simulation_id || !communityId || !_threadId) return;
-    const controller = new AbortController();
-    Promise.resolve()
-      .then(() => {
-        setApiLoading(true);
-        return apiClient.communityThreads.get(simulation.simulation_id!, communityId, _threadId);
-      })
-      .then((data) => { if (!controller.signal.aborted) setApiThread(data); })
-      .catch(() => { if (!controller.signal.aborted) setApiThread(null); })
-      .finally(() => { if (!controller.signal.aborted) setApiLoading(false); });
-    return () => controller.abort();
-  }, [simulation?.simulation_id, communityId, _threadId]);
+  // TanStack Query — cached thread detail
+  const threadQuery = useCommunityThread(
+    simulation?.simulation_id ?? null,
+    communityId ?? null,
+    _threadId ?? null,
+  );
+  const apiThread = (threadQuery.data as ThreadDetail | undefined) ?? null;
+  const apiLoading = threadQuery.isLoading;
 
   // Derive thread header from store data (fallback when no API data)
   const derivedThread = useMemo(() => {

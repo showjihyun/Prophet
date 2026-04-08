@@ -4,7 +4,7 @@
  */
 import { useState, useCallback, useEffect } from "react";
 import { X, Zap } from "lucide-react";
-import { apiClient } from "../../api/client";
+import { useModifyAgent } from "../../api/queries";
 import { useSimulationStore } from "../../store/simulationStore";
 
 // ---------------------------------------------------------------------------
@@ -63,6 +63,7 @@ export default function AgentInterveneModal({
   agentLabel,
 }: AgentInterveneModalProps) {
   const addToast = useSimulationStore((s) => s.addToast);
+  const modifyAgent = useModifyAgent();
   const [state, setState] = useState<InterventionState>(INITIAL_STATE);
   const [typeError, setTypeError] = useState("");
   const [strengthError, setStrengthError] = useState("");
@@ -121,10 +122,14 @@ export default function AgentInterveneModal({
     const simulation = useSimulationStore.getState().simulation;
     if (simulation?.simulation_id) {
       try {
-        await apiClient.agents.modify(simulation.simulation_id, agentId, {
-          ...(state.type === "modify_sentiment" && { emotion: { trust: state.strength } }),
-          ...(state.type === "boost_influence" && { personality: { social_influence: state.strength } }),
-          belief: state.strength * 2 - 1, // normalize 0-1 to -1 to 1
+        await modifyAgent.mutateAsync({
+          simId: simulation.simulation_id,
+          agentId,
+          body: {
+            ...(state.type === "modify_sentiment" && { emotion: { trust: state.strength } }),
+            ...(state.type === "boost_influence" && { personality: { social_influence: state.strength } }),
+            belief: state.strength * 2 - 1, // normalize 0-1 to -1 to 1
+          },
         });
       } catch (err) {
         console.warn("Intervention API call failed, applying locally", err);
@@ -133,7 +138,7 @@ export default function AgentInterveneModal({
 
     addToast({ type: "info", message: `Intervention applied to Agent #${agentId}` });
     onClose();
-  }, [state, agentId, onClose, addToast]);
+  }, [state, agentId, onClose, addToast, modifyAgent]);
 
   if (!isOpen) return null;
 

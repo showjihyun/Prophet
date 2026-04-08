@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
-import { apiClient } from "../api/client";
+import { useSimulationSteps } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 
 const FactionMapView = lazy(() => import("../components/graph/FactionMapView"));
@@ -199,15 +199,13 @@ export default function ScenarioOpinionsPage() {
   const simId = simulation?.simulation_id ?? null;
   const [viewMode, setViewMode] = useState<"data" | "faction">("data");
 
-  // Fetch steps from API if store is empty
+  // TanStack Query — bulk hydrate the store once when the live array is empty
+  const stepsQuery = useSimulationSteps(steps.length === 0 ? simId : null);
   useEffect(() => {
-    if (simId && steps.length === 0) {
-      apiClient.simulations.getSteps(simId).then((fetched) => {
-        const { appendStep } = useSimulationStore.getState();
-        for (const s of fetched) appendStep(s);
-      }).catch(() => {});
+    if (stepsQuery.data && steps.length === 0) {
+      useSimulationStore.getState().setStepsBulk(stepsQuery.data);
     }
-  }, [simId, steps.length]);
+  }, [stepsQuery.data, steps.length]);
 
   // Derive community opinions from the latest step's community_metrics
   const derivedCommunities = useMemo<CommunityOpinion[]>(() => {

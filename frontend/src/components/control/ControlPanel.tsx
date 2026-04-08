@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from '../../api/client';
+import { useProjects } from '../../api/queries';
 import type { SimulationRun, SimulationStatus } from '../../types/simulation';
 import type { ScenarioInfo, CreateSimulationConfig } from '../../api/client';
 import {
@@ -143,12 +144,16 @@ export default function ControlPanel() {
     };
   }, [status, speed, appendStep, setStatus, runAllLoading]);
 
-  // Load projects list on mount
+  // TanStack Query — shared cache with ProjectsListPage, so navigating
+  // into the simulation workspace is instant if the user just came from
+  // /projects. Sync the fetched list into the Zustand store so the rest
+  // of ControlPanel's imperative logic can keep reading it from there.
+  const projectsQuery = useProjects();
   useEffect(() => {
-    apiClient.projects.list()
-      .then((res) => useSimulationStore.getState().setProjects(Array.isArray(res) ? res : []))
-      .catch(() => {});
-  }, []);
+    if (Array.isArray(projectsQuery.data)) {
+      useSimulationStore.getState().setProjects(projectsQuery.data);
+    }
+  }, [projectsQuery.data]);
 
   // Auto-restore project from simulation and load scenarios on mount
   useEffect(() => {
@@ -268,6 +273,9 @@ export default function ControlPanel() {
       });
       setSimulation(sim);
       setStatus(SIM_STATUS.CONFIGURED);
+      // Update the URL so a page refresh stays on this new sim instead of
+      // bouncing back to the list.
+      navigate(`/simulation/${sim.simulation_id}`);
     } catch (err) {
       alert(`Failed to create simulation: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
@@ -286,7 +294,7 @@ export default function ControlPanel() {
     }
   };
 
-  // Load a previous simulation into the store
+  // Load a previous simulation into the store + update URL
   const handleLoadPrevSimulation = async (simId: string) => {
     setPrevSimOpen(false);
     try {
@@ -295,6 +303,7 @@ export default function ControlPanel() {
       const stepsData = await apiClient.simulations.getSteps(simId);
       // FE-PERF-03: single bulk update instead of O(n^2) per-step loop
       useSimulationStore.getState().setStepsBulk(stepsData);
+      navigate(`/simulation/${simId}`);
     } catch { /* ignore */ }
   };
 

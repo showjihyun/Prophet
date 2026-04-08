@@ -4,8 +4,13 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { apiClient } from "../api/client";
 import type { CreateSimulationConfig, CommunityConfigInput, CommunityTemplate, ProjectSummary } from "../api/client";
+import {
+  useProjects,
+  useCommunityTemplates,
+  useCreateSimulation,
+  useCreateScenario,
+} from "../api/queries";
 import PageNav from "../components/shared/PageNav";
 import { useSimulationStore } from "../store/simulationStore";
 
@@ -39,12 +44,12 @@ export default function CampaignSetupPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const projectsQuery = useProjects();
+  const projects: ProjectSummary[] = Array.isArray(projectsQuery.data) ? projectsQuery.data : [];
   const [selectedProjectId, setSelectedProjectId] = useState<string>(urlProjectId ?? "");
-
-  useEffect(() => {
-    apiClient.projects.list().then((res) => setProjects(Array.isArray(res) ? res : [])).catch(() => {});
-  }, []);
+  const templatesQuery = useCommunityTemplates();
+  const createSimulation = useCreateSimulation();
+  const createScenario = useCreateScenario();
 
   const cloneConfig = useSimulationStore((s) => s.cloneConfig);
   const setCloneConfig = useSimulationStore((s) => s.setCloneConfig);
@@ -92,9 +97,11 @@ export default function CampaignSetupPage() {
   }, []);
 
   const loadTemplates = useCallback(async () => {
+    // Templates are already being fetched via useCommunityTemplates above.
+    // If the cache has resolved, use it; otherwise refetch.
     try {
-      const res = await apiClient.communityTemplates.list();
-      const templates = res.templates ?? [];
+      const res = templatesQuery.data ?? (await templatesQuery.refetch()).data;
+      const templates = res?.templates ?? [];
       const loaded: CommunityConfigInput[] = templates.map((t: CommunityTemplate) => ({
         id: t.template_id,
         name: t.name,
@@ -110,12 +117,11 @@ export default function CampaignSetupPage() {
       }));
       setCommunities(loaded);
       setCommunityOpen(true);
-      // Sync target communities to loaded IDs
       setTargetCommunities(new Set());
     } catch {
       setError("Failed to load community templates");
     }
-  }, []);
+  }, [templatesQuery]);
 
   function toggleChannel(ch: string) {
     setChannels((prev) => {
@@ -203,7 +209,7 @@ export default function CampaignSetupPage() {
         random_seed: randomSeed,
         slm_llm_ratio: slmLlmRatio / 100,
       };
-      const sim = await apiClient.simulations.create(config);
+      const sim = await createSimulation.mutateAsync(config);
       const { setSimulation, setStatus } = useSimulationStore.getState();
       setSimulation({
         simulation_id: sim.simulation_id,
@@ -214,11 +220,14 @@ export default function CampaignSetupPage() {
         created_at: new Date().toISOString(),
       });
       setStatus(sim.status);
-      await apiClient.projects.createScenario(selectedProjectId, {
-        name: config.name,
-        config: { simulation_id: sim.simulation_id },
+      await createScenario.mutateAsync({
+        projectId: selectedProjectId,
+        data: {
+          name: config.name,
+          config: { simulation_id: sim.simulation_id },
+        },
       }).catch(() => {});
-      navigate("/simulation");
+      navigate(`/simulation/${sim.simulation_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create simulation");
       setSubmitting(false);
