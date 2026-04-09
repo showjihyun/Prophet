@@ -16,7 +16,7 @@ open http://localhost:5173
 
 That's the whole quick start. 5 minutes from clone to your first simulation.
 
-[![Tests](https://img.shields.io/badge/tests-827%2B%20backend%20%7C%20344%2B%20frontend-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-827%2B%20backend%20%7C%20520%2B%20frontend-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 [![Status](https://img.shields.io/badge/status-active-brightgreen)]()
 [![Discussions](https://img.shields.io/badge/discussions-open-blue)]()
@@ -45,15 +45,15 @@ organized into the communities you actually care about. You watch what happens.*
 
 ## Demo
 
-> _[GIF placeholder — 30-second loop showing a simulation: graph spreads, cascade
-> highlights light up communities, sentiment chart updates in real-time. Capture
-> with Loom or QuickTime, drop here.]_
+> _[GIF placeholder — 30-second loop showing a simulation: 3D graph spreads,
+> cascade highlights light up communities, sentiment chart updates in real-time.
+> Capture with Loom or QuickTime, drop here.]_
 
 ---
 
 ## What you can do with it
 
-### 🛍️ Pre-test a product launch
+### Pre-test a product launch
 
 A beverage brand was about to spend $1.2M launching a sustainability-focused
 product. Ran the message through Prophet against 5,000 agents (15% skeptics, 60%
@@ -61,20 +61,20 @@ mainstream, 20% early adopters, 5% influencers). The simulation showed the messa
 **polarized** the skeptical community at step 18 and adoption stalled at 12%.
 They reframed the campaign and hit 31% in the second simulation.
 
-### 🏥 Pre-screen public health messages
+### Pre-screen public health messages
 
 A health agency tested 3 vaccine messages against a 10K-agent virtual population.
 Strategy B caused echo-chamber formation in skeptical communities. Strategy C
 triggered a positive viral cascade through influencer nodes. They picked C and
 projected 3x adoption.
 
-### 🏢 Stress-test internal communications
+### Stress-test internal communications
 
 A Fortune 500 ran their RTO mandate announcement through a synthetic employee
 population. Prophet predicted a 38% sentiment collapse in engineering. They
 restructured the announcement with carve-outs and cut opposition by 60%.
 
-### 🔬 Computational social science research
+### Computational social science research
 
 Open-source. Reproducible. Runs on a laptop. Built-in cascade detection. If you've
 been wanting to do agent-based diffusion research without renting a GPU cluster,
@@ -92,13 +92,13 @@ Prophet is for you.
 2. Inject       → Your campaign / message / policy
 
 3. Simulate     → Each agent perceives, remembers, evaluates, decides, acts
-                  (12 actions: ignore, share, comment, adopt, reject…)
+                  (12 actions: ignore, share, comment, adopt, reject...)
 
 4. Detect       → Auto-detect viral cascades, polarization, echo chambers,
                   collapse, slow adoption
 
-5. Visualize    → Real-time graph with zoom-based animation
-                  (close-up / mid / overview tiers)
+5. Visualize    → 3D WebGL graph with orbit/zoom/pan controls,
+                  community-colored nodes and edges, real-time updates
 
 6. Decide       → Compare scenarios, export results
 ```
@@ -113,14 +113,15 @@ same simulation to **under $5**. You can run hundreds of scenarios for the price
 of one focus group.
 
 **2. The networks are real.** Random graphs don't behave like communities. Prophet
-generates social networks using a hybrid Watts-Strogatz + Barabási-Albert model
+generates social networks using a hybrid Watts-Strogatz + Barabasi-Albert model
 that produces realistic clustering, power-law influencers, and cross-community
 bridges. Your simulation isn't a toy.
 
-**3. You can watch it happen.** Real-time graph visualization at 30+ FPS.
-Messages flash across edges. Cascades light up communities. You see the simulation
-spread, step by step, the same way the real campaign would. Marketing leaders
-who see the demo immediately understand what Prophet does — no slide deck needed.
+**3. You can watch it happen.** 3D WebGL graph visualization powered by three.js.
+Community-colored nodes orbit and cluster in real time. Cascades light up
+communities. You see the simulation spread, step by step, the same way the real
+campaign would. Marketing leaders who see the demo immediately understand what
+Prophet does — no slide deck needed.
 
 ---
 
@@ -145,8 +146,8 @@ docker compose exec ollama ollama pull llama3.1:8b
 | Backend API         | http://localhost:8000        |
 | API Docs (Swagger)  | http://localhost:8000/docs   |
 
-Open `http://localhost:5173`, click **New Simulation**, pick a template, and
-click **Run All**. The graph spreads in real time.
+Open `http://localhost:5173`, go to **Projects**, create a new scenario with a
+campaign message, and click **Run All**. The 3D graph spreads in real time.
 
 ### Local development
 
@@ -178,13 +179,13 @@ Prophet is open-source from top to bottom — no proprietary dependencies anywhe
 
 | Layer          | Stack                                                     |
 |----------------|-----------------------------------------------------------|
-| Frontend       | React 18, TypeScript, Vite, Tailwind, Cytoscape.js, react-force-graph-3d |
+| Frontend       | React 18, TypeScript, Vite, Tailwind, react-force-graph-3d (three.js), Cytoscape.js (EgoGraph) |
 | State          | Zustand, TanStack Query, native WebSocket                 |
 | Backend        | Python 3.12, FastAPI (async), SQLAlchemy 2.0, Pydantic v2 |
 | LLM            | Ollama (local SLM), Claude API, OpenAI API, Gemini API    |
 | Database       | PostgreSQL 16 + pgvector                                  |
 | Cache          | Valkey                                                    |
-| Testing        | pytest, Vitest, Playwright                                |
+| Testing        | pytest (827+), Vitest (520+), Playwright (E2E)            |
 | Package mgmt   | `uv` (Python), `npm` (Node)                               |
 
 ---
@@ -192,34 +193,36 @@ Prophet is open-source from top to bottom — no proprietary dependencies anywhe
 ## Roadmap
 
 **Shipped:**
-- ✅ 6-layer agent engine (perception → memory → emotion → cognition → decision → influence)
-- ✅ Hybrid network generator (WS + BA + bridge edges)
-- ✅ 3-tier LLM inference (Mass SLM / Heuristic / Elite LLM)
-- ✅ Real-time WebSocket visualization
-- ✅ Pause / Resume / Run-All controls
-- ✅ Export to JSON / CSV
-- ✅ Community management (CRUD + reassign)
-- ✅ Real-time propagation animation (zoom-based LOD)
-- ✅ 3D graph visualization (react-force-graph-3d)
-- ✅ Echo chamber detection (real network topology)
-- ✅ PersonalityDrift connected to simulation engine
-- ✅ Controversy parameter wired end-to-end
-- ✅ Monte Carlo parallel execution
-- ✅ Historical simulation graceful degradation (agents/network/stop/compare/export return empty data instead of 404 after restart)
-- ✅ TanStack Query migration (server-state caching across all pages)
-- ✅ ControlPanel refactored (785 → 8 focused files)
-- ✅ Glossary tooltips on key metrics
+- 6-layer agent engine (perception, memory, emotion, cognition, decision, influence)
+- Hybrid network generator (WS + BA + bridge edges)
+- 3-tier LLM inference (Mass SLM / Heuristic / Elite LLM) with real call tracking
+- 3D WebGL graph visualization (react-force-graph-3d / three.js)
+- Real-time WebSocket updates with live step broadcasting
+- Pause / Resume / Step / Run-All controls
+- Echo chamber detection from real network topology
+- Personality drift connected to agent tick pipeline
+- Campaign controversy parameter wired end-to-end
+- Historical simulation graceful degradation (API returns empty data after restart)
+- TanStack Query migration (server-state caching across all pages)
+- Agent connections/subscribers computed from real network degree
+- LLM dashboard with real latency, token, and cache hit tracking
+- Auth with PostgreSQL persistence (survives server restarts)
+- Community management (CRUD + reassign + templates)
+- Project / scenario management with campaign setup wizard
+- Export to JSON / CSV
+- Glossary tooltips on technical metrics
+- 1,347+ automated tests (827 backend + 520 frontend)
 
 **In progress:**
-- 🟡 Hosted Cloud Starter tier
-- 🟡 Scenario template library
-- 🟡 Validation studies vs. real campaigns
+- Hosted Cloud Starter tier
+- Scenario template library
+- Validation studies vs. real campaigns
 
 **Planned:**
-- ⬜ Plugin SDK for custom agent layers
-- ⬜ Integration with Segment / mParticle / HubSpot
-- ⬜ Multi-language LLM agents (cross-cultural simulation)
-- ⬜ Synthetic population marketplace
+- Plugin SDK for custom agent layers
+- Integration with Segment / mParticle / HubSpot
+- Multi-language LLM agents (cross-cultural simulation)
+- Synthetic population marketplace
 
 See [`ROADMAP.md`](ROADMAP.md) for the full picture and how to influence it.
 
@@ -229,11 +232,11 @@ See [`ROADMAP.md`](ROADMAP.md) for the full picture and how to influence it.
 
 **We need help.** Specifically:
 
-- 🐛 **Bug reports** with reproduction steps
-- 📚 **Documentation** improvements (typos, clarity, examples)
-- 🧪 **Test cases** for edge cases you find
-- ✨ **`good first issue`** picks — small, clearly-scoped tasks tagged for newcomers
-- 💡 **Use cases** — tell us what you're trying to simulate; we may already support it
+- **Bug reports** with reproduction steps
+- **Documentation** improvements (typos, clarity, examples)
+- **Test cases** for edge cases you find
+- **`good first issue`** picks — small, clearly-scoped tasks tagged for newcomers
+- **Use cases** — tell us what you're trying to simulate; we may already support it
 
 Start here:
 
@@ -249,20 +252,20 @@ We label every issue, we keep the roadmap public, and we publish what we ship.
 
 ## Documentation
 
-- 📖 **API Docs** — http://localhost:8000/docs (Swagger UI when running)
-- 🤝 **[Contributing Guide](CONTRIBUTING.md)**
-- 📜 **[Code of Conduct](CODE_OF_CONDUCT.md)**
-- 🔒 **[Security Policy](SECURITY.md)**
-- 📅 **[Changelog](CHANGELOG.md)**
-- 🗺️ **[Roadmap](ROADMAP.md)**
+- **API Docs** — http://localhost:8000/docs (Swagger UI when running)
+- **[Contributing Guide](CONTRIBUTING.md)**
+- **[Code of Conduct](CODE_OF_CONDUCT.md)**
+- **[Security Policy](SECURITY.md)**
+- **[Changelog](CHANGELOG.md)**
+- **[Roadmap](ROADMAP.md)**
+- **[Git Branch Strategy](docs/GIT_BRANCH_STRATEGY.md)**
 
 ---
 
 ## Community
 
-- 💬 **GitHub Discussions** — questions, ideas, show-and-tell
-- 🐛 **GitHub Issues** — bugs and feature requests
-- 🐦 **Twitter / X** — [@prophet_sim](https://twitter.com/) _(coming soon)_
+- **GitHub Discussions** — questions, ideas, show-and-tell
+- **GitHub Issues** — bugs and feature requests
 
 If you build something cool with Prophet, we want to see it. Open a Discussion
 and post a screenshot.
@@ -291,11 +294,13 @@ visualization) that MiroFish doesn't focus on.
   network structure draw directly from OASIS's design.
 - **GraphRAG** (Microsoft Research) — the hybrid vector + graph retrieval
   pattern that powers Prophet's per-agent memory layer.
-- **NetworkX** — without it, the hybrid Watts-Strogatz + Barabási-Albert
+- **NetworkX** — without it, the hybrid Watts-Strogatz + Barabasi-Albert
   network generator would have taken months instead of days.
-- **Cytoscape.js** — the rendering engine behind Prophet's 10K-node real-time
-  graph. It's the reason we can show the simulation instead of just describing
-  it.
+- **three.js / react-force-graph-3d** — the 3D rendering engine behind
+  Prophet's real-time graph visualization. Instanced sphere rendering makes
+  1,000-5,000 node graphs run smoothly in WebGL.
+- **Cytoscape.js** — powers the EgoGraph (per-agent neighborhood view) with
+  2D force-directed layout.
 - **Ollama** — local SLM inference is what makes the 3-tier cost model possible.
   Without `llama3.1:8b` on a laptop, every Prophet simulation would still cost
   thousands of dollars.
