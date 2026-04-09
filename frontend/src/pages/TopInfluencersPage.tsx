@@ -7,7 +7,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { type AgentSummary } from "../api/client";
-import { useAgents } from "../api/queries";
+import { useAgents, useNetwork } from "../api/queries";
 import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { useSimulationStore } from "../store/simulationStore";
 import {
@@ -67,7 +67,12 @@ const COMMUNITY_ID_TO_NAME: Record<string, string> = {
   A: "Alpha", B: "Beta", C: "Gamma", D: "Delta", E: "Bridge",
 };
 
-function agentToInfluencer(a: AgentSummary, rank: number): Influencer {
+function agentToInfluencer(
+  a: AgentSummary,
+  rank: number,
+  connections: number,
+  chains: number,
+): Influencer {
   const community = COMMUNITY_ID_TO_NAME[a.community_id] ?? a.community_id;
   return {
     rank,
@@ -76,8 +81,8 @@ function agentToInfluencer(a: AgentSummary, rank: number): Influencer {
     communityColor: COMMUNITY_COLORS[community] ?? "var(--muted-foreground)",
     influenceScore: Math.round(a.influence_score * 1000) / 10,
     sentiment: a.belief > 0.1 ? "Positive" : a.belief < -0.1 ? "Negative" : "Neutral",
-    chains: 0,
-    connections: 0,
+    chains,
+    connections,
     status: a.action !== "idle" ? "Active" : "Idle",
   };
 }
@@ -87,8 +92,9 @@ export default function TopInfluencersPage() {
   const simulation = useSimulationStore((s) => s.simulation);
   const simulationId = simulation?.simulation_id ?? null;
   const [search, setSearch] = useState("");
-  // TanStack Query — cached agents list, instant on revisit
+  // TanStack Query — cached agents list and network graph, instant on revisit
   const agentsQuery = useAgents(simulationId, { limit: 200 });
+  const networkQuery = useNetwork(simulationId);
   const loading = agentsQuery.isLoading;
 
   // Derive influencers + distribution + stats from query data in a single memo
@@ -101,8 +107,30 @@ export default function TopInfluencersPage() {
       };
     }
     const items: AgentSummary[] = agentsQuery.data.items;
+
+    // Build degree map from network graph (total edges per agent)
+    // and incoming-edge map (agents that point TO each agent = chains proxy)
+    const degreeMap = new Map<string, number>();
+    const incomingMap = new Map<string, number>();
+    if (networkQuery.data) {
+      for (const edge of networkQuery.data.edges) {
+        const src = String(edge.data.source);
+        const tgt = String(edge.data.target);
+        degreeMap.set(src, (degreeMap.get(src) ?? 0) + 1);
+        degreeMap.set(tgt, (degreeMap.get(tgt) ?? 0) + 1);
+        incomingMap.set(tgt, (incomingMap.get(tgt) ?? 0) + 1);
+      }
+    }
+
     const sorted = [...items].sort((a, b) => b.influence_score - a.influence_score);
-    const _influencers = sorted.map((a, i) => agentToInfluencer(a, i + 1));
+    const _influencers = sorted.map((a, i) =>
+      agentToInfluencer(
+        a,
+        i + 1,
+        degreeMap.get(a.agent_id) ?? 0,
+        incomingMap.get(a.agent_id) ?? 0,
+      ),
+    );
 
     // Compute distribution
     const commCounts: Record<string, number> = {};
@@ -136,7 +164,7 @@ export default function TopInfluencersPage() {
         bridges: bridgeCount,
       },
     };
-  }, [agentsQuery.data]);
+  }, [agentsQuery.data, networkQuery.data]);
 
   // Sort state (A1)
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'influence_score', direction: 'desc' });

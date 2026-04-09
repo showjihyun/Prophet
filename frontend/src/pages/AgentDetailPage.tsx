@@ -196,20 +196,36 @@ export default function AgentDetailPage() {
   const agentNotFound = agentQuery.isError;
 
   // Derive view-model from query data. useMemo because apiToAgent walks
-  // network nodes to find the friendly community_name.
+  // network nodes to find the friendly community_name and computes degree.
   const agent = useMemo<AgentView | null>(() => {
     if (!agentQuery.data) return null;
     let communityName: string | undefined;
+    let connectionCount = 0;
+    let subscriberCount = 0;
     if (networkQuery.data) {
-      const node = networkQuery.data.nodes.find(
+      const graph = networkQuery.data;
+      const node = graph.nodes.find(
         (n) => String(n.data.agent_id) === agentId,
       );
       const name = node?.data.community_name;
       if (typeof name === "string" && name.length > 0) {
         communityName = name;
       }
+      // degree = all edges touching this agent
+      const nodeId = agentId ?? "";
+      const allEdges = graph.edges.filter(
+        (e) => String(e.data.source) === nodeId || String(e.data.target) === nodeId,
+      );
+      connectionCount = allEdges.length;
+      // subscribers = edges where this agent is the target (incoming)
+      subscriberCount = graph.edges.filter(
+        (e) => String(e.data.target) === nodeId,
+      ).length;
     }
-    return apiToAgent(agentQuery.data as AgentDetail, communityName);
+    const view = apiToAgent(agentQuery.data as AgentDetail, communityName);
+    view.connections = connectionCount;
+    view.subscribers = subscriberCount;
+    return view;
   }, [agentQuery.data, networkQuery.data, agentId]);
 
   // Derive connections from the cached network graph
