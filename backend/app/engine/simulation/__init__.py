@@ -15,7 +15,6 @@ from app.engine.simulation.schema import (
 from app.engine.simulation.orchestrator import SimulationOrchestrator, SimulationState
 from app.engine.simulation.step_runner import StepRunner
 from app.engine.simulation.metric_collector import MetricCollector
-from app.engine.simulation.monte_carlo import MonteCarloRunner
 from app.engine.simulation.event_activation import EventDrivenActivation
 from app.engine.simulation.exceptions import (
     SimulationStepError,
@@ -42,7 +41,6 @@ __all__ = [
     "SimulationState",
     "StepRunner",
     "MetricCollector",
-    "MonteCarloRunner",
     # Exceptions
     "SimulationStepError",
     "SimulationCapacityError",

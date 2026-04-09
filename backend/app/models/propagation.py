@@ -1,4 +1,4 @@
-"""Propagation, Expert, Emergent, MonteCarlo, LLMCall models.
+"""Propagation, Expert, Emergent, LLMCall models.
 SPEC: docs/spec/08_DB_SPEC.md
 """
 import uuid
@@ -66,31 +66,6 @@ class EmergentEvent(Base):
     description: Mapped[str | None] = mapped_column(Text)
     affected_agent_count: Mapped[int | None] = mapped_column(Integer)
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-
-class MonteCarloRun(Base):
-    __tablename__ = "monte_carlo_runs"
-    __table_args__ = (
-        Index("idx_monte_carlo_sim", "simulation_id"),
-    )
-
-    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    simulation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("simulations.simulation_id", ondelete="CASCADE"), nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
-    n_runs: Mapped[int] = mapped_column(Integer, nullable=False)
-    llm_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Results (populated on completion)
-    viral_probability: Mapped[float | None] = mapped_column(Float)
-    expected_reach: Mapped[float | None] = mapped_column(Float)
-    p5_reach: Mapped[float | None] = mapped_column(Float)
-    p50_reach: Mapped[float | None] = mapped_column(Float)
-    p95_reach: Mapped[float | None] = mapped_column(Float)
-    community_adoption: Mapped[dict | None] = mapped_column(JSONB)
-    run_summaries: Mapped[dict | None] = mapped_column(JSONB)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

@@ -92,14 +92,6 @@ class RecommendEngineRequest(BaseModel):
     max_steps: int = Field(ge=1, default=50)
 
 
-class MonteCarloRequest(BaseModel):
-    """Monte Carlo analysis request.
-    SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idmonte-carlo
-    """
-    n_runs: int = Field(ge=1, default=100)
-    llm_enabled: bool = False
-
-
 class AgentPatchRequest(BaseModel):
     """Patch agent state (simulation must be PAUSED).
     SPEC: docs/spec/06_API_SPEC.md#patch-simulationssimulation_idagentsagent_id
@@ -199,27 +191,6 @@ class ScenarioComparisonResponse(BaseModel):
     simulation_a: str
     simulation_b: str
     comparison: dict[str, Any] = Field(default_factory=dict)
-
-
-# --- Monte Carlo ---
-
-class MonteCarloStatusResponse(BaseModel):
-    """Monte Carlo job status/results.
-    SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idmonte-carlojob_id
-    """
-    job_id: str
-    status: str
-    n_runs: int = 0
-    completed_runs: int | None = None
-    viral_probability: float | None = None
-    expected_reach: int | None = None
-    p5_reach: int | None = None
-    p50_reach: int | None = None
-    p95_reach: int | None = None
-    community_adoption: dict[str, float] | None = None
-    error_message: str | None = None
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
 
 
 # --- Engine Control ---

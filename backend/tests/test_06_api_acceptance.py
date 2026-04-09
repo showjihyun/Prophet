@@ -8,16 +8,13 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.api import deps as _deps_mod
-from app.api import simulations as _sim_mod
 
 
 @pytest.fixture(autouse=True)
 def _reset_store():
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
     yield
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
 
 
 def _valid_campaign() -> dict:
@@ -207,37 +204,6 @@ class TestAPI06StatusFilter:
         )
         data = resp.json()
         assert data["total"] == 0
-
-
-# ---- API-07: POST monte-carlo returns 202 immediately ----
-
-
-@pytest.mark.phase6
-@pytest.mark.acceptance
-class TestAPI07MonteCarlo202:
-    """SPEC: 06_API_SPEC.md §9 API-07"""
-
-    async def test_monte_carlo_returns_202(
-        self, client: AsyncClient, created_sim: dict
-    ):
-        sim_id = created_sim["simulation_id"]
-        resp = await client.post(
-            f"/api/v1/simulations/{sim_id}/monte-carlo",
-            json={"n_runs": 10, "llm_enabled": False},
-        )
-        assert resp.status_code == 202
-
-    async def test_monte_carlo_has_job_id(
-        self, client: AsyncClient, created_sim: dict
-    ):
-        sim_id = created_sim["simulation_id"]
-        resp = await client.post(
-            f"/api/v1/simulations/{sim_id}/monte-carlo",
-            json={"n_runs": 10},
-        )
-        data = resp.json()
-        assert "job_id" in data
-        assert data["status"] == "queued"
 
 
 # ---- API-08: Inject event -> reflected (basic injection test) ----

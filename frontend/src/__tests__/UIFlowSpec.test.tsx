@@ -247,20 +247,6 @@ describe('FLOW-15: WebSocket Configuration', () => {
   });
 });
 
-// ── FLOW-20: Monte Carlo Configuration ─────────────────────────────────────
-
-describe('FLOW-20: Monte Carlo Configuration', () => {
-  /** @spec UI_FLOW_SPEC.md#flow-20 */
-
-  it('should have valid run range constants', async () => {
-    const constants = await import('@/config/constants');
-    expect(constants.MONTE_CARLO_MIN_RUNS).toBe(10);
-    expect(constants.MONTE_CARLO_MAX_RUNS).toBe(500);
-    expect(constants.DEFAULT_MONTE_CARLO_RUNS).toBe(100);
-    expect(constants.MONTE_CARLO_POLL_INTERVAL_MS).toBe(2000);
-  });
-});
-
 // ── FLOW-22: Community Palette Consistency ──────────────────────────────────
 
 describe('FLOW-22: Community Palette', () => {

@@ -26,7 +26,6 @@ import {
   Settings,
   User,
   AlertTriangle,
-  BarChart3,
   Cpu,
   Plus,
   Copy,
@@ -37,7 +36,6 @@ import { SIM_STATUS } from "@/config/constants";
 import ThemeToggle from "../shared/ThemeToggle";
 import InjectEventModal from "../shared/InjectEventModal";
 import ReplayModal from "../shared/ReplayModal";
-import MonteCarloModal from "../shared/MonteCarloModal";
 import EngineControlPanel from "./EngineControlPanel";
 import ControlButton from "./ControlButton";
 import LoadPrevDropdown from "./LoadPrevDropdown";
@@ -103,7 +101,6 @@ export default function ControlPanel() {
 
   const [injectOpen, setInjectOpen] = useState(false);
   const [replayOpen, setReplayOpen] = useState(false);
-  const [monteCarloOpen, setMonteCarloOpen] = useState(false);
   const [engineOpen, setEngineOpen] = useState(false);
 
   return (
@@ -313,11 +310,6 @@ export default function ControlPanel() {
           onClick={() => setInjectOpen(true)}
         />
         <ControlButton
-          icon={<BarChart3 className="w-4 h-4" />}
-          label="Monte Carlo"
-          onClick={() => setMonteCarloOpen(true)}
-        />
-        <ControlButton
           icon={<Cpu className="w-4 h-4" />}
           label="Engine Control"
           onClick={() => setEngineOpen(!engineOpen)}
@@ -360,7 +352,6 @@ export default function ControlPanel() {
       {/* Modals */}
       <InjectEventModal isOpen={injectOpen} onClose={() => setInjectOpen(false)} />
       <ReplayModal isOpen={replayOpen} onClose={() => setReplayOpen(false)} />
-      <MonteCarloModal isOpen={monteCarloOpen} onClose={() => setMonteCarloOpen(false)} />
 
       {/* Engine Control modal */}
       <EngineControlPanel isOpen={engineOpen} onClose={() => setEngineOpen(false)} />

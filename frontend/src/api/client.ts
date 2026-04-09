@@ -259,12 +259,6 @@ export const apiClient = {
       request<{ replay_id: string; from_step: number }>(`/simulations/${id}/replay/${step}`, { method: "POST" }),
     compare: (id: string, otherId: string) =>
       request<Record<string, unknown>>(`/simulations/${id}/compare/${otherId}`),
-    monteCarlo: (id: string, opts: { n_runs: number; llm_enabled?: boolean }) =>
-      request<{ job_id: string }>(`/simulations/${id}/monte-carlo`, { method: "POST", body: JSON.stringify(opts) }),
-    getMonteCarloJob: (id: string, jobId: string) =>
-      request<Record<string, unknown>>(`/simulations/${id}/monte-carlo/${jobId}`),
-    getLatestMonteCarlo: (id: string) =>
-      request<Record<string, unknown> | null>(`/simulations/${id}/monte-carlo`),
     engineControl: (id: string, body: { slm_llm_ratio: number; slm_model?: string; budget_usd?: number }) =>
       request<Record<string, unknown>>(`/simulations/${id}/engine-control`, { method: "POST", body: JSON.stringify(body) }),
     runAll: (id: string) =>

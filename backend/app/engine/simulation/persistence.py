@@ -22,7 +22,7 @@ from app.models.agent import Agent
 from app.models.community import Community
 from app.models.campaign import Campaign
 from app.models.network import NetworkEdge
-from app.models.propagation import EmergentEvent as EmergentEventORM, ExpertOpinion, LLMCall, MonteCarloRun, PropagationEvent
+from app.models.propagation import EmergentEvent as EmergentEventORM, ExpertOpinion, LLMCall, PropagationEvent
 from app.models.agent import AgentState as AgentStateORM
 from app.models.memory import AgentMemory
 
@@ -545,13 +545,16 @@ class SimulationPersistence:
             logger.exception("Failed to count simulations")
             return 0
 
-    async def load_steps(self, session: AsyncSession, sim_id: uuid.UUID) -> list[dict]:
-        """Load step history from DB."""
+    async def load_steps(
+        self, session: AsyncSession, sim_id: uuid.UUID, limit: int = 2000,
+    ) -> list[dict]:
+        """Load step history from DB (capped at `limit` rows to prevent unbounded queries)."""
         try:
             result = await session.execute(
                 select(SimStep)
                 .where(SimStep.simulation_id == sim_id)
                 .order_by(SimStep.step)
+                .limit(limit)
             )
             rows = result.scalars().all()
             return [

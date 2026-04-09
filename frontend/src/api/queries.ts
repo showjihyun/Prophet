@@ -414,28 +414,6 @@ export function useReplay() {
   });
 }
 
-export function useMonteCarlo() {
-  return useMutation({
-    mutationFn: ({ simId, opts }: {
-      simId: string;
-      opts: Parameters<typeof apiClient.simulations.monteCarlo>[1];
-    }) => apiClient.simulations.monteCarlo(simId, opts),
-  });
-}
-
-export function useMonteCarloJob(
-  simId: string | null,
-  jobId: string | null,
-  pollMs: number | false = false,
-) {
-  return useQuery({
-    queryKey: ["simulation", simId, "monteCarlo", jobId] as const,
-    queryFn: () => apiClient.simulations.getMonteCarloJob(simId!, jobId!),
-    enabled: !!simId && !!jobId,
-    refetchInterval: pollMs,
-  });
-}
-
 export function useEngineControl() {
   const qc = useQueryClient();
   return useMutation({

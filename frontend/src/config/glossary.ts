@@ -165,10 +165,6 @@ export const GLOSSARY = {
   },
 
   // ───────── Simulation flow ─────────
-  monteCarlo: {
-    label: "Monte Carlo",
-    text: "Run the same simulation many times with different random seeds, then aggregate the results. Used to get confidence intervals and detect rare events that a single run would miss.",
-  },
   adoptionCurve: {
     label: "Adoption Curve",
     text: "Adoption rate plotted over time. Steep rises indicate viral spread; flat plateaus indicate stalling. The shape of the curve tells you what kind of campaign you have.",

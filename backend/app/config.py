@@ -87,7 +87,6 @@ class Settings(BaseSettings):
     sim_default_max_steps: int = 50
     sim_default_random_seed: int = 42
     sim_base_activation_rate: float = 0.10
-    monte_carlo_default_runs: int = 100
 
     # ── Agent ───────────────────────────────────────────────────────────────
     agent_max_memories: int = 1000

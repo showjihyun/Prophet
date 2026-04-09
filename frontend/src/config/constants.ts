@@ -23,8 +23,6 @@ export const LS_KEY_THEME = "prophet-theme";
 export const LS_KEY_SIMULATION_ID = "prophet-simulation-id";
 export const LS_KEY_USERNAME = "prophet-username";
 export const LS_KEY_PROJECT_ID = "prophet-project-id";
-export const LS_KEY_MC_PREFIX = "prophet-mc-";
-
 // ── WebSocket ──────────────────────────────────────────────────────────────
 
 export const WS_MAX_RETRIES = 5;
@@ -35,7 +33,6 @@ export const WS_MAX_RECONNECT_DELAY_MS = 30_000;
 // ── Polling / Timers ───────────────────────────────────────────────────────
 
 export const LLM_STATS_POLL_INTERVAL_MS = 5_000;
-export const MONTE_CARLO_POLL_INTERVAL_MS = 2_000;
 export const TOAST_DISMISS_TIMEOUT_MS = 5_000;
 export const SETTINGS_SAVE_SUCCESS_DURATION_MS = 3_000;
 export const QUERY_STALE_TIME_MS = 5_000;
@@ -52,17 +49,6 @@ export const DEFAULT_SLM_LLM_RATIO = 0.5;
 export const DEFAULT_SIMULATION_SPEED = 2;
 export const DEFAULT_RANDOM_SEED = 42;
 export const SIMULATION_SPEEDS = [1, 2, 5, 10] as const;
-
-// ── Monte Carlo ────────────────────────────────────────────────────────────
-
-export const DEFAULT_MONTE_CARLO_RUNS = 100;
-export const MONTE_CARLO_MIN_RUNS = 10;
-export const MONTE_CARLO_MAX_RUNS = 500;
-export const MONTE_CARLO_STEP = 10;
-export const MONTE_CARLO_LLM_TIME_FACTOR = 2.5;
-export const MONTE_CARLO_SLM_TIME_FACTOR = 0.3;
-export const MONTE_CARLO_LLM_COST_PER_RUN = 0.05;
-export const MONTE_CARLO_SLM_COST_PER_RUN = 0.001;
 
 // ── Engine Control ─────────────────────────────────────────────────────────
 

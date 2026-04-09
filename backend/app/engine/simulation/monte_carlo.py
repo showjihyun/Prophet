@@ -73,9 +73,6 @@ class MonteCarloRunner:
                 if a.adopted:
                     community_adopted[a.community_id] += 1
 
-            # Clean up orchestrator state to free NetworkX graph + agent list.
-            orch.delete_simulation(state.simulation_id)
-
             return RunSummary(
                 run_id=run_id,
                 final_adoption=final_adoption,

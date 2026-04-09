@@ -10,16 +10,13 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.api import deps as _deps_mod
-from app.api import simulations as _sim_mod
 
 
 @pytest.fixture(autouse=True)
 def _reset():
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
     yield
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
 
 
 def _valid_create_body() -> dict:

@@ -96,10 +96,6 @@ class SimulationConfig:
     slm_model: str = "phi4"
     budget_usd: float | None = None
 
-    # Monte Carlo
-    monte_carlo_runs: int = 0
-    monte_carlo_llm_enabled: bool = False
-
     # Seeding
     random_seed: int | None = None
 

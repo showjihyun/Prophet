@@ -15,7 +15,6 @@ from app.engine.simulation.schema import (
     AgentModification,
 )
 from app.engine.simulation.orchestrator import SimulationOrchestrator
-from app.engine.simulation.monte_carlo import MonteCarloRunner
 
 
 def _make_config(
@@ -321,33 +320,6 @@ class TestSIM08_WebSocketPlaceholder:
 
         assert result is not None
         assert elapsed_ms < 500, f"Step took {elapsed_ms:.0f}ms, expected < 500ms"
-
-
-@pytest.mark.phase6
-@pytest.mark.acceptance
-class TestSIM09_MonteCarlo:
-    """SIM-09: Monte Carlo 100 runs produces viral_probability in [0,1].
-    SPEC: docs/spec/04_SIMULATION_SPEC.md#acceptance-criteria
-    """
-
-    @pytest.mark.asyncio
-    async def test_monte_carlo_valid_probability(self):
-        """SIM-09: viral_probability should be in [0, 1]."""
-        config = _make_config(
-            n_communities=2,
-            community_size=20,
-            max_steps=5,
-            seed=42,
-        )
-        runner = MonteCarloRunner()
-        # Use small n_runs for speed
-        result = await runner.run(config, n_runs=5)
-
-        assert 0.0 <= result.viral_probability <= 1.0
-        assert result.n_runs == 5
-        assert result.expected_reach >= 0
-        assert result.p5_reach <= result.p50_reach <= result.p95_reach
-        assert len(result.run_summaries) == 5
 
 
 @pytest.mark.phase6

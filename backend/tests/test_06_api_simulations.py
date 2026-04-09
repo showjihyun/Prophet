@@ -7,17 +7,14 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.api import deps as _deps_mod
-from app.api import simulations as _sim_mod
 
 
 @pytest.fixture(autouse=True)
 def _reset_orchestrator():
-    """Reset the orchestrator singleton and monte carlo jobs between tests."""
+    """Reset the orchestrator singleton between tests."""
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
     yield
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
 
 
 def _valid_create_body() -> dict:
@@ -238,35 +235,6 @@ class TestReplayAndCompare:
         id2 = r2.json()["simulation_id"]
         resp = await client.get(f"/api/v1/simulations/{id1}/compare/{id2}")
         assert resp.status_code == 200
-
-
-@pytest.mark.phase6
-class TestMonteCarlo:
-    """SPEC: 06_API_SPEC.md#monte-carlo"""
-
-    async def test_start_returns_202(self, client: AsyncClient, sim_id: str):
-        resp = await client.post(
-            f"/api/v1/simulations/{sim_id}/monte-carlo",
-            json={"n_runs": 10},
-        )
-        assert resp.status_code == 202
-
-    async def test_get_job_status(self, client: AsyncClient, sim_id: str):
-        resp = await client.post(
-            f"/api/v1/simulations/{sim_id}/monte-carlo",
-            json={"n_runs": 10},
-        )
-        job_id = resp.json()["job_id"]
-        resp2 = await client.get(
-            f"/api/v1/simulations/{sim_id}/monte-carlo/{job_id}"
-        )
-        assert resp2.status_code == 200
-
-    async def test_get_nonexistent_job_404(self, client: AsyncClient, sim_id: str):
-        resp = await client.get(
-            f"/api/v1/simulations/{sim_id}/monte-carlo/nonexistent"
-        )
-        assert resp.status_code == 404
 
 
 @pytest.mark.phase6

@@ -245,24 +245,6 @@ class TestDIF06_ExpertNegativeOpinion:
 
 @pytest.mark.phase4
 @pytest.mark.acceptance
-class TestDIF07_MonteCarloPlaceholder:
-    """DIF-07: Monte Carlo 100 runs — placeholder (will be Phase 6)."""
-
-    def test_placeholder(self):
-        # Monte Carlo runner is Phase 6; verify schema exists
-        from app.engine.diffusion.schema import MonteCarloResult, RunSummary
-        result = MonteCarloResult(
-            n_runs=100, viral_probability=0.3, expected_reach=50.0,
-            community_adoption={"c1": 0.5}, p5_reach=20.0,
-            p50_reach=50.0, p95_reach=80.0,
-            run_summaries=[RunSummary(run_id=0, final_adoption=50,
-                                      viral_detected=False, steps_completed=10)],
-        )
-        assert result.n_runs == 100
-
-
-@pytest.mark.phase4
-@pytest.mark.acceptance
 class TestDIF08_DiffusionRateZero:
     """DIF-08: Diffusion rate R(t) is 0 with no active agents."""
 

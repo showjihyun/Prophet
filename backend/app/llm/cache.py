@@ -69,7 +69,7 @@ class ValkeyCacheBackend:
 
 
 class LLMResponseCache:
-    """Caches LLM responses to reduce cost in Monte Carlo runs and repeated scenarios.
+    """Caches LLM responses to reduce cost in repeated scenarios.
 
     Uses Valkey when available; falls back transparently to an in-memory dict
     when the Valkey server is unreachable.
