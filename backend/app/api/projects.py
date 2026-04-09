@@ -364,7 +364,17 @@ async def run_scenario(
         orchestrator.start(state.simulation_id)
         scenario.simulation_id = state.simulation_id
         scenario.status = "running"
-        await session.commit()
+        try:
+            await session.commit()
+        except Exception:
+            logger.exception(
+                "FK commit failed for scenario %s → simulation %s",
+                scenario_id, state.simulation_id,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Scenario could not be linked to simulation. Please retry.",
+            )
     else:
         # Abort: clean up the in-memory state so it doesn't consume resources.
         orchestrator.delete_simulation(state.simulation_id)
@@ -372,6 +382,10 @@ async def run_scenario(
             "run_scenario: persist_creation failed for %s — aborting simulation "
             "(no DB row, no FK link). The in-memory state has been cleaned up.",
             state.simulation_id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Simulation could not be persisted to database. Please retry.",
         )
 
     return {"simulation_id": str(state.simulation_id), "status": "running"}

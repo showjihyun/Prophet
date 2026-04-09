@@ -226,7 +226,7 @@ Agent(subagent_type="feature-dev:code-reviewer", model="sonnet")
 - **PostgreSQL 16** + **pgvector** (벡터 메모리)
 - **Valkey** (LLM 캐시, 세션)
 - **NetworkX** (소셜 그래프 런타임)
-- **Celery** (Monte Carlo 백그라운드 작업)
+
 
 ### LLM
 - **Ollama** (로컬, 기본값) — `ollama-python`

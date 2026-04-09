@@ -12,7 +12,9 @@ from app.api.community_templates import router as community_templates_router
 from app.api.auth import router as auth_router
 from app.config import settings
 import sqlalchemy
+from sqlalchemy import update
 from app.database import engine, Base
+from app.models.simulation import Simulation
 
 
 import app.models  # noqa: F401 — register all models for Base.metadata
@@ -34,10 +36,9 @@ async def lifespan(app: FastAPI):
         # be stopped. Flip those rows to `failed` so the frontend shows the
         # right state and the user can recover.
         await conn.execute(
-            sqlalchemy.text(
-                "UPDATE simulations SET status = 'failed' "
-                "WHERE status IN ('running', 'paused')"
-            )
+            update(Simulation)
+            .where(Simulation.status.in_(["running", "paused"]))
+            .values(status="failed")
         )
     yield
     await engine.dispose()

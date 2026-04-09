@@ -9,14 +9,14 @@ You point it at your message, your audience, and your communities — it tells y
 how the message spreads, where it stalls, and which groups push back.
 
 ```bash
-git clone https://github.com/your-org/prophet.git
+git clone https://github.com/showjihyun/prophet.git
 cd prophet && docker compose up -d
 open http://localhost:5173
 ```
 
 That's the whole quick start. 5 minutes from clone to your first simulation.
 
-[![Tests](https://img.shields.io/badge/tests-1234%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-827%2B%20backend%20%7C%20344%2B%20frontend-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 [![Status](https://img.shields.io/badge/status-active-brightgreen)]()
 [![Discussions](https://img.shields.io/badge/discussions-open-blue)]()
@@ -100,7 +100,7 @@ Prophet is for you.
 5. Visualize    → Real-time graph with zoom-based animation
                   (close-up / mid / overview tiers)
 
-6. Decide       → Compare scenarios, run Monte Carlo sweeps, export results
+6. Decide       → Compare scenarios, export results
 ```
 
 ---
@@ -129,7 +129,7 @@ who see the demo immediately understand what Prophet does — no slide deck need
 ### Run with Docker (recommended)
 
 ```bash
-git clone https://github.com/your-org/prophet.git
+git clone https://github.com/showjihyun/prophet.git
 cd prophet
 
 # CPU environment (no GPU)
@@ -178,7 +178,7 @@ Prophet is open-source from top to bottom — no proprietary dependencies anywhe
 
 | Layer          | Stack                                                     |
 |----------------|-----------------------------------------------------------|
-| Frontend       | React 18, TypeScript, Vite, Tailwind, Cytoscape.js        |
+| Frontend       | React 18, TypeScript, Vite, Tailwind, Cytoscape.js, react-force-graph-3d |
 | State          | Zustand, TanStack Query, native WebSocket                 |
 | Backend        | Python 3.12, FastAPI (async), SQLAlchemy 2.0, Pydantic v2 |
 | LLM            | Ollama (local SLM), Claude API, OpenAI API, Gemini API    |
@@ -196,11 +196,19 @@ Prophet is open-source from top to bottom — no proprietary dependencies anywhe
 - ✅ Hybrid network generator (WS + BA + bridge edges)
 - ✅ 3-tier LLM inference (Mass SLM / Heuristic / Elite LLM)
 - ✅ Real-time WebSocket visualization
-- ✅ Monte Carlo simulation
 - ✅ Pause / Resume / Run-All controls
 - ✅ Export to JSON / CSV
 - ✅ Community management (CRUD + reassign)
 - ✅ Real-time propagation animation (zoom-based LOD)
+- ✅ 3D graph visualization (react-force-graph-3d)
+- ✅ Echo chamber detection (real network topology)
+- ✅ PersonalityDrift connected to simulation engine
+- ✅ Controversy parameter wired end-to-end
+- ✅ Monte Carlo parallel execution
+- ✅ Historical simulation graceful degradation (agents/network/stop/compare/export return empty data instead of 404 after restart)
+- ✅ TanStack Query migration (server-state caching across all pages)
+- ✅ ControlPanel refactored (785 → 8 focused files)
+- ✅ Glossary tooltips on key metrics
 
 **In progress:**
 - 🟡 Hosted Cloud Starter tier
@@ -230,7 +238,7 @@ See [`ROADMAP.md`](ROADMAP.md) for the full picture and how to influence it.
 Start here:
 
 1. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) — setup is under 10 minutes
-2. Browse [`good first issue`](https://github.com/your-org/prophet/labels/good%20first%20issue)
+2. Browse [`good first issue`](https://github.com/showjihyun/prophet/labels/good%20first%20issue)
 3. Open a Discussion before any large change
 4. Open a PR — we aim to respond within 48 hours
 
@@ -320,7 +328,7 @@ If Prophet helps your research, please cite:
   title  = {Prophet: A simulation engine for marketing campaign diffusion},
   author = {Prophet Contributors},
   year   = {2026},
-  url    = {https://github.com/your-org/prophet}
+  url    = {https://github.com/showjihyun/prophet}
 }
 ```
 

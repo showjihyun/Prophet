@@ -10,29 +10,37 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [0.1.0.0] - 2026-04-09
 
 ### Added
-- 3D graph visualization via react-force-graph-3d (WebGL/three.js), replacing
-  2D Cytoscape canvas entirely with orbit/zoom/pan controls and community-colored
-  nodes and edges
-- TanStack Query migration across all pages — centralized query/mutation layer
-  with request deduplication, cross-route caching, and background revalidation
-- Central glossary system with HelpTooltip component for technical term definitions
+- Core engine: real echo chamber detection using network topology (intra/inter-community
+  edge ratio) instead of the hardcoded 10:1 ratio that fired for every community
+- Core engine: PersonalityDrift wired into agent tick pipeline — agents now evolve
+  personality based on actions taken, with cumulative drift tracking per step
+- Core engine: campaign controversy parameter connected through agent tick so
+  MessageStrength correctly reflects the configured controversy value
+- Monte Carlo: parallel scenario execution via `asyncio.Semaphore` (max concurrency 3)
+  with real per-community adoption stats replacing previous sequential blocking runs
+- API: historical simulation graceful degradation — agents, network, stop, compare,
+  and export endpoints return empty/fallback data instead of 404 when in-memory state
+  is lost after server restart; export falls back to DB records
+- Frontend: ControlPanel split into 8 focused files (hooks + subcomponents) reducing
+  the monolith to focused, testable units
+- Frontend: EngineControlPanel centered modal layout
+- Frontend: 3D graph visualization via react-force-graph-3d (WebGL/three.js) with
+  orbit/zoom/pan controls and community-colored nodes and edges
+- Frontend: TanStack Query migration across all pages — centralized query/mutation
+  layer with request deduplication, cross-route caching, and background revalidation
+- Frontend: central glossary system with HelpTooltip component for technical term
+  definitions
+- DB safety: background persistence tasks now capture their own DB session so they
+  cannot use a closed request-scoped session (use-after-free fix)
+- DB safety: FK commit guard in `run_scenario` prevents ghost simulations when DB
+  persistence fails before `orchestrator.start()` is called
+- DB safety: startup ORM migration marks orphaned running/paused simulations as
+  failed on server restart
+- DB safety: `load_steps` query now has a LIMIT guard to prevent unbounded reads
 - SimulationListPage for browsing all simulations at `/simulation`
-- Parallel Monte Carlo execution via asyncio.Semaphore with real per-community
-  adoption tracking
-- Personality drift system — agents evolve personality based on actions taken,
-  with cumulative drift tracking
-- Campaign controversy parameter wired through agent tick pipeline
-- Real intra/inter-community edge counting for cascade detection (was hardcoded)
-- Historical simulation graceful degradation — API returns empty data instead
-  of 404 for sims that lost in-memory state after server restart
-- Simulation export now falls back to DB for historical simulations
-- FK safety check in run_scenario — prevents ghost simulations when DB
-  persistence fails
-- Startup migration marks orphaned running/paused sims as failed on restart
+- E2E tests for campaign setup, help tooltips, and TanStack cache behavior
 - Git branch strategy documentation and contributor-friendly improvements
   (fork workflow, issue templates, PR template)
-- E2E tests for campaign setup, help tooltips, and TanStack cache behavior
-- 3 new E2E test files (campaign-setup, help-tooltip, tanstack-cache)
 
 ### Changed
 - GraphPanel rewritten from Cytoscape.js 2D to react-force-graph-3d
@@ -40,23 +48,34 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CampaignSetupPage split from 617 lines to 111 lines + 6 focused sub-components
   + useCampaignForm hook
 - API error handling tightened — broad exception catches replaced with specific
-  ValueError/HTTPException-404 filters so real 500s surface instead of returning
-  silent empty data
+  ValueError/HTTPException-404 filters so real 500s surface instead of being
+  silently swallowed
 - Monte Carlo runner cleans up orchestrator state after each run to prevent
   memory accumulation
 - Community metrics computation reduced from O(n×c) to O(n) via pre-bucketing
 - Community link counting offloaded to thread pool to avoid blocking event loop
-- LLM fallback stub tracking via is_fallback_stub flag on LLMResponse
+- LLM fallback stub tracking via `is_fallback_stub` flag on `LLMResponse`
 
 ### Fixed
-- Silent error masking in 7 API endpoints — non-404 HTTPExceptions were caught
-  and swallowed, returning empty data instead of surfacing server errors
-- Monte Carlo memory leak — SimulationOrchestrator state not cleaned up after
-  completing each run
-- Ghost simulation bug — orchestrator.start() called before DB persistence
-  confirmed, creating invisible in-memory-only simulations
-- Replay endpoint no longer returns fake replay_id on failure (now properly 500s)
-- Monte Carlo return type annotation corrected (was RunSummary, actually tuple)
+- Echo chamber detector false positives — was hardcoded 10:1 intra/inter ratio
+  applied uniformly to all communities regardless of actual graph topology
+- PersonalityDrift dead code — drift was computed but `agent.personality` was never
+  updated; now committed back on every tick
+- Controversy hardcoded to 0.0 — campaign `controversy` field never reached agents;
+  now propagated through the full tick pipeline to MessageStrength
+- Monte Carlo sequential execution despite `parallel=True` flag — semaphore-based
+  concurrency now honours the flag
+- `create_task` background jobs using a closed request DB session (use-after-free)
+  — tasks now open their own session
+- `run_scenario` returning status `"running"` when DB persist failed, leaving an
+  invisible in-memory-only simulation with no DB record
+- `stop_simulation` returning HTTP 200 for nonexistent simulation IDs — now returns
+  404 with a descriptive message
+- Silent error masking in 7 API endpoints — non-404 HTTPExceptions were caught and
+  swallowed, returning empty data instead of surfacing the real server error
+- Monte Carlo memory leak — SimulationOrchestrator state not cleaned up after each
+  completed run
+- Replay endpoint returning a fake `replay_id` on failure — now properly raises 500
 
 ## [0.1.0] — Initial Public Release
 
