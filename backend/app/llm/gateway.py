@@ -289,7 +289,14 @@ class LLMGateway:
             "total": 0, "inmemory_hits": 0, "valkey_hits": 0,
             "vector_hits": 0, "llm_calls": 0, "batched_calls": 0,
             "budget_downgrades": 0,
+            # Accumulated token counts across all real (non-cached) LLM calls
+            "total_tokens": 0,
         }
+        # Lightweight ring buffer: last 100 per-call records for the LLM dashboard.
+        # Each entry: {"step": int|None, "agent_id": str|None, "provider": str,
+        #              "latency_ms": float, "tokens": int, "cached": bool}
+        self._call_log: list[dict] = []
+        self._CALL_LOG_MAX = 100
         # Batch queue
         self._batch_queue: list[_BatchEntry] = []
         self._batch_flush_task: asyncio.Task | None = None
@@ -367,6 +374,24 @@ class LLMGateway:
         )
 
         response = await self._call_with_fallback(prompt, options, effective_tier)
+
+        # --- Accumulate token stats from real (non-stub) responses ---
+        tokens = response.prompt_tokens + response.completion_tokens
+        if tokens == 0 and not response.is_fallback_stub:
+            # Rough proxy: ~4 chars per token for response content
+            tokens = max(1, len(response.content) // 4)
+        self._stats["total_tokens"] = self._stats.get("total_tokens", 0) + tokens
+
+        # --- Record per-call entry in ring buffer ---
+        entry: dict = {
+            "provider": response.provider,
+            "latency_ms": response.latency_ms,
+            "tokens": tokens,
+            "cached": response.cached,
+        }
+        self._call_log.append(entry)
+        if len(self._call_log) > self._CALL_LOG_MAX:
+            self._call_log.pop(0)
 
         # --- Store in all cache tiers ---
         self._inmemory.set(prompt_hash, response)
@@ -547,6 +572,15 @@ class LLMGateway:
         SPEC: docs/spec/platform/14_LLM_GATEWAY_SPEC.md#stats
         """
         return dict(self._stats)
+
+    def get_call_log(self) -> list[dict]:
+        """Return a copy of the per-call ring buffer (up to last 100 entries).
+
+        Each entry has keys: provider, latency_ms, tokens, cached.
+
+        SPEC: docs/spec/platform/14_LLM_GATEWAY_SPEC.md#stats
+        """
+        return list(self._call_log)
 
     def clear_cache(self, simulation_id: UUID | None = None) -> None:
         """Clear in-memory and (optionally) vector caches.

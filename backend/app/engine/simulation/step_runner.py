@@ -242,7 +242,9 @@ class StepRunner:
         )
         self._cascade_detector = CascadeDetector(config=cascade_config)
         self._network_evolver = NetworkEvolver()
-        self._gateway = LLMGateway()
+        # Use the passed-in gateway (shared with the orchestrator so stats are
+        # accumulated in one place); create a new one only when none was given.
+        self._gateway = gateway if gateway is not None else LLMGateway()
         self._negative_cascade = NegativeCascadeModel()
         from app.engine.platform.registry import PlatformRegistry
         self._platform_registry = PlatformRegistry()

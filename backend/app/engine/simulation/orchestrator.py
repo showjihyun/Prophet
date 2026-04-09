@@ -1153,12 +1153,27 @@ class SimulationOrchestrator:
             total_duration = sum(s.step_duration_ms for s in state.step_history)
             avg_latency = total_duration / max(total_calls, 1)
 
+        # Pull real cache-hit and token counts from the gateway that actually
+        # executed the LLM calls.  The step_runner holds the live gateway
+        # instance (shared with all CommunityOrchestrators for this sim).
+        gw_stats: dict = {}
+        gw = getattr(self._step_runner, "_gateway", None)
+        if gw is not None:
+            gw_stats = gw.get_stats()
+
+        cached_calls = (
+            gw_stats.get("inmemory_hits", 0)
+            + gw_stats.get("valkey_hits", 0)
+            + gw_stats.get("vector_hits", 0)
+        )
+        total_tokens = gw_stats.get("total_tokens", 0)
+
         return {
             "total_calls": total_calls,
-            "cached_calls": 0,
+            "cached_calls": cached_calls,
             "provider_breakdown": provider_breakdown,
             "avg_latency_ms": round(avg_latency, 1),
-            "total_tokens": 0,
+            "total_tokens": total_tokens,
             "tier_breakdown": tier_breakdown,
         }
 
@@ -1193,33 +1208,68 @@ class SimulationOrchestrator:
         sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
         state = self._get_state(sim_uuid)
 
-        calls: list[dict] = []
         default_provider = state.config.default_llm_provider or "ollama"
 
-        # Build call log from agents with LLM tier usage
-        for agent in state.agents:
-            if agent.llm_tier_used is None:
-                continue
-            if agent_id and str(agent.agent_id) != agent_id:
-                continue
-            agent_provider = "ollama-slm" if agent.llm_tier_used == 1 else default_provider
-            if provider and agent_provider != provider:
-                continue
-            if step is not None and agent.step != step:
-                continue
+        # --- Fetch real per-call data from the gateway ring buffer ---
+        # The ring buffer stores the most recent LLM calls with real latency
+        # and token counts, but without per-agent metadata (lightweight).
+        gw = getattr(self._step_runner, "_gateway", None)
+        gw_call_log: list[dict] = gw.get_call_log() if gw is not None else []
 
-            calls.append({
-                "call_id": f"call-{agent.agent_id}-s{agent.step}",
-                "step": agent.step,
-                "agent_id": str(agent.agent_id),
-                "provider": agent_provider,
-                "latency_ms": 0.0,
-                "tokens": 0,
-                "cached": False,
-            })
+        calls: list[dict] = []
 
-        # Sort by step descending, limit
-        calls.sort(key=lambda c: c["step"], reverse=True)
+        if not agent_id and step is None:
+            # No fine-grained filter requested — serve directly from ring buffer
+            # (most recent calls first) with provider filter if specified.
+            for i, entry in enumerate(reversed(gw_call_log)):
+                call_provider = entry.get("provider", default_provider)
+                if provider and call_provider != provider:
+                    continue
+                calls.append({
+                    "call_id": f"gw-call-{i}",
+                    "step": None,
+                    "agent_id": None,
+                    "provider": call_provider,
+                    "latency_ms": round(entry.get("latency_ms", 0.0), 2),
+                    "tokens": entry.get("tokens", 0),
+                    "cached": entry.get("cached", False),
+                })
+                if len(calls) >= limit:
+                    break
+        else:
+            # Filtered view: reconstruct from agent state (which has step/agent_id),
+            # then enrich with average latency/tokens from the gateway ring buffer.
+            avg_latency = 0.0
+            avg_tokens = 0
+            if gw_call_log:
+                real_calls = [e for e in gw_call_log if not e.get("cached", False)]
+                if real_calls:
+                    avg_latency = sum(e.get("latency_ms", 0.0) for e in real_calls) / len(real_calls)
+                    avg_tokens = sum(e.get("tokens", 0) for e in real_calls) // len(real_calls)
+
+            for agent in state.agents:
+                if agent.llm_tier_used is None:
+                    continue
+                if agent_id and str(agent.agent_id) != agent_id:
+                    continue
+                agent_provider = "ollama-slm" if agent.llm_tier_used == 1 else default_provider
+                if provider and agent_provider != provider:
+                    continue
+                if step is not None and agent.step != step:
+                    continue
+
+                calls.append({
+                    "call_id": f"call-{agent.agent_id}-s{agent.step}",
+                    "step": agent.step,
+                    "agent_id": str(agent.agent_id),
+                    "provider": agent_provider,
+                    "latency_ms": round(avg_latency, 2),
+                    "tokens": avg_tokens,
+                    "cached": False,
+                })
+
+            calls.sort(key=lambda c: (c["step"] or 0), reverse=True)
+
         return {"calls": calls[:limit]}
 
     def get_llm_impact(self, simulation_id: str | UUID) -> dict:
