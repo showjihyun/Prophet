@@ -43,7 +43,18 @@ const COMMUNITY_META: Record<string, { name: string; color: string }> = {
   E: { name: "Bridge Community", color: "var(--community-bridge)" },
 };
 
-function apiToLocal(c: CommunityInfo): typeof COMMUNITIES[number] {
+interface LocalCommunity {
+  id: string;
+  name: string;
+  color: string;
+  agents: number;
+  sentiment: { positive: number; neutral: number; negative: number };
+  influencers: Array<{ id: string; score: number }>;
+  emotions: { interest: number; trust: number; skepticism: number; excitement: number };
+  status: "Very High" | "High" | "Medium" | "Low";
+}
+
+function apiToLocal(c: CommunityInfo): LocalCommunity {
   const meta = COMMUNITY_META[c.community_id] ?? { name: c.name || c.community_id, color: "var(--muted-foreground)" };
   const sentPos = Math.round(Math.max(0, c.mean_belief) * 100);
   const sentNeg = Math.round(Math.max(0, -c.mean_belief) * 100);

@@ -140,6 +140,8 @@ export const OPENAI_MODELS = [
 
 import type { SimulationStatus } from "@/types/simulation";
 
+export type { SimulationStatus };
+
 export const SIM_STATUS = {
   CREATED: "created",
   CONFIGURED: "configured",
