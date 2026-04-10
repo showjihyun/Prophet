@@ -64,27 +64,30 @@ class TestRegistryRegisterGet:
 class TestRegistryGetDefault:
     """SPEC: 05_LLM_SPEC.md#4-llmadapterregistry — get_default"""
 
-    def test_get_default_uses_env_var(self, monkeypatch):
-        """DEFAULT_LLM_PROVIDER env var selects default adapter."""
+    def test_get_default_uses_settings(self, monkeypatch):
+        """settings.default_llm_provider selects default adapter."""
+        from app.config import settings
         registry = LLMAdapterRegistry()
         adapter = _HealthyMockAdapter("claude")
         registry.register(adapter)
-        monkeypatch.setenv("DEFAULT_LLM_PROVIDER", "claude")
+        monkeypatch.setattr(settings, "default_llm_provider", "claude")
         result = registry.get_default()
         assert result is adapter
 
     def test_get_default_falls_back_to_ollama(self, monkeypatch):
-        """Without env var, default is 'ollama'."""
+        """Default provider is 'ollama'."""
+        from app.config import settings
         registry = LLMAdapterRegistry()
         adapter = _HealthyMockAdapter("ollama")
         registry.register(adapter)
-        monkeypatch.delenv("DEFAULT_LLM_PROVIDER", raising=False)
+        monkeypatch.setattr(settings, "default_llm_provider", "ollama")
         result = registry.get_default()
         assert result is adapter
 
     def test_get_default_raises_if_not_registered(self, monkeypatch):
+        from app.config import settings
         registry = LLMAdapterRegistry()
-        monkeypatch.delenv("DEFAULT_LLM_PROVIDER", raising=False)
+        monkeypatch.setattr(settings, "default_llm_provider", "ollama")
         with pytest.raises(LLMProviderNotFoundError):
             registry.get_default()
 
@@ -143,3 +146,82 @@ class TestRegistrySLM:
         registry = LLMAdapterRegistry()
         with pytest.raises(LLMProviderNotFoundError):
             registry.get_slm()
+
+
+@pytest.mark.phase5
+class TestRegistryTierRouting:
+    """SPEC: 05_LLM_SPEC.md#4 — _pick_adapter tier-aware routing."""
+
+    def test_tier1_prefers_ollama(self):
+        """Tier 1 picks Ollama even when elite providers are available."""
+        registry = LLMAdapterRegistry()
+        ollama = _HealthyMockAdapter("ollama")
+        claude = _HealthyMockAdapter("claude")
+        registry.register(ollama)
+        registry.register(claude)
+        result = registry._pick_adapter(tier=1)
+        assert result is ollama
+
+    def test_tier2_prefers_ollama(self):
+        """Tier 2 picks Ollama (default/SLM path)."""
+        registry = LLMAdapterRegistry()
+        ollama = _HealthyMockAdapter("ollama")
+        claude = _HealthyMockAdapter("claude")
+        registry.register(ollama)
+        registry.register(claude)
+        result = registry._pick_adapter(tier=2)
+        assert result is ollama
+
+    def test_tier3_prefers_elite_claude(self):
+        """Tier 3 picks Claude over Ollama when available."""
+        registry = LLMAdapterRegistry()
+        ollama = _HealthyMockAdapter("ollama")
+        claude = _HealthyMockAdapter("claude")
+        registry.register(ollama)
+        registry.register(claude)
+        result = registry._pick_adapter(tier=3)
+        assert result is claude
+
+    def test_tier3_prefers_claude_over_openai(self):
+        """Tier 3 elite priority: Claude > OpenAI > Gemini."""
+        registry = LLMAdapterRegistry()
+        openai = _HealthyMockAdapter("openai")
+        claude = _HealthyMockAdapter("claude")
+        registry.register(openai)
+        registry.register(claude)
+        result = registry._pick_adapter(tier=3)
+        assert result is claude
+
+    def test_tier3_falls_back_to_openai(self):
+        """Tier 3 falls back to OpenAI if Claude not available."""
+        registry = LLMAdapterRegistry()
+        ollama = _HealthyMockAdapter("ollama")
+        openai = _HealthyMockAdapter("openai")
+        registry.register(ollama)
+        registry.register(openai)
+        result = registry._pick_adapter(tier=3)
+        assert result is openai
+
+    def test_tier3_falls_back_to_ollama_if_no_elite(self):
+        """Tier 3 falls back to Ollama if no elite providers registered."""
+        registry = LLMAdapterRegistry()
+        ollama = _HealthyMockAdapter("ollama")
+        registry.register(ollama)
+        result = registry._pick_adapter(tier=3)
+        assert result is ollama
+
+    def test_preferred_overrides_tier(self):
+        """Explicit preferred adapter overrides tier-based selection."""
+        registry = LLMAdapterRegistry()
+        ollama = _HealthyMockAdapter("ollama")
+        claude = _HealthyMockAdapter("claude")
+        registry.register(ollama)
+        registry.register(claude)
+        result = registry._pick_adapter(tier=1, preferred="claude")
+        assert result is claude
+
+    def test_empty_registry_returns_none(self):
+        """No adapters registered returns None."""
+        registry = LLMAdapterRegistry()
+        result = registry._pick_adapter(tier=3)
+        assert result is None

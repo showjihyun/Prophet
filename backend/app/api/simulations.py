@@ -21,7 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_orchestrator, get_session, get_persistence
 from app.api.ws import manager as ws_manager
 from app.engine.simulation.persistence import SimulationPersistence
-from app.engine.simulation.exceptions import StepNotFoundError
+from app.engine.simulation.exceptions import (
+    InvalidStateError,
+    InvalidStateTransitionError,
+    SimulationCapacityError,
+    StepNotFoundError,
+)
 from app.api.schemas import (
     CreateSimulationRequest,
     EngineControlRequest,
@@ -605,13 +610,36 @@ async def run_all_simulation(
 
     try:
         report = await orchestrator.run_all(sim_uuid, step_callback=_persist_each_step)
-    except ValueError as exc:
+    except SimulationCapacityError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/capacity-exceeded",
+                title="Simulation Capacity Exceeded",
+                status=429,
+                detail=str(exc),
+                instance=f"/api/v1/simulations/{simulation_id}/run-all",
+            ).model_dump(),
+        )
+    except (InvalidStateError, InvalidStateTransitionError, ValueError) as exc:
         raise HTTPException(
             status_code=409,
             detail=ErrorResponse(
                 type="https://prophet.io/errors/invalid-state",
                 title="Invalid Simulation State",
                 status=409,
+                detail=str(exc),
+                instance=f"/api/v1/simulations/{simulation_id}/run-all",
+            ).model_dump(),
+        )
+    except Exception as exc:
+        logger.error("run_all failed for %s: %s", simulation_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/internal",
+                title="Simulation Execution Failed",
+                status=500,
                 detail=str(exc),
                 instance=f"/api/v1/simulations/{simulation_id}/run-all",
             ).model_dump(),
