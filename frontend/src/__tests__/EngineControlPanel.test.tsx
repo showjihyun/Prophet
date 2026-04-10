@@ -14,7 +14,6 @@
  *
  * @spec docs/spec/05_LLM_SPEC.md#71-user-engine-control-slmllm-ratio
  */
-import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useSimulationStore } from "../store/simulationStore";
@@ -35,6 +34,7 @@ const MOCK_SIMULATION = {
   simulation_id: "sim-ec-001",
   project_id: "proj-001",
   scenario_id: "scen-001",
+  name: "Engine Control Test",
   status: "paused" as const,
   current_step: 5,
   max_steps: 365,

@@ -84,6 +84,7 @@ const MOCK_SIMULATION = {
   simulation_id: 'sim-test-001',
   project_id: 'proj-001',
   scenario_id: 'scen-001',
+  name: 'Simulation Main Test',
   status: 'running' as const,
   current_step: 5,
   max_steps: 365,

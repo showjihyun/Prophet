@@ -18,19 +18,19 @@ describe("GLOSSARY", () => {
   describe("entry shape", () => {
     const entries = Object.entries(GLOSSARY) as Array<[GlossaryTerm, { label: string; text: string }]>;
 
-    it.each(entries)("'%s' has a non-empty label", (key, entry) => {
+    it.each(entries)("'%s' has a non-empty label", (_key, entry) => {
       expect(entry.label).toBeTruthy();
       expect(typeof entry.label).toBe("string");
       expect(entry.label.length).toBeGreaterThan(0);
     });
 
-    it.each(entries)("'%s' has a non-empty text", (key, entry) => {
+    it.each(entries)("'%s' has a non-empty text", (_key, entry) => {
       expect(entry.text).toBeTruthy();
       expect(typeof entry.text).toBe("string");
       expect(entry.text.length).toBeGreaterThan(0);
     });
 
-    it.each(entries)("'%s' text ends with a period", (key, entry) => {
+    it.each(entries)("'%s' text ends with a period", (_key, entry) => {
       // Style guide: entries should be complete sentences.
       expect(entry.text.trimEnd()).toMatch(/[.!?]$/);
     });

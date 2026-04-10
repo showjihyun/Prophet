@@ -5,7 +5,7 @@
  * Tests the exported getAnimationTier, ACTION_COLORS, TIER_LIMITS from
  * GraphPanel.tsx and the store/type contracts.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { useSimulationStore } from '@/store/simulationStore';
 import type { PropagationPair, StepResult } from '@/types/simulation';
 import {

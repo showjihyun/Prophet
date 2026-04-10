@@ -3,7 +3,6 @@
  * @spec docs/spec/06_API_SPEC.md#post-simulationssimulation_idinject-event
  * @spec docs/spec/07_FRONTEND_SPEC.md#control-panel
  */
-import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useSimulationStore } from "../store/simulationStore";
@@ -24,6 +23,7 @@ const MOCK_SIMULATION = {
   simulation_id: "sim-inject-001",
   project_id: "proj-001",
   scenario_id: "scen-001",
+  name: "Inject Event Test",
   status: "running" as const,
   current_step: 10,
   max_steps: 365,

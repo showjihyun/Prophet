@@ -5,9 +5,8 @@
  *
  * @spec docs/spec/ui/UI_13_SCENARIO_OPINIONS.md#faction-view
  */
-import { render, screen, unmountComponentAtNode } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import React from 'react';
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Cytoscape mock — must be hoisted before component import
@@ -206,7 +205,7 @@ describe('FactionMapView', () => {
       vi.clearAllMocks();
       renderView(COMMUNITIES);
 
-      const call = (cytoscape as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      const call = (cytoscape as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
       // Each community maps to one node
       const nodeElements = (call.elements as unknown[]).filter(
         (el: unknown) => !(el as { data: { source?: string } }).data.source,
@@ -218,7 +217,7 @@ describe('FactionMapView', () => {
       vi.clearAllMocks();
       renderView(COMMUNITIES);
 
-      const call = (cytoscape as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      const call = (cytoscape as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
       // Total elements = nodes + edges; at minimum there are as many entries as communities
       expect((call.elements as unknown[]).length).toBeGreaterThanOrEqual(COMMUNITIES.length);
     });

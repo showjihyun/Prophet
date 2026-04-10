@@ -6,9 +6,9 @@
  * Tests verify user journey flows across pages and components.
  * Covers FLOW-01 through FLOW-29 at the integration level.
  */
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -20,13 +20,6 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@/hooks/useSimulationSocket', () => ({
   useSimulationSocket: () => ({ lastMessage: null }),
-}));
-
-vi.mock('@/hooks/useSimulationData', () => ({
-  useSimulationData: () => ({
-    llmStats: null,
-    refreshLlmStats: vi.fn(),
-  }),
 }));
 
 const mockApiClient = {
