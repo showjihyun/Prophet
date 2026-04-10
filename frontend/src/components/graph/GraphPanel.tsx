@@ -192,13 +192,10 @@ export default function GraphPanel() {
       setDims({ w: el.clientWidth, h: el.clientHeight });
     };
     update();
-    if ("ResizeObserver" in window) {
-      const ro = new ResizeObserver(update);
-      ro.observe(el);
-      return () => ro.disconnect();
-    }
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
+    // ResizeObserver is guaranteed in all supported browsers (lib.dom).
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   // ---- Per-step adoption highlight (no graph rebuild) --------------------- //

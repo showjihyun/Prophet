@@ -159,7 +159,7 @@ function nodeColor(ele: cytoscape.NodeSingular): string {
   return COMMUNITY_COLOR[community] ?? "#888888";
 }
 
-const CY_STYLE: cytoscape.Stylesheet[] = [
+const CY_STYLE: cytoscape.StylesheetStyle[] = [
   {
     selector: "node",
     style: {

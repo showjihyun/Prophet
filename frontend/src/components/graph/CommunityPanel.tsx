@@ -106,7 +106,7 @@ export default function CommunityPanel() {
       const neutral = Math.max(0, 100 - positive - negative);
       // adoption_count may not exist in API response; derive from adoption_rate
       const agentCount = metrics.adoption_count
-        ?? (metrics.size != null ? metrics.size : Math.round((metrics.adoption_rate ?? 0) * 1000));
+        ?? Math.round((metrics.adoption_rate ?? 0) * 1000);
       return {
         id: metrics.community_id ?? id,
         name: `${id.charAt(0).toUpperCase()}${id.slice(1)} Community`,

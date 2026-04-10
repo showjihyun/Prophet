@@ -31,7 +31,7 @@ export function useProjectScenarioSync() {
 
   // Auto-restore project from simulation and load scenarios on mount
   useEffect(() => {
-    const simProjectId = (simulation as Record<string, unknown> | undefined)?.project_id as
+    const simProjectId = (simulation as unknown as Record<string, unknown> | undefined)?.project_id as
       | string
       | undefined;
     const effectiveProjectId = currentProjectId || simProjectId;

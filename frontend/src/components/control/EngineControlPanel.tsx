@@ -41,7 +41,7 @@ export default function EngineControlPanel({ isOpen, onClose }: EngineControlPan
       const res = (await engineControl.mutateAsync({
         simId: simulation.simulation_id,
         body: { slm_llm_ratio: slmLlmRatio, budget_usd: budgetUsd },
-      })) as EngineControlResponse;
+      })) as unknown as EngineControlResponse;
       setImpact(res.impact_assessment);
       setTierDist(res.tier_distribution);
     } catch (err) {
