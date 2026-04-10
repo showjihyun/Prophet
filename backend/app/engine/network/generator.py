@@ -1,5 +1,6 @@
 """Hybrid Network Generator — main generation pipeline.
 SPEC: docs/spec/02_NETWORK_SPEC.md#interface-contracts
+SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§2
 """
 import logging
 import math
@@ -18,6 +19,20 @@ from app.engine.network.schema import (
 )
 
 logger = logging.getLogger(__name__)
+
+_PERSONALITY_DIMS = ("openness", "skepticism", "trend_following", "brand_loyalty", "social_influence")
+
+
+def _personality_similarity(p1: dict[str, float], p2: dict[str, float]) -> float:
+    """Compute personality similarity as 1 - normalized Manhattan distance.
+
+    SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§2 HM-04
+
+    Returns value in [0.0, 1.0]. 1.0 = identical personalities.
+    """
+    n_dims = len(_PERSONALITY_DIMS)
+    manhattan = sum(abs(p1.get(d, 0.5) - p2.get(d, 0.5)) for d in _PERSONALITY_DIMS)
+    return 1.0 - manhattan / n_dims
 
 
 class InfluenceScorer:
@@ -110,6 +125,11 @@ class NetworkGenerator:
 
         # Step 7: Validate
         metrics = self._validate_network_metrics(merged, config, bridge_edges)
+        if not metrics.is_valid:
+            logger.warning(
+                "Network validation failed (seed=%s): %s",
+                seed, "; ".join(metrics.validation_errors),
+            )
 
         # Identify influencer (hub) nodes
         influencer_ids = [
@@ -304,7 +324,11 @@ class NetworkGenerator:
             if not other_cids:
                 continue
             target_cid = rng.choice(other_cids)
-            target_node = rng.choice(community_nodes[target_cid])
+            # Degree-weighted preferential attachment for bridge edges (P5)
+            # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#5.2
+            target_candidates = community_nodes[target_cid]
+            degrees = [G.degree(n) + 1 for n in target_candidates]  # +1 avoids zero
+            target_node = rng.choices(target_candidates, weights=degrees, k=1)[0]
             if not G.has_edge(node, target_node):
                 G.add_edge(node, target_node, weight=0.3, is_bridge=True)
                 bridge_edges.append((node, target_node))
@@ -316,12 +340,29 @@ class NetworkGenerator:
         G: nx.Graph,
         config: NetworkConfig,
     ) -> None:
-        """Step 5: Compute edge weights based on personality similarity.
+        """Step 5: Compute edge weights based on community trust + homophily.
         SPEC: docs/spec/02_NETWORK_SPEC.md#step-5-edge-weight-computation
+        SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§2 HM-01
 
         For edges without pre-computed weights, assign based on
-        community similarity and random interaction frequency.
+        community similarity, random interaction frequency, and
+        optionally personality homophily (when homophily_weight > 0).
         """
+        hw = config.homophily_weight
+        if hw > 0:
+            # HM-02: rescale so trust + freq + homophily = 1.0
+            total_orig = config.trust_similarity_weight + config.interaction_freq_weight
+            if total_orig > 0:
+                scale = (1.0 - hw) / total_orig
+                tw = config.trust_similarity_weight * scale
+                fw = config.interaction_freq_weight * scale
+            else:
+                tw = 0.0
+                fw = 0.0
+        else:
+            tw = config.trust_similarity_weight
+            fw = config.interaction_freq_weight
+
         for u, v, data in G.edges(data=True):
             if "weight" in data and data.get("is_bridge", False):
                 # Bridge edges keep their initial weight of 0.3
@@ -339,10 +380,18 @@ class NetworkGenerator:
             # Interaction frequency: uniform baseline
             interaction_freq = 0.5
 
-            weight = (
-                config.trust_similarity_weight * trust
-                + config.interaction_freq_weight * interaction_freq
-            )
+            weight = tw * trust + fw * interaction_freq
+
+            # HM-01: add personality homophily when weight > 0 and data available
+            if hw > 0:
+                u_pers = G.nodes[u].get("personality")
+                v_pers = G.nodes[v].get("personality")
+                if u_pers and v_pers:
+                    weight += hw * _personality_similarity(u_pers, v_pers)
+                else:
+                    # HM-03: fallback — redistribute homophily to trust+freq
+                    weight += hw * 0.5  # neutral contribution
+
             # Clamp to [0, 1]
             weight = max(0.0, min(1.0, weight))
             G[u][v]["weight"] = weight
@@ -394,13 +443,26 @@ class NetworkGenerator:
         # Clustering coefficient
         cc = nx.average_clustering(G)
 
-        # Average path length (use largest connected component if disconnected)
-        if nx.is_connected(G):
-            apl = nx.average_shortest_path_length(G)
-        else:
+        # Average path length — sampled for large graphs (P5)
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#5.3b
+        _SAMPLE_THRESHOLD = 1000
+        target_graph = G
+        if not nx.is_connected(G):
             largest_cc = max(nx.connected_components(G), key=len)
-            subgraph = G.subgraph(largest_cc)
-            apl = nx.average_shortest_path_length(subgraph)
+            target_graph = G.subgraph(largest_cc)
+        if len(target_graph) <= _SAMPLE_THRESHOLD:
+            apl = nx.average_shortest_path_length(target_graph)
+        else:
+            # Sample-based APL estimation to avoid O(N²)
+            _rng = random.Random(len(target_graph))
+            sample_nodes = _rng.sample(list(target_graph.nodes()), min(100, len(target_graph)))
+            total_dist = 0
+            count = 0
+            for n in sample_nodes:
+                lengths = nx.single_source_shortest_path_length(target_graph, n)
+                total_dist += sum(lengths.values())
+                count += len(lengths)
+            apl = total_dist / max(count, 1)
 
         # Degree distribution
         degree_seq = [d for _, d in G.degree()]
@@ -413,6 +475,23 @@ class NetworkGenerator:
             community_sizes[cid] = community_sizes.get(cid, 0) + 1
 
         bridge_count = len(bridge_edges)
+
+        # Modularity — measures community structure quality (P5)
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#5.1
+        try:
+            communities_partition = [
+                {n for n, d in G.nodes(data=True) if d.get("community_id") == c}
+                for c in set(nx.get_node_attributes(G, "community_id").values())
+            ]
+            modularity = nx.community.modularity(G, communities_partition) if communities_partition else 0.0
+        except Exception:
+            modularity = 0.0
+
+        # Assortativity (P5)
+        try:
+            assortativity = nx.degree_assortativity_coefficient(G)
+        except Exception:
+            assortativity = 0.0
 
         # Validation
         if not (config.min_clustering_coefficient <= cc <= config.max_clustering_coefficient):
@@ -437,4 +516,6 @@ class NetworkGenerator:
             bridge_count=bridge_count,
             is_valid=is_valid,
             validation_errors=errors,
+            modularity=modularity,
+            assortativity=assortativity,
         )

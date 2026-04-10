@@ -38,6 +38,7 @@ class NetworkConfig:
     # Edge weight
     trust_similarity_weight: float = 0.6
     interaction_freq_weight: float = 0.4
+    homophily_weight: float = 0.0  # HM-02: personality similarity influence on edges
 
     # Validation thresholds
     min_clustering_coefficient: float = 0.2
@@ -74,6 +75,8 @@ class NetworkMetrics:
     bridge_count: int
     is_valid: bool
     validation_errors: list[str] = field(default_factory=list)
+    modularity: float = 0.0
+    assortativity: float = 0.0
 
 
 @dataclass

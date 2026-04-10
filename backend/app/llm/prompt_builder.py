@@ -1,11 +1,26 @@
 """Prompt construction for agent cognition, expert analysis, and memory reflection.
 SPEC: docs/spec/05_LLM_SPEC.md#5-prompt-builder
+SPEC: docs/spec/19_SIMULATION_QUALITY_SPEC.md#sq-04
+SPEC: docs/spec/20_SIMULATION_QUALITY_P2_SPEC.md#§3
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.llm.schema import LLMPrompt
+
+# SQ-04: 프롬프트 구조 토큰 — 사용자 콘텐츠에서 제거해야 할 패턴
+_INJECTION_PATTERNS = re.compile(
+    r"---|###|\"\"\"|\'\'\'"
+    r"|<\||\|>"
+    r"|\[INST\]|\[/INST\]"
+    r"|<system>|</system>"
+    r"|<\|im_start\|>|<\|im_end\|>"
+    r"|<\|endoftext\|>",
+    re.IGNORECASE,
+)
+_MAX_CONTENT_LENGTH = 500
 
 
 class PromptBuilder:
@@ -15,6 +30,35 @@ class PromptBuilder:
 
     All methods return LLMPrompt with response_format="json".
     """
+
+    def sanitize_content(self, content: str) -> str:
+        """사용자/캠페인 제공 콘텐츠에서 프롬프트 인젝션 패턴을 제거한다.
+
+        SPEC: docs/spec/19_SIMULATION_QUALITY_SPEC.md#sq-04
+
+        처리 규칙:
+        1. 500자 초과 시 잘라내기 + "[truncated]" 추가
+        2. 프롬프트 구조 토큰 → "[SEP]" 대체
+        3. 연속 3개 이상 개행 → 2개로 압축
+        4. null byte / non-printable 제거
+        """
+        if not content:
+            return content
+
+        # 1. 길이 제한
+        if len(content) > _MAX_CONTENT_LENGTH:
+            content = content[:_MAX_CONTENT_LENGTH] + "...[truncated]"
+
+        # 2. 프롬프트 구조 토큰 격리
+        content = _INJECTION_PATTERNS.sub("[SEP]", content)
+
+        # 3. 연속 개행 압축
+        content = re.sub(r"\n{3,}", "\n\n", content)
+
+        # 4. non-printable 제거 (개행/탭 제외)
+        content = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", content)
+
+        return content
 
     def build_agent_cognition_prompt(
         self,
@@ -26,9 +70,10 @@ class PromptBuilder:
         """Build prompt for agent cognition (Tier 3 evaluation).
 
         SPEC: docs/spec/05_LLM_SPEC.md#5-prompt-builder
+        SPEC: docs/spec/19_SIMULATION_QUALITY_SPEC.md#sq-04
 
         System: agent identity + personality + response format
-        User: campaign exposure + memories + emotion + neighbor actions
+        User: campaign exposure (격리) + memories + emotion + neighbor actions
         """
         # Extract personality values
         personality = agent.personality
@@ -62,11 +107,12 @@ class PromptBuilder:
             ]
             neighbor_summary = "; ".join(actions)
 
-        # Campaign message
-        campaign_message = getattr(campaign, "message", str(campaign))
+        # SQ-04: 캠페인 메시지 sanitize + 명시적 XML 경계로 격리
+        raw_campaign_message = getattr(campaign, "message", str(campaign))
+        campaign_message = self.sanitize_content(raw_campaign_message)
 
         user = (
-            f"You have been exposed to: {campaign_message}\n"
+            f"<campaign_content>\n{campaign_message}\n</campaign_content>\n"
             f"Your recent memories: {memories_text}\n"
             f"Your current emotion: interest={emotion.interest}, "
             f"trust={emotion.trust}, skepticism={emotion.skepticism}, "
@@ -178,6 +224,56 @@ class PromptBuilder:
             },
             response_format="json",
             max_tokens=256,
+        )
+
+
+    def build_content_generation_prompt(
+        self,
+        agent: Any,
+        original_content: str,
+        action: Any,
+        step: int,
+    ) -> LLMPrompt:
+        """Build prompt for Tier 3 agent content generation (SHARE/COMMENT).
+
+        SPEC: docs/spec/20_SIMULATION_QUALITY_P2_SPEC.md#§3 CG-01/CG-02
+
+        Generates a short user post (≤ 140 chars) reflecting agent's personal framing.
+        Response format: JSON with key generated_text (str).
+        """
+        agent_id = str(agent.agent_id)
+        agent_type = agent.agent_type.value if hasattr(agent.agent_type, "value") else str(agent.agent_type)
+        action_str = action.value if hasattr(action, "value") else str(action)
+
+        system = (
+            f"You are simulating agent {agent_id}, a {agent_type} in community {agent.community_id}.\n"
+            f"You are performing a {action_str} action on social media.\n"
+            f"Write a short authentic post (≤ 140 characters) in your voice.\n"
+            f"Respond ONLY in JSON with key: generated_text"
+        )
+
+        # CG-02: sanitize original content before embedding in prompt
+        safe_content = self.sanitize_content(original_content)
+
+        user = (
+            f"Original content you are reacting to:\n"
+            f"<source_content>\n{safe_content}\n</source_content>\n\n"
+            f"Action: {action_str} (step {step})\n"
+            f"Write your short {action_str} post (≤ 140 chars). "
+            f"Make it personal and authentic to your perspective.\n"
+            f"Respond in JSON: {{\"generated_text\": \"...\"}}"
+        )
+
+        return LLMPrompt(
+            system=system,
+            user=user,
+            context={
+                "agent_id": agent_id,
+                "action": action_str,
+                "step": step,
+            },
+            response_format="json",
+            max_tokens=128,
         )
 
 

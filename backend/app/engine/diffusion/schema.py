@@ -117,6 +117,7 @@ class PropagationEvent:
     step: int
     message_id: UUID
     contextual_packet: "ContextualPacket | None" = None
+    generated_content: str | None = None  # CG-03: Tier 3 agent-generated post text
 
 
 @dataclass

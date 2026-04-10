@@ -73,6 +73,18 @@ class AgentType(str, Enum):
     EXPERT = "expert"
 
 
+class DiffusionState(str, Enum):
+    """SIR-inspired diffusion state for information spread.
+    SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#3.1
+    """
+    SUSCEPTIBLE = "susceptible"
+    EXPOSED = "exposed"
+    INTERESTED = "interested"
+    ADOPTED = "adopted"
+    RECOVERED = "recovered"
+    RESISTANT = "resistant"
+
+
 class AgentAction(str, Enum):
     """SPEC: docs/spec/01_AGENT_SPEC.md#agent-action-enum"""
     # Passive
@@ -140,6 +152,8 @@ class AgentState:
     llm_tier_used: int | None
     activity_vector: list[float] = field(default_factory=lambda: [0.5] * 24)
     cumulative_drift: dict[str, float] = field(default_factory=dict)
+    diffusion_state: DiffusionState = DiffusionState.SUSCEPTIBLE
+    last_reflection_step: int = -1  # RF-01: step when agent last reflected
 
 
 __all__ = [
@@ -149,4 +163,5 @@ __all__ = [
     "AgentAction",
     "ACTION_WEIGHT",
     "AgentState",
+    "DiffusionState",
 ]
