@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     agent_max_memories: int = 1000
     agent_max_personality_drift: float = 0.3
     memory_fallback_alpha: float = 0.6
-    memory_fallback_beta: float = 0.0
+    memory_fallback_beta: float = 0.25
     memory_fallback_gamma: float = 0.3
     memory_fallback_delta: float = 0.1
 

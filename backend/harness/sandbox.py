@@ -123,7 +123,7 @@ class SimulationSandbox:
             resolved_config = dc_replace(resolved_config, random_seed=seed)
 
         state = orchestrator.create_simulation(resolved_config)
-        orchestrator.start(resolved_config.simulation_id)
+        await orchestrator.start(resolved_config.simulation_id)
 
         sandbox = cls(orchestrator=orchestrator, simulation_id=resolved_config.simulation_id)
         try:
@@ -210,7 +210,7 @@ class SimulationSandbox:
 
         SPEC: docs/spec/09_HARNESS_SPEC.md#f24-simulation-sandbox
         """
-        self._orchestrator.inject_event(self._simulation_id, event=event)
+        await self._orchestrator.inject_event(self._simulation_id, event=event)
 
 
 __all__ = ["SimulationSandbox"]

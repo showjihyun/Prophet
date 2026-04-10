@@ -361,7 +361,7 @@ async def run_scenario(
     # a ghost simulation running in memory with no DB backing — steps
     # complete but are invisible to all DB-backed queries (list/export/compare).
     if await persist.simulation_row_exists(session, state.simulation_id):
-        orchestrator.start(state.simulation_id)
+        await orchestrator.start(state.simulation_id)
         scenario.simulation_id = state.simulation_id
         scenario.status = "running"
         try:

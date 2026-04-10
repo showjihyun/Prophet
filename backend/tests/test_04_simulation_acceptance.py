@@ -106,7 +106,7 @@ class TestSIM02_RunSteps:
         orch = SimulationOrchestrator()
         config = _make_config(max_steps=10, seed=42)
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         adoption_rates: list[float] = []
         for _ in range(10):
@@ -126,7 +126,7 @@ class TestSIM02_RunSteps:
         orch = SimulationOrchestrator()
         config = _make_config(max_steps=3, seed=42)
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         result = await orch.run_step(state.simulation_id)
         assert result.simulation_id == state.simulation_id
@@ -149,7 +149,7 @@ class TestSIM03_PauseMidStep:
         orch = SimulationOrchestrator()
         config = _make_config(max_steps=10, seed=42)
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         await orch.run_step(state.simulation_id)
         await orch.pause(state.simulation_id)
@@ -161,7 +161,7 @@ class TestSIM03_PauseMidStep:
         orch = SimulationOrchestrator()
         config = _make_config(max_steps=10, seed=42)
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         await orch.run_step(state.simulation_id)
         await orch.pause(state.simulation_id)
@@ -182,7 +182,7 @@ class TestSIM04_ModifyAgentBelief:
         orch = SimulationOrchestrator()
         config = _make_config(max_steps=10, seed=42)
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         # Run one step
         await orch.run_step(state.simulation_id)
@@ -216,7 +216,7 @@ class TestSIM05_InjectNegativeEvent:
         orch = SimulationOrchestrator()
         config = _make_config(max_steps=10, seed=42)
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         # Run a baseline step
         result_before = await orch.run_step(state.simulation_id)
@@ -230,7 +230,7 @@ class TestSIM05_InjectNegativeEvent:
             channel="direct",
             timestamp=state.current_step,
         )
-        orch.inject_event(state.simulation_id, event=negative_event)
+        await orch.inject_event(state.simulation_id, event=negative_event)
 
         # Run step after injection
         result_after = await orch.run_step(state.simulation_id)
@@ -258,7 +258,7 @@ class TestSIM06_ReplayDeterministic:
             orch = SimulationOrchestrator()
             config = _make_config(max_steps=5, seed=12345)
             state = orch.create_simulation(config)
-            orch.start(state.simulation_id)
+            await orch.start(state.simulation_id)
 
             for _ in range(5):
                 result = await orch.run_step(state.simulation_id)
@@ -286,7 +286,7 @@ class TestSIM07_StepPerformance:
             seed=42,
         )
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         start = time.perf_counter()
         result = await orch.run_step(state.simulation_id)
@@ -312,7 +312,7 @@ class TestSIM08_WebSocketPlaceholder:
         orch = SimulationOrchestrator()
         config = _make_config(n_communities=2, community_size=20, max_steps=2, seed=42)
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         start = time.perf_counter()
         result = await orch.run_step(state.simulation_id)
@@ -340,14 +340,14 @@ class TestSIM10_ScenarioComparison:
             n_communities=2, community_size=30, max_steps=5, seed=42
         )
         state_a = orch_a.create_simulation(config_a)
-        orch_a.start(state_a.simulation_id)
+        await orch_a.start(state_a.simulation_id)
 
         orch_b = SimulationOrchestrator()
         config_b = _make_config(
             n_communities=2, community_size=30, max_steps=5, seed=99
         )
         state_b = orch_b.create_simulation(config_b)
-        orch_b.start(state_b.simulation_id)
+        await orch_b.start(state_b.simulation_id)
 
         # Run both
         for _ in range(5):

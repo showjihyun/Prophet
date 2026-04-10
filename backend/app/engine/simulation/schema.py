@@ -99,6 +99,29 @@ class SimulationConfig:
     # Seeding
     random_seed: int | None = None
 
+    def __post_init__(self) -> None:
+        """Validate configuration invariants.
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.5
+        """
+        if self.max_steps < 1:
+            raise ValueError(f"max_steps must be >= 1, got {self.max_steps}")
+        if not (0.0 <= self.llm_tier3_ratio <= 1.0):
+            raise ValueError(
+                f"llm_tier3_ratio must be in [0.0, 1.0], got {self.llm_tier3_ratio}"
+            )
+        if not (0.0 <= self.slm_llm_ratio <= 1.0):
+            raise ValueError(
+                f"slm_llm_ratio must be in [0.0, 1.0], got {self.slm_llm_ratio}"
+            )
+        for c in self.communities:
+            if c.size < 1:
+                raise ValueError(
+                    f"Community '{c.id}' size must be >= 1, got {c.size}"
+                )
+        if self.random_seed is None:
+            import os
+            self.random_seed = int.from_bytes(os.urandom(4), "big")
+
 
 @dataclass
 class AgentModification:

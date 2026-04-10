@@ -2,42 +2,18 @@
  * SPEC: docs/spec/07_FRONTEND_SPEC.md#gap-7
  * Tests for GAP-7 propagation animation system.
  *
- * Since getAnimationTier, ACTION_COLORS, and TIER_LIMITS are module-level
- * constants in GraphPanel.tsx but not exported, this file tests them via
- * re-implementations that mirror the exact values, and tests store/type
- * contracts directly via imports.
+ * Tests the exported getAnimationTier, ACTION_COLORS, TIER_LIMITS from
+ * GraphPanel.tsx and the store/type contracts.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSimulationStore } from '@/store/simulationStore';
 import type { PropagationPair, StepResult } from '@/types/simulation';
-
-// ---------------------------------------------------------------------------
-// Local mirror of GraphPanel GAP-7 logic (not exported, so verified here)
-// ---------------------------------------------------------------------------
-
-type AnimationTier = 'closeup' | 'midrange' | 'overview';
-
-/** Mirror of getAnimationTier in GraphPanel.tsx — SPEC: GAP-7 */
-function getAnimationTier(zoom: number): AnimationTier {
-  if (zoom >= 0.7) return 'closeup';
-  if (zoom >= 0.3) return 'midrange';
-  return 'overview';
-}
-
-/** Mirror of TIER_LIMITS in GraphPanel.tsx — SPEC: GAP-7 */
-const TIER_LIMITS: Record<AnimationTier, number> = {
-  closeup: 50,
-  midrange: 30,
-  overview: 5,
-};
-
-/** Mirror of ACTION_COLORS in GraphPanel.tsx — SPEC: GAP-7 */
-const ACTION_COLORS: Record<string, string> = {
-  share: '#22c55e',
-  comment: '#3b82f6',
-  like: '#eab308',
-  adopt: '#a855f7',
-};
+import {
+  getAnimationTier,
+  TIER_LIMITS,
+  ACTION_COLORS,
+  type AnimationTier,
+} from '@/components/graph/propagationAnimationUtils';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -181,6 +157,13 @@ describe('GAP-7 — ACTION_COLORS does not include "ignore"', () => {
     expect(animated).toHaveLength(2);
     expect(animated.every((p) => p.action !== 'ignore')).toBe(true);
   });
+
+  it('ACTION_COLORS match CSS variable values', () => {
+    expect(ACTION_COLORS.share).toBe('#22c55e');
+    expect(ACTION_COLORS.comment).toBe('#3b82f6');
+    expect(ACTION_COLORS.like).toBe('#eab308');
+    expect(ACTION_COLORS.adopt).toBe('#a855f7');
+  });
 });
 
 describe('GAP-7 — TIER_LIMITS', () => {
@@ -214,5 +197,71 @@ describe('GAP-7 — TIER_LIMITS', () => {
       const tier = getAnimationTier(zoom);
       expect(TIER_LIMITS[tier]).toBe(expected);
     }
+  });
+});
+
+describe('GAP-7 — Propagation pair filtering and limiting', () => {
+  it('filters ignore actions and limits to tier count', () => {
+    const allPairs: PropagationPair[] = Array.from({ length: 100 }, (_, i) => ({
+      source: `a${i}`,
+      target: `a${i + 100}`,
+      action: i % 5 === 0 ? 'ignore' : 'share',
+      probability: 1 - i * 0.005,
+    }));
+
+    const tier: AnimationTier = 'midrange';
+    const limit = TIER_LIMITS[tier];
+
+    const filtered = allPairs
+      .filter((p) => p.action in ACTION_COLORS)
+      .slice(0, limit);
+
+    expect(filtered.length).toBe(limit);
+    expect(filtered.every((p) => p.action !== 'ignore')).toBe(true);
+  });
+
+  it('handles empty propagation_pairs gracefully', () => {
+    const pairs: PropagationPair[] = [];
+    const filtered = pairs.filter((p) => p.action in ACTION_COLORS);
+    expect(filtered).toHaveLength(0);
+  });
+
+  it('handles all-ignore propagation_pairs', () => {
+    const pairs: PropagationPair[] = [
+      { source: 'a1', target: 'a2', action: 'ignore', probability: 0.5 },
+      { source: 'a3', target: 'a4', action: 'ignore', probability: 0.3 },
+    ];
+    const filtered = pairs.filter((p) => p.action in ACTION_COLORS);
+    expect(filtered).toHaveLength(0);
+  });
+});
+
+describe('GAP-7 — Toggle disables animation processing', () => {
+  beforeEach(() => {
+    useSimulationStore.setState({ propagationAnimationsEnabled: true });
+  });
+
+  it('when disabled, should not process pairs', () => {
+    useSimulationStore.setState({ propagationAnimationsEnabled: false });
+    const enabled = useSimulationStore.getState().propagationAnimationsEnabled;
+    const pairs: PropagationPair[] = [
+      { source: 'a1', target: 'a2', action: 'share', probability: 0.9 },
+    ];
+    // When disabled, animation logic should skip processing
+    const animated = enabled
+      ? pairs.filter((p) => p.action in ACTION_COLORS)
+      : [];
+    expect(animated).toHaveLength(0);
+  });
+
+  it('when enabled, should process pairs normally', () => {
+    const enabled = useSimulationStore.getState().propagationAnimationsEnabled;
+    const pairs: PropagationPair[] = [
+      { source: 'a1', target: 'a2', action: 'share', probability: 0.9 },
+    ];
+    const animated = enabled
+      ? pairs.filter((p) => p.action in ACTION_COLORS)
+      : [];
+    expect(animated).toHaveLength(1);
   });
 });

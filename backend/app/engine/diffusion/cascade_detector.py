@@ -194,20 +194,27 @@ class CascadeDetector:
         """Polarization: variance > threshold.
 
         SPEC: docs/spec/03_DIFFUSION_SPEC.md#cascadedetector
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#6.5
         """
+        # Collect ALL polarized communities (P6 fix — was return-on-first)
+        polarized: list[tuple] = []
         for community_id, variance in current.community_variances.items():
             if variance > config.polarization_variance_threshold:
-                return EmergentEvent(
-                    event_type="polarization",
-                    step=current.step,
-                    community_id=community_id,
-                    severity=min(1.0, variance),
-                    description=(
-                        f"Polarization detected in community {community_id}: "
-                        f"variance={variance:.3f}"
-                    ),
-                    affected_agent_ids=current.adopted_agent_ids,
-                )
+                polarized.append((community_id, variance))
+        if polarized:
+            max_var = max(v for _, v in polarized)
+            cids = ", ".join(str(cid) for cid, _ in polarized)
+            return EmergentEvent(
+                event_type="polarization",
+                step=current.step,
+                community_id=polarized[0][0],
+                severity=min(1.0, max_var),
+                description=(
+                    f"Polarization in {len(polarized)} community(ies) [{cids}]: "
+                    f"max variance={max_var:.3f}"
+                ),
+                affected_agent_ids=current.adopted_agent_ids,
+            )
         return None
 
     def _check_collapse(
@@ -254,7 +261,10 @@ class CascadeDetector:
         """Echo chamber: internal/external ratio > threshold.
 
         SPEC: docs/spec/03_DIFFUSION_SPEC.md#cascadedetector
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#6.5
         """
+        # Collect ALL echo chamber communities (P6 fix — was return-on-first)
+        echo_chambers: list[tuple] = []
         for community_id in current.internal_links:
             internal = current.internal_links.get(community_id, 0)
             external = current.external_links.get(community_id, 0)
@@ -268,17 +278,22 @@ class CascadeDetector:
                 ratio = internal / external
 
             if ratio > config.echo_chamber_ratio:
-                return EmergentEvent(
-                    event_type="echo_chamber",
-                    step=current.step,
-                    community_id=community_id,
-                    severity=min(1.0, ratio / (config.echo_chamber_ratio * 2)),
-                    description=(
-                        f"Echo chamber in community {community_id}: "
-                        f"internal/external ratio={ratio:.1f}"
-                    ),
-                    affected_agent_ids=[],
-                )
+                echo_chambers.append((community_id, ratio))
+
+        if echo_chambers:
+            max_ratio = max(r for _, r in echo_chambers)
+            cids = ", ".join(str(cid) for cid, _ in echo_chambers)
+            return EmergentEvent(
+                event_type="echo_chamber",
+                step=current.step,
+                community_id=echo_chambers[0][0],
+                severity=min(1.0, max_ratio / (config.echo_chamber_ratio * 2)),
+                description=(
+                    f"Echo chamber in {len(echo_chambers)} community(ies) [{cids}]: "
+                    f"max ratio={max_ratio:.1f}"
+                ),
+                affected_agent_ids=[],
+            )
         return None
 
 

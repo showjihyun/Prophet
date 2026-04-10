@@ -75,7 +75,7 @@ class ScaleBenchmark:
         config = self._make_config(agent_count, steps)
 
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         step_times: list[float] = []
         for _ in range(steps):

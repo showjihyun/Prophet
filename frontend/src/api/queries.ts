@@ -399,11 +399,15 @@ export function useRunAllSimulation() {
 // ───────── Campaign / intervention dispatches ─────────
 
 export function useInjectEvent() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ simId, event }: {
       simId: string;
       event: Parameters<typeof apiClient.simulations.injectEvent>[1];
     }) => apiClient.simulations.injectEvent(simId, event),
+    onSuccess: (_data, { simId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.simulation(simId) });
+    },
   });
 }
 

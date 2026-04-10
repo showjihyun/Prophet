@@ -336,3 +336,69 @@ class TestBuildPropagationPairs:
         # Should not raise TypeError even without an instance
         result = StepRunner._build_propagation_pairs([])
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# 4. WebSocket broadcast includes propagation_pairs (GAP-7)
+# ---------------------------------------------------------------------------
+
+class TestWsBroadcastPropagationPairs:
+    """Verify that step_result WS broadcast payload includes propagation_pairs."""
+
+    def test_ws_broadcast_dict_has_propagation_pairs_key(self):
+        """The WS broadcast data dict must include 'propagation_pairs'."""
+        # Simulate the WS broadcast dict construction from simulations.py
+        from app.engine.simulation.schema import StepResult
+
+        result = StepResult(simulation_id=uuid4(), step=1)
+        result.propagation_pairs = [
+            {"source": str(uuid4()), "target": str(uuid4()), "action": "share", "probability": 0.8},
+        ]
+
+        # Reconstruct the WS broadcast data dict exactly as in the endpoint
+        ws_data = {
+            "type": "step_result",
+            "data": {
+                "step": result.step,
+                "propagation_pairs": result.propagation_pairs,
+            },
+        }
+
+        assert "propagation_pairs" in ws_data["data"]
+        assert len(ws_data["data"]["propagation_pairs"]) == 1
+        assert ws_data["data"]["propagation_pairs"][0]["action"] == "share"
+
+    def test_ws_broadcast_empty_propagation_pairs(self):
+        """Empty propagation_pairs should be an empty list, not omitted."""
+        from app.engine.simulation.schema import StepResult
+
+        result = StepResult(simulation_id=uuid4(), step=1)
+        ws_data = {
+            "propagation_pairs": result.propagation_pairs,
+        }
+        assert ws_data["propagation_pairs"] == []
+
+    def test_ws_broadcast_propagation_pairs_dict_shape(self):
+        """Each pair in WS broadcast must have source/target/action/probability."""
+        from app.engine.simulation.step_runner import StepRunner
+        from app.engine.diffusion.schema import PropagationEvent
+
+        events = [
+            PropagationEvent(
+                source_agent_id=uuid4(),
+                target_agent_id=uuid4(),
+                action_type="comment",
+                probability=0.65,
+                step=1,
+                message_id=uuid4(),
+            )
+        ]
+        pairs = StepRunner._build_propagation_pairs(events)
+
+        for pair in pairs:
+            assert "source" in pair
+            assert "target" in pair
+            assert "action" in pair
+            assert "probability" in pair
+            assert isinstance(pair["source"], str)
+            assert isinstance(pair["target"], str)

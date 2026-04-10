@@ -23,7 +23,7 @@ def _make_sim_config(n_communities=2):
 class TestSimulationStateTransitions:
     """SPEC: 04_SIMULATION_SPEC.md#error-specification — lifecycle errors"""
 
-    def test_invalid_transition_completed_to_running_raises(self):
+    async def test_invalid_transition_completed_to_running_raises(self):
         """COMPLETED → RUNNING is invalid state transition."""
         from app.engine.simulation.orchestrator import SimulationOrchestrator
         from app.engine.simulation.exceptions import InvalidStateTransitionError
@@ -32,9 +32,9 @@ class TestSimulationStateTransitions:
         # Force to COMPLETED state
         sim.status = "COMPLETED"
         with pytest.raises(InvalidStateTransitionError):
-            orch.start(sim.simulation_id)
+            await orch.start(sim.simulation_id)
 
-    def test_invalid_transition_failed_to_running_raises(self):
+    async def test_invalid_transition_failed_to_running_raises(self):
         """FAILED → RUNNING is invalid state transition."""
         from app.engine.simulation.orchestrator import SimulationOrchestrator
         from app.engine.simulation.exceptions import InvalidStateTransitionError
@@ -42,7 +42,7 @@ class TestSimulationStateTransitions:
         sim = orch.create_simulation(_make_sim_config())
         sim.status = "FAILED"
         with pytest.raises(InvalidStateTransitionError):
-            orch.start(sim.simulation_id)
+            await orch.start(sim.simulation_id)
 
     @pytest.mark.asyncio
     async def test_modify_agent_while_running_raises(self):
@@ -68,16 +68,16 @@ class TestSimulationInputValidation:
         with pytest.raises(ValueError):
             orch.create_simulation(config)
 
-    def test_inject_unknown_event_type_raises(self):
+    async def test_inject_unknown_event_type_raises(self):
         """inject_event with unknown event type raises ValueError."""
         from app.engine.simulation.orchestrator import SimulationOrchestrator
         orch = SimulationOrchestrator()
         sim = orch.create_simulation(_make_sim_config())
         sim.status = "PAUSED"
         with pytest.raises(ValueError):
-            orch.inject_event(sim.simulation_id, event_type="UNKNOWN_TYPE", payload={})
+            await orch.inject_event(sim.simulation_id, event_type="UNKNOWN_TYPE", payload={})
 
-    def test_replay_step_beyond_current_raises(self):
+    async def test_replay_step_beyond_current_raises(self):
         """replay_step target step > current step raises ValueError."""
         from app.engine.simulation.orchestrator import SimulationOrchestrator
         orch = SimulationOrchestrator()
@@ -85,9 +85,9 @@ class TestSimulationInputValidation:
         sim.status = "PAUSED"
         sim.current_step = 5
         with pytest.raises(ValueError):
-            orch.replay_step(sim.simulation_id, target_step=10)
+            await orch.replay_step(sim.simulation_id, target_step=10)
 
-    def test_replay_step_not_persisted_raises(self):
+    async def test_replay_step_not_persisted_raises(self):
         """replay_step with non-persisted step raises StepNotFoundError."""
         from app.engine.simulation.orchestrator import SimulationOrchestrator
         from app.engine.simulation.exceptions import StepNotFoundError
@@ -96,13 +96,13 @@ class TestSimulationInputValidation:
         sim.status = "PAUSED"
         sim.current_step = 10
         with pytest.raises(StepNotFoundError):
-            orch.replay_step(sim.simulation_id, target_step=3)
+            await orch.replay_step(sim.simulation_id, target_step=3)
 
 
 class TestSimulationCapacity:
     """SPEC: 04_SIMULATION_SPEC.md#error-specification — concurrency limits"""
 
-    def test_max_concurrent_exceeded_raises(self):
+    async def test_max_concurrent_exceeded_raises(self):
         """Max 3 concurrent simulations → 4th raises SimulationCapacityError."""
         from app.engine.simulation.orchestrator import SimulationOrchestrator
         from app.engine.simulation.exceptions import SimulationCapacityError
@@ -110,11 +110,11 @@ class TestSimulationCapacity:
         # Start 3 simulations
         for _ in range(3):
             sim = orch.create_simulation(_make_sim_config())
-            orch.start(sim.simulation_id)
+            await orch.start(sim.simulation_id)
         # 4th should fail
         sim4 = orch.create_simulation(_make_sim_config())
         with pytest.raises(SimulationCapacityError):
-            orch.start(sim4.simulation_id)
+            await orch.start(sim4.simulation_id)
 
 
 class TestSimulationRecovery:
@@ -127,7 +127,7 @@ class TestSimulationRecovery:
         from unittest.mock import patch, AsyncMock
         orch = SimulationOrchestrator()
         sim = orch.create_simulation(_make_sim_config())
-        orch.start(sim.simulation_id)
+        await orch.start(sim.simulation_id)
         with patch.object(
             orch._step_runner, 'execute_step',
             new_callable=AsyncMock,
@@ -143,7 +143,7 @@ class TestSimulationRecovery:
         from app.engine.simulation.orchestrator import SimulationOrchestrator
         orch = SimulationOrchestrator()
         sim = orch.create_simulation(_make_sim_config())
-        orch.start(sim.simulation_id)
+        await orch.start(sim.simulation_id)
         # Simulate WS disconnect by setting no active connection
         sim.ws_connected = False
         await orch.run_step(sim.simulation_id)

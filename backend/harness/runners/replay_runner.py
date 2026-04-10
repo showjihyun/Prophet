@@ -95,14 +95,14 @@ class ReplayRunner:
         # Apply agent modifications if supplied
         # Modifications are applied per-index (one per agent, or broadcast if only one given)
         if modifications:
-            self._orchestrator.start(replay_id)
+            await self._orchestrator.start(replay_id)
             await self._orchestrator.pause(replay_id)
             for i, agent in enumerate(replay_state.agents):
                 mod = modifications[i] if i < len(modifications) else modifications[-1]
                 await self._orchestrator.modify_agent(replay_id, agent.agent_id, modifications=mod)
             await self._orchestrator.resume(replay_id)
         else:
-            self._orchestrator.start(replay_id)
+            await self._orchestrator.start(replay_id)
 
         # Run all steps and collect results
         results: list[StepResult] = []

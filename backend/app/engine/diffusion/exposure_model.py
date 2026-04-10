@@ -76,10 +76,18 @@ class ExposureModel:
 
         results: dict[UUID, ExposureResult] = {}
 
+        # PERF: Build reverse map once (O(N)) instead of per-agent (O(N²))
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#5.3a
+        _reverse_node_map: dict[int, UUID] | None = None
+        if agent_node_map is not None:
+            _reverse_node_map = {v: k for k, v in agent_node_map.items()}
+
         for agent in agents:
             # Phase 1: Candidate Generation
             candidates = self._generate_candidates(
-                agent, graph, active_events, step, agent_node_map=agent_node_map
+                agent, graph, active_events, step,
+                agent_node_map=agent_node_map,
+                reverse_node_map=_reverse_node_map,
             )
 
             # Phase 2: RecSys Feed Ranking
@@ -134,6 +142,7 @@ class ExposureModel:
         active_events: list[CampaignEvent],
         step: int,
         agent_node_map: dict[UUID, int] | None = None,
+        reverse_node_map: dict[int, UUID] | None = None,
     ) -> list[FeedItem]:
         """Phase 1: Generate all candidate feed items for an agent.
 
@@ -165,11 +174,8 @@ class ExposureModel:
             agent_node = self._find_agent_node(agent, nx_graph)
 
         if agent_node is not None and nx_graph.has_node(agent_node):
-            # PERF-16: build reverse map once from agent_node_map to avoid O(N) per neighbor
-            if agent_node_map is not None:
-                node_to_agent = {v: k for k, v in agent_node_map.items()}
-            else:
-                node_to_agent = None
+            # Use pre-built reverse map (P5 O(N²) fix)
+            node_to_agent = reverse_node_map
 
             for neighbor in nx_graph.neighbors(agent_node):
                 if node_to_agent is not None:

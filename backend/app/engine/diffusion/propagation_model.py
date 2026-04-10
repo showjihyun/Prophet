@@ -2,6 +2,7 @@
 SPEC: docs/spec/03_DIFFUSION_SPEC.md#propagationmodel
 """
 import logging
+import math
 import random
 from uuid import UUID, uuid4
 
@@ -139,8 +140,11 @@ class PropagationModel:
             if action == AgentAction.REPOST:
                 trust *= 0.7
 
-            # P(i→j) = influence_i * trust_ij * emotion_factor * message_strength
-            prob = influence * trust * max(0.0, emotion_factor) * message_strength
+            # P(i→j) = influence_i * trust_ij * smoothed_emotion * message_strength
+            # Sigmoid smoothing: never exactly 0, graceful degradation (P4)
+            # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#3.2
+            smoothed_emotion = 0.01 + 0.99 / (1.0 + math.exp(-4.0 * emotion_factor))
+            prob = influence * trust * smoothed_emotion * message_strength
 
             # ADOPT: passive propagation → P * 0.5
             if action == AgentAction.ADOPT:

@@ -106,8 +106,8 @@ class TestSentimentModelUpdateCommunity:
 
         result = model.update_community_sentiment(cid, agents, [])
 
-        # mean = 0.0, var = (0.25 + 0.25)/2 = 0.25
-        assert result.sentiment_variance == pytest.approx(0.25, abs=0.01)
+        # mean = 0.0, var = (0.25 + 0.25)/(2-1) = 0.50 (Bessel's correction)
+        assert result.sentiment_variance == pytest.approx(0.50, abs=0.01)
 
     def test_adoption_rate(self):
         model = SentimentModel()

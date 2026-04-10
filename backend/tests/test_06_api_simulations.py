@@ -208,6 +208,32 @@ class TestInjectEvent:
         )
         assert resp.status_code == 409
 
+    async def test_inject_with_target_communities(self, client: AsyncClient, sim_id: str):
+        """target_communities should be accepted and forwarded to orchestrator."""
+        await client.post(f"/api/v1/simulations/{sim_id}/start")
+        resp = await client.post(
+            f"/api/v1/simulations/{sim_id}/inject-event",
+            json={
+                "event_type": "controversy",
+                "content": "scandal in community A",
+                "controversy": 0.9,
+                "target_communities": ["A", "C"],
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "event_id" in data
+        assert "effective_step" in data
+
+    async def test_inject_unknown_type_400(self, client: AsyncClient, sim_id: str):
+        """Unknown event type should return 400."""
+        await client.post(f"/api/v1/simulations/{sim_id}/start")
+        resp = await client.post(
+            f"/api/v1/simulations/{sim_id}/inject-event",
+            json={"event_type": "UNKNOWN_TYPE", "content": "test"},
+        )
+        assert resp.status_code == 400
+
 
 @pytest.mark.phase6
 class TestReplayAndCompare:

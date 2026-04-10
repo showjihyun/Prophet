@@ -42,6 +42,8 @@ import { type CytoscapeGraph } from "../../api/client";
 import { useNetwork } from "../../api/queries";
 import { useSimulationStore } from "../../store/simulationStore";
 import { COMMUNITIES } from "@/config/constants";
+import type { PropagationPair } from "@/types/simulation";
+import { getAnimationTier, TIER_LIMITS, ACTION_COLORS } from "./propagationAnimationUtils";
 
 // --------------------------------------------------------------------------- //
 // Types                                                                       //
@@ -160,9 +162,14 @@ export default function GraphPanel() {
   const latestStep = useSimulationStore((s) => s.latestStep);
   const highlightedCommunity = useSimulationStore((s) => s.highlightedCommunity);
   const setHighlightedCommunity = useSimulationStore((s) => s.setHighlightedCommunity);
+  const propagationAnimEnabled = useSimulationStore((s) => s.propagationAnimationsEnabled);
 
   // Per-node mutable highlight flags kept off React state to avoid re-renders.
   const adoptedSetRef = useRef<Set<string>>(new Set());
+
+  // GAP-7: Active propagation link set (source→target keys that should show particles)
+  const activePropLinksRef = useRef<Map<string, string>>(new Map());
+  const propTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---- Load graph data on simulation change ------------------------------- //
   // TanStack Query — cached network graph, instant on revisit
@@ -209,6 +216,47 @@ export default function GraphPanel() {
     adoptedSetRef.current = newSet;
     fgRef.current?.refresh();
   }, [latestStep, graphData.nodes]);
+
+  // ---- GAP-7: Propagation animation effect -------------------------------- //
+  useEffect(() => {
+    if (!propagationAnimEnabled || !latestStep?.propagation_pairs?.length) {
+      activePropLinksRef.current.clear();
+      return;
+    }
+
+    // Determine current zoom tier and limit
+    const fg = fgRef.current;
+    const camera = fg ? (fg as unknown as { camera: () => { position: { length: () => number } } }).camera?.() : null;
+    const zoomDist = camera?.position?.length?.() ?? 500;
+    // Normalize zoom: closer = higher value (inverse distance, capped at 1.0)
+    const normalizedZoom = Math.min(1.0, 300 / Math.max(zoomDist, 1));
+    const tier = getAnimationTier(normalizedZoom);
+    const limit = TIER_LIMITS[tier];
+
+    // Filter out "ignore" actions and take top pairs by probability
+    const pairs = (latestStep.propagation_pairs as PropagationPair[])
+      .filter((p) => p.action in ACTION_COLORS)
+      .slice(0, limit);
+
+    const newMap = new Map<string, string>();
+    for (const p of pairs) {
+      const key = `${p.source}__${p.target}`;
+      newMap.set(key, ACTION_COLORS[p.action] ?? "#94a3b8");
+    }
+    activePropLinksRef.current = newMap;
+    fgRef.current?.refresh();
+
+    // Clear particles after CASCADE_TTL_MS (fade out)
+    if (propTimerRef.current) clearTimeout(propTimerRef.current);
+    propTimerRef.current = setTimeout(() => {
+      activePropLinksRef.current.clear();
+      fgRef.current?.refresh();
+    }, 8_000);
+
+    return () => {
+      if (propTimerRef.current) clearTimeout(propTimerRef.current);
+    };
+  }, [propagationAnimEnabled, latestStep]);
 
   // ---- Color + size callbacks (built-in InstancedMesh path) --------------- //
   const nodeColorFn = useCallback(
@@ -300,6 +348,42 @@ export default function GraphPanel() {
     [isLarge],
   );
 
+  // ---- GAP-7: Propagation particle callbacks ------------------------------ //
+  const linkParticlesFn = useCallback(
+    (link: object): number => {
+      if (!propagationAnimEnabled) return linkCount < 200 ? 1 : 0;
+      const l = link as GraphLink;
+      const srcId = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
+      const tgtId = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
+      const key = `${srcId}__${tgtId}`;
+      if (activePropLinksRef.current.has(key)) return 4;
+      return linkCount < 200 ? 1 : 0;
+    },
+    [propagationAnimEnabled, linkCount],
+  );
+
+  const linkParticleColorFn = useCallback(
+    (link: object): string => {
+      const l = link as GraphLink;
+      const srcId = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
+      const tgtId = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
+      const key = `${srcId}__${tgtId}`;
+      return activePropLinksRef.current.get(key) ?? "rgba(255,255,255,0.6)";
+    },
+    [],
+  );
+
+  const linkParticleWidthFn = useCallback(
+    (link: object): number => {
+      const l = link as GraphLink;
+      const srcId = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
+      const tgtId = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
+      const key = `${srcId}__${tgtId}`;
+      return activePropLinksRef.current.has(key) ? 2.0 : 0.8;
+    },
+    [],
+  );
+
   return (
     <div
       data-testid="graph-panel"
@@ -332,8 +416,9 @@ export default function GraphPanel() {
             linkColor={linkColorFn}
             linkWidth={0.3}
             linkOpacity={isLarge ? 0.35 : 0.55}
-            linkDirectionalParticles={linkCount < 200 ? 1 : 0}
-            linkDirectionalParticleWidth={0.8}
+            linkDirectionalParticles={linkParticlesFn}
+            linkDirectionalParticleColor={linkParticleColorFn}
+            linkDirectionalParticleWidth={linkParticleWidthFn}
             linkDirectionalParticleSpeed={0.005}
             cooldownTicks={isHuge ? 40 : isLarge ? 80 : 150}
             warmupTicks={isHuge ? 5 : 10}
