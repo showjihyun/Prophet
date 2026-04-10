@@ -8,13 +8,14 @@
  * Real-data-only: fetches the simulation's network graph from the API
  * and extracts the ego subgraph for the given agent. No mock data.
  */
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import cytoscape, { type Core, type EventObject } from "cytoscape";
 import { ZoomIn, ZoomOut, Maximize2, Filter, X } from "lucide-react";
 import { COMMUNITY_PALETTE } from "@/config/constants";
-import { apiClient, type CytoscapeGraph } from "../../api/client";
+import type { CytoscapeGraph } from "../../api/client";
 import { useSimulationStore } from "../../store/simulationStore";
+import { useNetwork } from "../../api/queries";
 
 const COMMUNITY_COLOR: Record<string, string> = { ...COMMUNITY_PALETTE };
 
@@ -115,7 +116,7 @@ function buildEgoFromNetwork(
   }));
 
   // 6. Add a few inter-neighbor edges for visual density (max 10).
-  const neighborIdArr = Array.from(neighborIds);
+  // neighborIdArr removed — inter-edge iteration uses neighborIds Set directly
   const interEdgeSet = new Set<string>();
   for (const e of graph.edges) {
     const src = String(e.data.source);
@@ -225,9 +226,6 @@ export default function EgoGraph({ agentId }: EgoGraphProps) {
   const simulationId =
     useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
 
-  const [loading, setLoading] = useState(true);
-  const [empty, setEmpty] = useState(false);
-
   // Community filter
   const [filterOpen, setFilterOpen] = useState(false);
   const [visibleCommunities, setVisibleCommunities] = useState<Set<string>>(
@@ -235,33 +233,40 @@ export default function EgoGraph({ agentId }: EgoGraphProps) {
   );
   const filterRef = useRef<HTMLDivElement>(null);
 
+  // Fetch network via TanStack Query (caches across re-renders)
+  const networkQuery = useNetwork(simulationId);
+  const loading = networkQuery.isLoading;
+
+  // Derive empty state from network query data (no setState in effect)
+  const empty = useMemo(() => {
+    if (!simulationId) return true;
+    const graph = networkQuery?.data as CytoscapeGraph | undefined;
+    if (!graph) return !networkQuery?.isLoading;
+    const egoData = buildEgoFromNetwork(graph, agentId);
+    return !egoData || egoData.nodes.length === 0;
+  }, [simulationId, networkQuery?.data, networkQuery?.isLoading, agentId]);
+
   useEffect(() => {
     if (!containerRef.current || !simulationId) {
-      setLoading(false);
-      setEmpty(true);
       return;
     }
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setEmpty(false);
-
-      let egoData: { nodes: EgoNode[]; edges: EgoEdge[] } | null = null;
-      try {
-        const graph = await apiClient.network.get(simulationId!);
+    // Derive ego graph data from cached network query (no setState in guard)
+    const graph = networkQuery.data as CytoscapeGraph | undefined;
+    let egoData: { nodes: EgoNode[]; edges: EgoEdge[] } | null = null;
+    try {
+      if (graph) {
         egoData = buildEgoFromNetwork(graph, agentId);
-      } catch {
-        /* network not available */
       }
+    } catch {
+      /* network not available */
+    }
 
-      if (cancelled || !containerRef.current) return;
-      if (!egoData || egoData.nodes.length === 0) {
-        setLoading(false);
-        setEmpty(true);
-        return;
-      }
+    if (!egoData || egoData.nodes.length === 0) {
+      return;
+    }
 
+    // Mount Cytoscape instance with ego graph data
+    {
       const cy = cytoscape({
         container: containerRef.current,
         elements: { nodes: egoData.nodes, edges: egoData.edges },
@@ -311,19 +316,15 @@ export default function EgoGraph({ agentId }: EgoGraphProps) {
       });
 
       cyRef.current = cy;
-      setLoading(false);
     }
 
-    load();
-
     return () => {
-      cancelled = true;
       if (cyRef.current) {
         cyRef.current.destroy();
         cyRef.current = null;
       }
     };
-  }, [agentId, simulationId]);
+  }, [agentId, simulationId, networkQuery.data]);
 
   // Community visibility filter
   useEffect(() => {
