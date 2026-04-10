@@ -7,6 +7,40 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.1.1.0] - 2026-04-10
+
+### Added
+- Simulation quality Phase 1: Exposure Fatigue model (exponential decay on repeated
+  ad exposure), real edge-weight perception from network topology, dynamic expert
+  opinion scoring (controversy × skepticism × channel), prompt injection defense
+  (sanitize + XML boundary isolation)
+- Simulation quality Phase 2: Emotional Contagion (neighbor excitement/skepticism
+  propagate through edges, alpha=0.15), Bounded Confidence opinion dynamics (Deffuant
+  model, epsilon=0.3, mu=0.5 prevents unrealistic consensus), Content Generation
+  prompt for Tier 3 agents to write personalized social posts
+- Simulation quality Phase 3: Reflection Engine (Simulacra-style periodic belief
+  revision from accumulated memories), Homophily edge weighting (personality
+  similarity influences network trust via Manhattan distance)
+- Inject event: target_communities filtering, bad_review event type support,
+  frontend cache invalidation on success, 14 InjectEventModal tests
+- EngineControlPanel frontend tests
+
+### Changed
+- PropagationEvent unified: single canonical type with action_type field, removing
+  getattr duck-typing hacks from BridgePropagator and StepRunner
+- types.py converted to pure re-export module (no duplicate class definitions)
+- ReflectionEngine wired into both sync tick() and async_tick() execution paths
+- AgentState gains last_reflection_step field for tracking reflection intervals
+
+### Fixed
+- Dead sync code removed: run_until_complete hack in tick.py (never executed in
+  production FastAPI context)
+- Fire-and-forget async tasks now log errors via _fire_and_forget helper (14 sites)
+- Persistence: bare except → specific types + logging for agent serialization
+- run_all: step_callback exceptions now isolated and logged (no more stuck RUNNING state)
+- Network generator: validation failures now logged (was silent)
+- _config_to_dict and _community_metric_to_dict: degraded fallbacks now log errors
+
 ## [0.1.0.0] - 2026-04-09
 
 ### Added
