@@ -57,10 +57,19 @@ jobs:
         run: npm ci
 
       - name: Type check
-        run: npx tsc --noEmit
+        # Must be `tsc -b`, not `tsc --noEmit`. The root tsconfig.json is
+        # references-only with `files: []`, so `tsc --noEmit` compiles the
+        # empty project and falsely returns 0 errors (silent no-op).
+        # Use build mode to walk tsconfig.app.json and tsconfig.node.json.
+        run: npx tsc -b
 
       - name: Lint
         run: npx eslint .
 
       - name: Unit tests (vitest)
         run: npx vitest run
+
+      - name: Build
+        # Re-runs tsc -b internally plus vite build, catching any bundler
+        # regressions (chunk layout, asset imports) the earlier steps miss.
+        run: npm run build
