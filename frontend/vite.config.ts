@@ -1,11 +1,14 @@
 /// <reference types="vitest" />
-import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
-// https://vite.dev/config/
-export default defineConfig({
+// defineConfig wrapper intentionally omitted: vitest/config adds the `test`
+// field via type augmentation, but mixing that import with vite's own
+// defineConfig causes a plugin-type collision (vitest ships a nested vite
+// copy). A plain object export is read identically by both tools at runtime
+// and keeps tsc -b happy. See commit log for the full story.
+export default {
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -22,7 +25,7 @@ export default defineConfig({
         // - Stable filenames → browser cache survives across route changes
         // - Heavy deps don't get duplicated into every consumer chunk
         // - Easier to spot regressions in the bundle table
-        manualChunks(id) {
+        manualChunks(id: string): string | undefined {
           if (!id.includes('node_modules')) return undefined
 
           // 3D rendering: three.js + react-force-graph-3d + their d3 deps.
@@ -65,4 +68,4 @@ export default defineConfig({
     css: true,
     exclude: ['e2e/**', 'node_modules/**'],
   },
-})
+}

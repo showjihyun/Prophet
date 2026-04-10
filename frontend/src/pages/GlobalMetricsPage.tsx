@@ -98,7 +98,9 @@ export default function GlobalMetricsPage() {
   // during fast simulations (speed 10 = 100ms/step = 10 req/s without this).
   useEffect(() => {
     if (!simId) { setLlmStats(null); return; }
-    if (latestStep > 0 && latestStep % 5 !== 0) return;
+    // Throttle: only hit /llm/stats every 5 steps once we're past step 0.
+    const stepNum = latestStep?.step ?? 0;
+    if (stepNum > 0 && stepNum % 5 !== 0) return;
     let cancelled = false;
     apiClient.llm.getStats(simId)
       .then((res) => {

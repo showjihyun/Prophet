@@ -8,6 +8,18 @@ import * as React from 'react';
 import * as rtl from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+// jsdom does not implement ResizeObserver. Components that query layout on
+// mount (GraphPanel, lazy-loaded chart containers) crash without it. Provide
+// a no-op stub globally so tests render instead of throwing.
+class ResizeObserverStub {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+}
+
 // react-force-graph-3d pulls in three.js which tries to use WebGL at module
 // load time. jsdom has no WebGL, so importing it crashes any test that
 // indirectly renders GraphPanel. Stub it globally with a no-op component
