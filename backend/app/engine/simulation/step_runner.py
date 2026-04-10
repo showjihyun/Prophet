@@ -204,11 +204,17 @@ def _build_graph_context(
     for cid, beliefs in community_agents.items():
         community_beliefs[cid] = sum(beliefs) / len(beliefs) if beliefs else 0.0
 
+    # Per-agent belief and emotion maps for opinion dynamics + emotional contagion
+    agent_beliefs: dict[UUID, float] = {a.agent_id: a.belief for a in agents}
+    agent_emotions = {a.agent_id: a.emotion for a in agents}
+
     return GraphContext(
         edges=edges,
         trust_matrix=trust_matrix,
         neighbor_ids=neighbor_ids,
         community_beliefs=community_beliefs,
+        agent_beliefs=agent_beliefs,
+        agent_emotions=agent_emotions,
     )
 
 
@@ -373,6 +379,15 @@ class StepRunner:
                 agents = state.agents
             env_events.extend(remaining)
 
+        # Separate injected events with target_communities for per-community filtering
+        targeted_inject_events: list[EnvironmentEvent] = []
+        global_env_events: list[EnvironmentEvent] = []
+        for ev in env_events:
+            if hasattr(ev, "target_communities") and ev.target_communities:
+                targeted_inject_events.append(ev)
+            else:
+                global_env_events.append(ev)
+
         # Tier config for communities
         tier_config = TierConfig(
             max_tier3_ratio=config.llm_tier3_ratio,
@@ -391,11 +406,25 @@ class StepRunner:
 
         # ── Phase 1: Intra-Community (parallel) ──
         community_orchs = self._build_community_orchestrators(state)
+
+        def _events_for_community(co: CommunityOrchestrator) -> list[EnvironmentEvent]:
+            """Filter targeted inject events: match on community UUID, config id, or name."""
+            if not targeted_inject_events:
+                return global_env_events
+            cid_str = str(co.community_id)
+            cname = co.community_config.name if co.community_config else ""
+            matched = [
+                ev for ev in targeted_inject_events
+                if cid_str in ev.target_communities
+                or cname in ev.target_communities
+            ]
+            return global_env_events + matched
+
         community_results: list[CommunityTickResult] = await asyncio.gather(*[
             co.tick(
                 step=step_num,
                 campaign_events=campaign_events,
-                env_events=env_events,
+                env_events=_events_for_community(co),
                 tier_config=tier_config,
                 seed=seed,
                 recsys_config=recsys_config,
@@ -421,7 +450,7 @@ class StepRunner:
         for cr in community_results:
             for ua in cr.updated_agents:
                 updated_agent = replace(ua, step=step_num + 1)
-                if env_events and ua.action != AgentAction.IGNORE:
+                if (global_env_events or targeted_inject_events) and ua.action != AgentAction.IGNORE:
                     updated_agent = replace(
                         updated_agent,
                         exposure_count=updated_agent.exposure_count + 1,
@@ -521,9 +550,11 @@ class StepRunner:
         all_beliefs = [a.belief for a in updated_agents]
         mean_sentiment = sum(all_beliefs) / len(all_beliefs) if all_beliefs else 0.0
         if len(all_beliefs) > 1:
+            # Bessel's correction: /（n-1) for sample variance
+            # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#6.3
             sentiment_var = sum(
                 (b - mean_sentiment) ** 2 for b in all_beliefs
-            ) / len(all_beliefs)
+            ) / (len(all_beliefs) - 1)
         else:
             sentiment_var = 0.0
 
@@ -601,7 +632,7 @@ class StepRunner:
             {
                 "source": str(e.source_agent_id),
                 "target": str(e.target_agent_id),
-                "action": str(getattr(e, "action_type", "share")),
+                "action": str(e.action_type),
                 "probability": float(e.probability),
             }
             for e in sorted_events

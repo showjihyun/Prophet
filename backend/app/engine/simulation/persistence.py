@@ -36,10 +36,34 @@ class SimulationPersistence:
     """Async persistence layer for simulation data.
 
     SPEC: docs/spec/08_DB_SPEC.md
+    SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.4
 
     Each method accepts an AsyncSession and performs writes.
-    All methods are fire-and-forget safe — exceptions are caught and logged.
+    Fire-and-forget safe with retry logic — transient failures are retried
+    up to _RETRY_COUNT times. Permanent failures are logged and recorded in
+    a bounded failure queue for admin inspection.
     """
+
+    _RETRY_COUNT: int = 3
+    _RETRY_DELAY_BASE: float = 0.3
+
+    def __init__(self) -> None:
+        from collections import deque
+        self._failed_queue: deque[dict[str, Any]] = deque(maxlen=1000)
+
+    @property
+    def failed_queue(self) -> list[dict[str, Any]]:
+        """Return a snapshot of the persistence failure queue."""
+        return list(self._failed_queue)
+
+    def _record_failure(self, operation: str, sim_id: Any, detail: str) -> None:
+        """Record a permanent persistence failure."""
+        self._failed_queue.append({
+            "operation": operation,
+            "simulation_id": str(sim_id),
+            "detail": detail,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
     async def persist_creation(
         self,
@@ -139,29 +163,32 @@ class SimulationPersistence:
             if agent_values:
                 await session.execute(insert(Agent), agent_values)
 
-            # 5. Network edge rows — bulk insert, capped
-            edge_batch = network_edges[:5000]
-            edge_values = [
-                {
-                    "edge_id": uuid.uuid4(),
-                    "simulation_id": sim_id,
-                    "source_node_id": (
-                        int(src)
-                        if isinstance(src, (int, float))
-                        else hash(str(src)) % 2147483647
-                    ),
-                    "target_node_id": (
-                        int(tgt)
-                        if isinstance(tgt, (int, float))
-                        else hash(str(tgt)) % 2147483647
-                    ),
-                    "weight": data.get("weight", 1.0),
-                    "is_bridge": data.get("is_bridge", False),
-                }
-                for src, tgt, data in edge_batch
-            ]
-            if edge_values:
-                await session.execute(insert(NetworkEdge), edge_values)
+            # 5. Network edge rows — batch insert (no cap)
+            # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#5.3c
+            _EDGE_BATCH_SIZE = 1000
+            for i in range(0, len(network_edges), _EDGE_BATCH_SIZE):
+                edge_chunk = network_edges[i:i + _EDGE_BATCH_SIZE]
+                edge_values = [
+                    {
+                        "edge_id": uuid.uuid4(),
+                        "simulation_id": sim_id,
+                        "source_node_id": (
+                            int(src)
+                            if isinstance(src, (int, float))
+                            else hash(str(src)) % 2147483647
+                        ),
+                        "target_node_id": (
+                            int(tgt)
+                            if isinstance(tgt, (int, float))
+                            else hash(str(tgt)) % 2147483647
+                        ),
+                        "weight": data.get("weight", 1.0),
+                        "is_bridge": data.get("is_bridge", False),
+                    }
+                    for src, tgt, data in edge_chunk
+                ]
+                if edge_values:
+                    await session.execute(insert(NetworkEdge), edge_values)
 
             await session.commit()
             logger.info("Persisted simulation %s: %d agents, %d edges", sim_id, len(agents), len(network_edges))
@@ -276,8 +303,11 @@ class SimulationPersistence:
                             "exposure_count": agent.exposure_count,
                             "llm_tier_used": agent.llm_tier_used,
                         })
-                    except Exception:
-                        pass  # skip malformed agent, continue batch
+                    except (AttributeError, TypeError, ValueError) as exc:
+                        logger.warning(
+                            "Skipping malformed agent %s at step %d: %s",
+                            getattr(agent, "agent_id", "unknown"), result.step, exc,
+                        )
                 if state_values:
                     await session.execute(insert(AgentStateORM), state_values)
 
@@ -300,9 +330,41 @@ class SimulationPersistence:
 
             await session.commit()
             logger.debug("Persisted step %d for simulation %s", result.step, sim_id)
+            return
         except Exception:
             await session.rollback()
-            logger.exception("Failed to persist step %d for %s", result.step, sim_id)
+            logger.warning("persist_step attempt 1 failed for step %d sim %s", result.step, sim_id)
+
+        # Retry up to _RETRY_COUNT - 1 more times
+        import asyncio as _aio
+        for attempt in range(2, self._RETRY_COUNT + 1):
+            try:
+                await _aio.sleep(self._RETRY_DELAY_BASE * attempt)
+                step_row = SimStep(
+                    step_id=uuid.uuid4(),
+                    simulation_id=sim_id,
+                    step=result.step,
+                    total_adoption=result.total_adoption,
+                    adoption_rate=result.adoption_rate,
+                    diffusion_rate=result.diffusion_rate,
+                    mean_sentiment=result.mean_sentiment,
+                    sentiment_variance=result.sentiment_variance,
+                    action_distribution={k: v for k, v in result.action_distribution.items()},
+                    community_metrics={k: _community_metric_to_dict(v) for k, v in result.community_metrics.items()},
+                    llm_calls_count=result.llm_calls_this_step,
+                    step_duration_ms=result.step_duration_ms,
+                )
+                session.add(step_row)
+                await session.commit()
+                logger.info("persist_step retry %d succeeded for step %d sim %s", attempt, result.step, sim_id)
+                return
+            except Exception:
+                await session.rollback()
+                logger.warning("persist_step attempt %d failed for step %d sim %s", attempt, result.step, sim_id)
+
+        # All retries exhausted
+        self._record_failure("persist_step", sim_id, f"step={result.step}")
+        logger.error("persist_step PERMANENTLY FAILED for sim=%s step=%d after %d attempts", sim_id, result.step, self._RETRY_COUNT)
 
     async def persist_event(
         self,
@@ -588,7 +650,8 @@ def _config_to_dict(config: SimulationConfig) -> dict:
             "slm_llm_ratio": config.slm_llm_ratio,
             "communities": [c if isinstance(c, str) else str(c) for c in config.communities],
         }
-    except Exception:
+    except Exception as exc:
+        logger.error("Failed to serialize SimulationConfig: %s", exc)
         return {"name": getattr(config, "name", "unknown")}
 
 
@@ -598,5 +661,9 @@ def _community_metric_to_dict(metric: Any) -> dict:
         return metric
     try:
         return asdict(metric)
-    except Exception:
+    except Exception as exc:
+        logger.error(
+            "Failed to convert community metric to dict (type=%s): %s",
+            type(metric).__name__, exc,
+        )
         return {}

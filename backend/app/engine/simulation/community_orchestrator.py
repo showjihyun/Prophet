@@ -15,10 +15,10 @@ from app.engine.agent.schema import AgentAction, AgentState
 from app.engine.agent.tick import AgentTick, AgentTickResult, GraphContext
 from app.engine.agent.tier_selector import TierConfig, TierSelector
 from app.engine.agent.perception import EnvironmentEvent, NeighborAction
+from app.engine.agent.influence import PropagationEvent
 from app.engine.diffusion.schema import (
     CampaignEvent,
     CommunitySentiment,
-    PropagationEvent,
     RecSysConfig,
 )
 from app.engine.diffusion.exposure_model import ExposureModel
@@ -362,11 +362,11 @@ class BridgePropagator:
             adjusted = PropagationEvent(
                 source_agent_id=event.source_agent_id,
                 target_agent_id=event.target_agent_id,
-                action_type=getattr(event, "action_type", "share"),
+                content_id=event.content_id,
                 probability=event.probability * self.BRIDGE_TRUST_FACTOR,
+                packet=event.packet,
                 step=event.step,
-                message_id=getattr(event, "message_id", event.content_id if hasattr(event, "content_id") else __import__("uuid").uuid4()),
-                contextual_packet=getattr(event, "contextual_packet", None),
+                action_type=event.action_type,
             )
             cross_events.append(adjusted)
 

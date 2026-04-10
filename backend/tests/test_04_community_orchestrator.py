@@ -119,17 +119,28 @@ class TestBridgePropagatorContract:
             BridgePropagator,
             CommunityTickResult,
         )
-        from app.engine.diffusion.schema import PropagationEvent
+        from app.engine.agent.influence import PropagationEvent, ContextualPacket, MessageStrength
+        from app.engine.agent.schema import AgentAction, AgentEmotion
 
         bp = BridgePropagator()
         cid = uuid4()
+        dummy_packet = ContextualPacket(
+            source_agent_id=uuid4(),
+            source_emotion=AgentEmotion(interest=0.5, trust=0.5, skepticism=0.5, excitement=0.5),
+            source_summary="test",
+            message_strength=MessageStrength(novelty=0.5, controversy=0.5, utility=0.5),
+            sentiment_polarity=0.0,
+            action_taken=AgentAction.SHARE,
+            step=0,
+        )
         pe = PropagationEvent(
             source_agent_id=uuid4(),
             target_agent_id=uuid4(),
-            action_type="share",
+            content_id=uuid4(),
             probability=1.0,
+            packet=dummy_packet,
             step=0,
-            message_id=uuid4(),
+            action_type="share",
         )
         cr = CommunityTickResult(
             community_id=cid,

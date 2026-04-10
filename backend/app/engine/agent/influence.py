@@ -63,6 +63,8 @@ class PropagationEvent:
     probability: float
     packet: ContextualPacket
     step: int
+    action_type: str = "share"
+    generated_content: str | None = None
 
 
 # Actions that generate propagation events
@@ -171,6 +173,7 @@ class InfluenceLayer:
                     probability=p,
                     packet=packet,
                     step=source_agent.step,
+                    action_type=action.value,
                 ))
 
         return events

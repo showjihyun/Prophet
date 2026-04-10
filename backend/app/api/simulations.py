@@ -48,10 +48,33 @@ from app.engine.network.schema import CommunityConfig
 from app.engine.simulation.schema import (
     CampaignConfig,
     SimulationConfig,
+    StepResult,
 )
 from app.llm.engine_control import EngineController
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1/simulations", tags=["simulations"])
+
+
+def _fire_and_forget(coro, *, label: str = "ws_broadcast") -> asyncio.Task:
+    """Create a background task with error logging.
+
+    Prevents silent failures in fire-and-forget async tasks (H4).
+    """
+    task = asyncio.create_task(coro)
+
+    def _log_exc(t: asyncio.Task) -> None:
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            logger.error("Background task '%s' failed: %s", label, exc)
+
+    task.add_done_callback(_log_exc)
+    return task
 
 # ---- Default communities when none are provided ----
 _DEFAULT_COMMUNITIES: list[CommunityConfig] = [
@@ -286,7 +309,7 @@ async def get_simulation(
             created_at=datetime.now(timezone.utc),
         )
     except (ValueError, KeyError):
-        pass
+        pass  # simulation not in memory — fall through to DB lookup
 
     # Fallback: point-lookup from DB (read-only, completed/historical sims)
     db_sim = await persist.load_simulation(session, sim_uuid)
@@ -332,9 +355,9 @@ async def start_simulation(
     _require_status(state, SimulationStatus.CONFIGURED, SimulationStatus.PAUSED)
     now = datetime.now(timezone.utc)
     sim_uuid = _sim_id_to_uuid(simulation_id)
-    orchestrator.start(sim_uuid)
+    await orchestrator.start(sim_uuid)
     await persist.persist_status(session, sim_uuid, "running")
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
         "type": "status_change",
         "data": {"status": "running"},
     }))
@@ -362,7 +385,7 @@ async def step_simulation(
         # broadcast so the frontend can swap to the recover UI instead of
         # repeatedly hitting /resume and getting 409.
         await persist.persist_status(session, sim_uuid, state.status, state.current_step)
-        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
             "type": "status_change",
             "data": {"status": state.status},
         }))
@@ -429,7 +452,7 @@ async def step_simulation(
                 from app.database import async_session as _async_session
                 async with _async_session() as bg_session:
                     await persist.persist_expert_opinions(bg_session, sim_id, step, ops)
-            asyncio.create_task(_persist_opinions_bg(sim_uuid, result.step, opinions))
+            _fire_and_forget(_persist_opinions_bg(sim_uuid, result.step, opinions), label="persist_opinions")
 
     # M-7: Persist agent memories (collect from agent state, cap at 100)
     agent_memories: list[dict] = []
@@ -459,10 +482,10 @@ async def step_simulation(
             from app.database import async_session as _async_session
             async with _async_session() as bg_session:
                 await persist.persist_agent_memories(bg_session, sim_id, mems)
-        asyncio.create_task(_persist_memories_bg(sim_uuid, agent_memories))
+        _fire_and_forget(_persist_memories_bg(sim_uuid, agent_memories), label="persist_memories")
 
     # Broadcast step result via WebSocket
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
         "type": "step_result",
         "data": {
             "simulation_id": str(sim_uuid),
@@ -487,6 +510,7 @@ async def step_simulation(
                 for e in result.emergent_events
             ],
             "action_distribution": {k: v for k, v in result.action_distribution.items()},
+            "propagation_pairs": result.propagation_pairs,
             "llm_calls_this_step": result.llm_calls_this_step,
             "step_duration_ms": result.step_duration_ms,
         },
@@ -494,7 +518,7 @@ async def step_simulation(
 
     # Broadcast individual emergent events
     for event in result.emergent_events:
-        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
             "type": "emergent_event",
             "data": {
                 "event_type": event.event_type,
@@ -523,13 +547,14 @@ async def step_simulation(
                 "excitement": agent.emotion.excitement,
             },
         }
-    asyncio.create_task(
-        ws_manager.broadcast_agent_updates(str(sim_uuid), agent_state_map)
+    _fire_and_forget(
+        ws_manager.broadcast_agent_updates(str(sim_uuid), agent_state_map),
+        label="broadcast_agent_updates",
     )
 
     # Broadcast status change if simulation completed
     if state.status == "completed":
-        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
             "type": "status_change",
             "data": {"status": "completed"},
         }))
@@ -571,8 +596,15 @@ async def run_all_simulation(
     _require_status(state, SimulationStatus.CONFIGURED, SimulationStatus.RUNNING)
     sim_uuid = _sim_id_to_uuid(simulation_id)
 
+    async def _persist_each_step(result: StepResult) -> None:
+        """Persist each intermediate step during run_all.
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.2
+        """
+        step_state = _get_state_or_404(orchestrator, simulation_id)
+        await persist.persist_step(session, sim_uuid, result, agents=step_state.agents)
+
     try:
-        report = await orchestrator.run_all(sim_uuid)
+        report = await orchestrator.run_all(sim_uuid, step_callback=_persist_each_step)
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
@@ -589,7 +621,7 @@ async def run_all_simulation(
     await persist.persist_status(session, sim_uuid, report["status"], report["total_steps"])
 
     # Broadcast completion via WebSocket
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
         "type": "run_all_complete",
         "data": {
             "simulation_id": simulation_id,
@@ -601,7 +633,7 @@ async def run_all_simulation(
             "status": report["status"],
         },
     }))
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
         "type": "status_change",
         "data": {"status": report["status"]},
     }))
@@ -633,7 +665,7 @@ async def pause_simulation(
     sim_uuid = _sim_id_to_uuid(simulation_id)
     await orchestrator.pause(sim_uuid)
     await persist.persist_status(session, sim_uuid, "paused", state.current_step)
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
         "type": "status_change",
         "data": {"status": "paused"},
     }))
@@ -654,7 +686,7 @@ async def resume_simulation(
     _require_status(state, SimulationStatus.PAUSED)
     sim_uuid = _sim_id_to_uuid(simulation_id)
     await orchestrator.resume(sim_uuid)
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
         "type": "status_change",
         "data": {"status": "running"},
     }))
@@ -710,7 +742,7 @@ async def stop_simulation(
         state.status = "created"
         state.current_step = 0
         await persist.persist_status(session, sim_uuid, "created")
-        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+        _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
             "type": "status_change",
             "data": {"status": "created"},
         }))
@@ -718,7 +750,7 @@ async def stop_simulation(
 
     state.status = "completed"
     await persist.persist_status(session, sim_uuid, "completed")
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
+    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
         "type": "status_change",
         "data": {"status": "completed"},
     }))
@@ -819,10 +851,11 @@ async def inject_event(
 
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        orchestrator.inject_event(
+        await orchestrator.inject_event(
             sim_uuid,
             event_type=body.event_type,
             payload={"content": body.content, "controversy": body.controversy},
+            target_communities=body.target_communities or None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -842,7 +875,7 @@ async def replay_from_step(
     _get_state_or_404(orchestrator, simulation_id)
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        result = orchestrator.replay_step(sim_uuid, step)
+        result = await orchestrator.replay_step(sim_uuid, step)
     except (ValueError, StepNotFoundError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -975,6 +1008,7 @@ async def engine_control(
         total_agents=len(state.agents),
         slm_llm_ratio=body.slm_llm_ratio,
         budget_usd=body.budget_usd,
+        tier1_model=body.slm_model,
     )
     impact = controller.get_impact_assessment(dist)
 
@@ -1004,19 +1038,40 @@ async def recommend_engine(
     """Budget-based auto engine recommendation.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationsrecommend-engine
     """
-    # Fallback heuristic
+    # Use EngineController for consistent tier calculation
     ratio = min(1.0, body.budget_usd / (body.agent_count * body.max_steps * 0.001))
+    ratio = round(max(0.0, min(1.0, ratio)), 2)
+
+    controller = EngineController()
+    dist = controller.compute_tier_distribution(
+        total_agents=body.agent_count,
+        slm_llm_ratio=ratio,
+        budget_usd=body.budget_usd,
+    )
+
+    estimated_total_cost = round(dist.estimated_cost_per_step * body.max_steps, 2)
+    estimated_time_ms = dist.estimated_latency_ms * body.max_steps
+    if estimated_time_ms < 60_000:
+        estimated_total_time = f"~{estimated_time_ms / 1000:.0f}s"
+    else:
+        estimated_total_time = f"~{estimated_time_ms / 60_000:.0f}min"
+
+    mode = "Speed" if ratio < 0.3 else "Quality" if ratio > 0.7 else "Balanced"
+
+    from app.api.schemas import TierDistribution as ApiTierDistribution
     return RecommendEngineResponse(
-        recommended_ratio=round(ratio, 2),
-        recommended_slm_model="gemma2:2b" if ratio < 0.3 else "phi4",
-        tier_distribution={
-            "tier1_count": int(body.agent_count * (1 - ratio)),
-            "tier2_count": int(body.agent_count * ratio * 0.8),
-            "tier3_count": int(body.agent_count * ratio * 0.2),
-        },
-        estimated_total_cost=round(body.budget_usd * 0.9, 2),
-        estimated_total_time="N/A",
-        mode="SLM 모드" if ratio < 0.3 else "Hybrid",
+        recommended_ratio=ratio,
+        recommended_slm_model=dist.tier1_model,
+        tier_distribution=ApiTierDistribution(
+            tier1_count=dist.tier1_count,
+            tier2_count=dist.tier2_count,
+            tier3_count=dist.tier3_count,
+            estimated_cost_per_step=dist.estimated_cost_per_step,
+            estimated_latency_ms=dist.estimated_latency_ms,
+        ),
+        estimated_total_cost=estimated_total_cost,
+        estimated_total_time=estimated_total_time,
+        mode=mode,
     )
 
 

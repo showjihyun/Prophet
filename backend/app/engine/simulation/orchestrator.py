@@ -4,8 +4,9 @@ SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
 import asyncio
 import logging
 import random as stdlib_random
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field, replace
+from typing import Awaitable, Callable
 from uuid import UUID, uuid4
 
 import networkx as nx
@@ -72,14 +73,18 @@ _ALLOWED_EVENT_TYPES = {
     "campaign_ad", "influencer_post", "expert_review",
     "community_discussion", "negative_pr", "competitor_attack",
     "controversy", "celebrity_endorsement", "news_article",
-    "regulatory_change", "product_update",
+    "regulatory_change", "product_update", "bad_review",
 }
+
+
+_SNAPSHOT_WINDOW = 20  # max agent snapshots to keep in memory
 
 
 @dataclass
 class SimulationState:
     """In-memory runtime state for a simulation.
     SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+    SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.3
     """
     simulation_id: UUID
     config: SimulationConfig
@@ -90,6 +95,8 @@ class SimulationState:
     step_history: list[StepResult] = field(default_factory=list)
     injected_events: list[EnvironmentEvent] = field(default_factory=list)
     ws_connected: bool = True
+    # Agent snapshots for replay — step → deep-copied agent list
+    agent_snapshots: dict[int, list[AgentState]] = field(default_factory=dict)
 
 
 class SimulationOrchestrator:
@@ -109,7 +116,7 @@ class SimulationOrchestrator:
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
         """
         self._simulations: dict[UUID, SimulationState] = {}
-        self._locks: dict[UUID, asyncio.Lock] = {}
+        self._locks: defaultdict[UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._step_runner = StepRunner(llm_adapter=llm_adapter, gateway=gateway)
         self._llm_adapter = llm_adapter
         self._slm_adapter = slm_adapter
@@ -121,9 +128,7 @@ class SimulationOrchestrator:
         self._network_metrics_cache: dict[UUID, tuple[int, dict]] = {}
 
     def _get_lock(self, simulation_id: UUID) -> asyncio.Lock:
-        """Get or create a per-simulation asyncio lock."""
-        if simulation_id not in self._locks:
-            self._locks[simulation_id] = asyncio.Lock()
+        """Get or create a per-simulation asyncio lock (atomic via defaultdict)."""
         return self._locks[simulation_id]
 
     # ------------------------------------------------------------------ #
@@ -282,29 +287,31 @@ class SimulationOrchestrator:
         self._locks[sim_id] = asyncio.Lock()
         return state
 
-    def start(self, simulation_id: UUID) -> None:
+    async def start(self, simulation_id: UUID) -> None:
         """Transition to RUNNING state.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.1
 
         Raises:
             InvalidStateTransitionError: invalid transition
             SimulationCapacityError: max concurrent exceeded
         """
-        state = self._get_state(simulation_id)
-        self._validate_transition(state.status, SimulationStatus.RUNNING.value)
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            self._validate_transition(state.status, SimulationStatus.RUNNING.value)
 
-        # Check concurrent limit
-        running_count = sum(
-            1 for s in self._simulations.values()
-            if s.status == SimulationStatus.RUNNING.value
-        )
-        if running_count >= _MAX_CONCURRENT:
-            raise SimulationCapacityError(
-                f"Max {_MAX_CONCURRENT} concurrent simulations exceeded"
+            # Check concurrent limit
+            running_count = sum(
+                1 for s in self._simulations.values()
+                if s.status == SimulationStatus.RUNNING.value
             )
+            if running_count >= _MAX_CONCURRENT:
+                raise SimulationCapacityError(
+                    f"Max {_MAX_CONCURRENT} concurrent simulations exceeded"
+                )
 
-        state.status = SimulationStatus.RUNNING.value
+            state.status = SimulationStatus.RUNNING.value
 
     async def run_step(self, simulation_id: UUID) -> StepResult:
         """Execute one simulation step.
@@ -317,6 +324,14 @@ class SimulationOrchestrator:
         async with self._get_lock(simulation_id):
             state = self._get_state(simulation_id)
             try:
+                # Snapshot agents before step for replay support (P1.3)
+                from copy import deepcopy
+                state.agent_snapshots[state.current_step] = deepcopy(state.agents)
+                # Evict oldest snapshots beyond sliding window
+                if len(state.agent_snapshots) > _SNAPSHOT_WINDOW:
+                    oldest_key = min(state.agent_snapshots)
+                    del state.agent_snapshots[oldest_key]
+
                 result = await self._step_runner.execute_step(state, state.current_step)
                 state.step_history.append(result)
                 state.current_step += 1
@@ -330,13 +345,22 @@ class SimulationOrchestrator:
                 state.status = SimulationStatus.FAILED.value
                 raise
 
-    async def run_all(self, simulation_id: UUID) -> dict:
+    async def run_all(
+        self,
+        simulation_id: UUID,
+        step_callback: Callable[[StepResult], Awaitable[None]] | None = None,
+    ) -> dict:
         """Run all remaining steps to completion and return a summary report.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.2
 
         If the simulation is CONFIGURED it will be started automatically.
         Runs until max_steps is reached or the simulation moves to COMPLETED/FAILED.
+
+        Args:
+            step_callback: optional async callback invoked after each step
+                           for persistence or progress reporting.
 
         Returns a report dict with:
           total_steps, final_adoption_rate, final_mean_sentiment,
@@ -348,7 +372,7 @@ class SimulationOrchestrator:
 
         # Auto-start from CONFIGURED
         if state.status == SimulationStatus.CONFIGURED.value:
-            self.start(simulation_id)
+            await self.start(simulation_id)
         elif state.status != SimulationStatus.RUNNING.value:
             raise ValueError(
                 f"run_all requires CONFIGURED or RUNNING status, got '{state.status}'"
@@ -360,6 +384,14 @@ class SimulationOrchestrator:
         while state.status == SimulationStatus.RUNNING.value:
             result = await self.run_step(simulation_id)
             emergent_count += len(result.emergent_events)
+            if step_callback:
+                try:
+                    await step_callback(result)
+                except Exception as cb_exc:
+                    logger.error(
+                        "run_all step_callback failed at step %d: %s",
+                        result.step, cb_exc,
+                    )
             # Yield control to event loop so WebSocket broadcasts can fire
             await asyncio.sleep(0)
 
@@ -475,56 +507,60 @@ class SimulationOrchestrator:
 
             return state.agents[agent_idx]
 
-    def inject_event(
+    async def inject_event(
         self,
         simulation_id: UUID,
         event: EnvironmentEvent | None = None,
         event_type: str | None = None,
         payload: dict | None = None,
+        target_communities: list[str] | None = None,
     ) -> None:
         """Inject an external event mid-simulation.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.1
 
         Raises:
             ValueError: unknown event_type
         """
-        state = self._get_state(simulation_id)
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
 
-        if event is not None:
-            state.injected_events.append(event)
-            return
+            if event is not None:
+                state.injected_events.append(event)
+                return
 
-        # String-based injection (for error test compatibility)
-        if event_type is not None:
-            NEGATIVE_EVENT_TYPES = {"negative_pr", "competitor_attack", "bad_review", "controversy", "regulatory_change"}
-            POSITIVE_EVENT_TYPES = {"celebrity_endorsement", "product_update", "news_article"}
-            DIRECT_TYPES = {"campaign_ad", "influencer_post", "expert_review", "community_discussion"}
-            if event_type in NEGATIVE_EVENT_TYPES:
-                mapped_type = "community_discussion"
-            elif event_type in POSITIVE_EVENT_TYPES:
-                mapped_type = "influencer_post"
-            elif event_type in DIRECT_TYPES:
-                mapped_type = event_type
-            else:
-                raise ValueError(
-                    f"Unknown event type: '{event_type}'. "
-                    f"Valid types: {sorted(_ALLOWED_EVENT_TYPES)}"
+            # String-based injection (for error test compatibility)
+            if event_type is not None:
+                NEGATIVE_EVENT_TYPES = {"negative_pr", "competitor_attack", "bad_review", "controversy", "regulatory_change"}
+                POSITIVE_EVENT_TYPES = {"celebrity_endorsement", "product_update", "news_article"}
+                DIRECT_TYPES = {"campaign_ad", "influencer_post", "expert_review", "community_discussion"}
+                if event_type in NEGATIVE_EVENT_TYPES:
+                    mapped_type = "community_discussion"
+                elif event_type in POSITIVE_EVENT_TYPES:
+                    mapped_type = "influencer_post"
+                elif event_type in DIRECT_TYPES:
+                    mapped_type = event_type
+                else:
+                    raise ValueError(
+                        f"Unknown event type: '{event_type}'. "
+                        f"Valid types: {sorted(_ALLOWED_EVENT_TYPES)}"
+                    )
+                env_event = EnvironmentEvent(
+                    event_type=mapped_type,
+                    content_id=uuid4(),
+                    message=str(payload) if payload else "",
+                    source_agent_id=None,
+                    channel="direct",
+                    timestamp=state.current_step,
+                    target_communities=target_communities or [],
                 )
-            env_event = EnvironmentEvent(
-                event_type=mapped_type,
-                content_id=uuid4(),
-                message=str(payload) if payload else "",
-                source_agent_id=None,
-                channel="direct",
-                timestamp=state.current_step,
-            )
-            state.injected_events.append(env_event)
-            return
+                state.injected_events.append(env_event)
+                return
 
-        raise ValueError("Either event or event_type must be provided")
+            raise ValueError("Either event or event_type must be provided")
 
-    def replay_step(
+    async def replay_step(
         self,
         simulation_id: UUID,
         target_step: int,
@@ -532,6 +568,7 @@ class SimulationOrchestrator:
         """Replay from a specific step, creating a branch.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.1
 
         Finds the step in history, creates a replay branch with unique replay_id,
         then resets current_step to target_step so the simulation can be re-run
@@ -541,48 +578,56 @@ class SimulationOrchestrator:
             ValueError: target_step > current_step
             StepNotFoundError: step not in history
         """
-        from uuid import uuid4
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
 
-        state = self._get_state(simulation_id)
+            if target_step > state.current_step:
+                raise ValueError(
+                    f"target_step {target_step} > current_step {state.current_step}"
+                )
 
-        if target_step > state.current_step:
-            raise ValueError(
-                f"target_step {target_step} > current_step {state.current_step}"
-            )
+            # Find the step result in history
+            step_result = None
+            for sr in state.step_history:
+                if sr.step == target_step:
+                    step_result = sr
+                    break
 
-        # Find the step result in history
-        step_result = None
-        for sr in state.step_history:
-            if sr.step == target_step:
-                step_result = sr
-                break
+            if step_result is None:
+                raise StepNotFoundError(
+                    f"Step {target_step} not found in history for simulation {simulation_id}"
+                )
 
-        if step_result is None:
-            raise StepNotFoundError(
-                f"Step {target_step} not found in history for simulation {simulation_id}"
-            )
+            # Generate replay branch ID
+            replay_id = uuid4()
 
-        # Generate replay branch ID
-        replay_id = uuid4()
+            # Store original history length before truncation
+            original_steps = state.current_step
 
-        # Store original history length before truncation
-        original_steps = state.current_step
+            # Restore agent state from snapshot if available (P1.3)
+            if target_step in state.agent_snapshots:
+                from copy import deepcopy
+                state.agents = deepcopy(state.agent_snapshots[target_step])
 
-        # Reset current_step to target so simulation can be re-run from this point.
-        # Trim history to only include steps up to and including target_step.
-        state.current_step = target_step
-        state.step_history = [sr for sr in state.step_history if sr.step <= target_step]
+            # Reset current_step to target so simulation can be re-run from this point.
+            # Trim history to only include steps up to and including target_step.
+            state.current_step = target_step
+            state.step_history = [sr for sr in state.step_history if sr.step <= target_step]
+            # Evict snapshots beyond replay point
+            state.agent_snapshots = {
+                k: v for k, v in state.agent_snapshots.items() if k <= target_step
+            }
 
-        # Re-enable running from this branch point
-        if state.status == SimulationStatus.COMPLETED.value:
-            state.status = SimulationStatus.PAUSED.value
+            # Re-enable running from this branch point
+            if state.status == SimulationStatus.COMPLETED.value:
+                state.status = SimulationStatus.PAUSED.value
 
-        return {
-            "replay_id": str(replay_id),
-            "from_step": target_step,
-            "original_steps": original_steps,
-            "status": state.status,
-        }
+            return {
+                "replay_id": str(replay_id),
+                "from_step": target_step,
+                "original_steps": original_steps,
+                "status": state.status,
+            }
 
     # ------------------------------------------------------------------ #
     # Helpers
