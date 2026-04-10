@@ -598,19 +598,21 @@ export default function TopInfluencersPage() {
                     tick={{ fontSize: 11 }}
                   />
                   <Tooltip
-                    formatter={(value: number, _name: string, props: { payload: { name: string } }) => [
+                    formatter={(value, _name, props) => [
                       `${value} influencers`,
-                      props.payload.name,
+                      (props as { payload: { name: string } }).payload.name,
                     ]}
                   />
                   <Bar
                     dataKey="value"
                     radius={[0, 4, 4, 0]}
                     style={{ cursor: "pointer" }}
-                    onClick={(data: { name: string }) => {
+                    onClick={(data) => {
+                      const name = (data as { name?: string }).name;
+                      if (!name) return;
                       setFilters((prev) => ({
                         ...prev,
-                        communities: [data.name],
+                        communities: [name],
                       }));
                       setCurrentPage(1);
                     }}

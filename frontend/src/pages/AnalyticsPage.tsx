@@ -285,7 +285,7 @@ export default function AnalyticsPage() {
                       borderRadius: "6px",
                       fontSize: "11px",
                     }}
-                    formatter={(v: number) => [`${v}%`]}
+                    formatter={(v) => `${v}%`}
                   />
                   <Legend wrapperStyle={{ fontSize: "11px" }} />
                   {/* Event markers */}
@@ -409,7 +409,7 @@ export default function AnalyticsPage() {
                       borderRadius: "6px",
                       fontSize: "11px",
                     }}
-                    formatter={(v: number) => [`${v}%`, "Adoption"]}
+                    formatter={(v) => [`${v}%`, "Adoption"]}
                   />
                   <Bar dataKey="rate" name="Adoption Rate" radius={[4, 4, 0, 0]}>
                     {communityAdoption.map((entry, idx) => (

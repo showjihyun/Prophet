@@ -285,7 +285,7 @@ export default function GlobalMetricsPage() {
                 <BarChart data={polarizationData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <XAxis dataKey="day" tick={{ fontSize: 11 }} />
                   <YAxis domain={[0, 1]} tick={{ fontSize: 11 }} tickCount={6} />
-                  <Tooltip formatter={(value: number) => [value.toFixed(2), "Polarization Index"]} />
+                  <Tooltip formatter={(value) => [Number(value).toFixed(2), "Polarization Index"]} />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                     {polarizationData.map((entry, i) => (
                       <Cell key={i} fill={polarizationColor(entry.value)} />
@@ -302,7 +302,7 @@ export default function GlobalMetricsPage() {
                 <BarChart data={sentimentByCommunity} layout="vertical" margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" width={56} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(value: number, name: string) => [`${value}%`, name.charAt(0).toUpperCase() + name.slice(1)]} />
+                  <Tooltip formatter={(value, name) => [`${value}%`, String(name).charAt(0).toUpperCase() + String(name).slice(1)]} />
                   <Bar dataKey="positive" stackId="sentiment" fill="var(--sentiment-positive)" name="Positive" />
                   <Bar dataKey="neutral" stackId="sentiment" fill="var(--sentiment-neutral)" name="Neutral" />
                   <Bar dataKey="negative" stackId="sentiment" fill="var(--sentiment-negative)" name="Negative" radius={[0, 4, 4, 0]} />

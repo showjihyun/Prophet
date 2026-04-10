@@ -4,6 +4,7 @@
  */
 import { useNavigate } from "react-router-dom";
 import { X, Download, RotateCcw, TrendingUp } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
 import { useSimulationStore } from "../../store/simulationStore";
 import { apiClient } from "../../api/client";
 import type { StepResult } from "../../types/simulation";
@@ -81,6 +82,14 @@ export default function SimulationReportModal({ onClose }: Props) {
   const navigate = useNavigate();
   const simulation = useSimulationStore((s) => s.simulation);
   const steps = useSimulationStore((s) => s.steps);
+
+  const exportMutation = useMutation({
+    mutationFn: async ({ simId, format }: { simId: string; format: "json" | "csv" }) => {
+      // apiClient.simulations.export returns void (opens a download in a new
+      // tab). Wrap in an async fn so useMutation sees a Promise.
+      apiClient.simulations.export(simId, format);
+    },
+  });
 
   const report = deriveReport(steps);
 
@@ -215,16 +224,16 @@ export default function SimulationReportModal({ onClose }: Props) {
         <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--border)] bg-[var(--background)]">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => simulation && apiClient.simulations.export(simulation.simulation_id, "json")}
-              disabled={!simulation}
+              onClick={() => simulation && exportMutation.mutate({ simId: simulation.simulation_id, format: "json" })}
+              disabled={!simulation || exportMutation.isPending}
               className="h-8 px-3 text-xs font-medium rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
               Export JSON
             </button>
             <button
-              onClick={() => simulation && apiClient.simulations.export(simulation.simulation_id, "csv")}
-              disabled={!simulation}
+              onClick={() => simulation && exportMutation.mutate({ simId: simulation.simulation_id, format: "csv" })}
+              disabled={!simulation || exportMutation.isPending}
               className="h-8 px-3 text-xs font-medium rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
