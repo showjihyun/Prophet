@@ -24,7 +24,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.simulation.orchestrator import SimulationOrchestrator
@@ -340,8 +340,11 @@ class CommunityOpinionService:
             llm_cost_usd=0.0,
             is_fallback_stub=response.is_fallback_stub,
         )
-        await self._persist_row_with_retry(row, session)
-        return CommunityOpinionSnapshot.from_row(row)
+        # ``_persist_row_with_retry`` returns either the row we just
+        # inserted OR a pre-existing row that another writer won a
+        # race for. Either way, the snapshot is the canonical answer.
+        persisted = await self._persist_row_with_retry(row, session)
+        return CommunityOpinionSnapshot.from_row(persisted)
 
     # ------------------------------------------------------------------ #
     # Internals                                                            #
@@ -470,8 +473,13 @@ class CommunityOpinionService:
         prompt schema instead of picking a value — e.g. returning
         ``"rising|stable|polarising|collapsing"`` verbatim in the
         ``sentiment_trend`` field, which then blows past the
-        ``VARCHAR(32)`` column limit. Normalise every stringly-typed
-        field here so persistence can't trip on LLM oddities.
+        ``VARCHAR(32)`` column limit. They also return single strings
+        or objects where the schema says "list of objects", which
+        then crashes the frontend ``.map()`` renderers.
+
+        Normalise every field here so persistence and rendering can't
+        trip on LLM oddities. Invalid elements are dropped rather than
+        coerced — we'd rather lose a bad theme than persist garbage.
         """
         if parsed:
             result = parsed
@@ -488,17 +496,23 @@ class CommunityOpinionService:
             "summary": CommunityOpinionService._clip_str(
                 result.get("summary", ""), max_len=2000,
             ),
-            "themes": result.get("themes", []) or [],
-            "divisions": result.get("divisions", []) or [],
+            "themes": CommunityOpinionService._normalise_themes(
+                result.get("themes")
+            ),
+            "divisions": CommunityOpinionService._normalise_divisions(
+                result.get("divisions")
+            ),
             "sentiment_trend": CommunityOpinionService._normalise_sentiment_trend(
                 result.get("sentiment_trend", "stable")
             ),
             "dominant_emotions": [
                 CommunityOpinionService._clip_str(e, max_len=64)
-                for e in (result.get("dominant_emotions", []) or [])
-                if isinstance(e, str)
+                for e in (result.get("dominant_emotions") or [])
+                if isinstance(e, str) and e
             ],
-            "key_quotes": result.get("key_quotes", []) or [],
+            "key_quotes": CommunityOpinionService._normalise_key_quotes(
+                result.get("key_quotes")
+            ),
         }
 
     @staticmethod
@@ -507,6 +521,92 @@ class CommunityOpinionService:
         if not isinstance(value, str):
             value = str(value) if value is not None else ""
         return value[:max_len]
+
+    @staticmethod
+    def _normalise_themes(value: Any) -> list[dict[str, Any]]:
+        """Drop any element that isn't a dict with a non-empty ``theme``
+        string. Missing ``weight``/``evidence_step`` default to 0."""
+        if not isinstance(value, list):
+            return []
+        out: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            theme = item.get("theme")
+            if not isinstance(theme, str) or not theme.strip():
+                continue
+            try:
+                weight = float(item.get("weight", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                weight = 0.0
+            try:
+                evidence_step = int(item.get("evidence_step", 0) or 0)
+            except (TypeError, ValueError):
+                evidence_step = 0
+            out.append({
+                "theme": CommunityOpinionService._clip_str(theme, max_len=200),
+                "weight": max(0.0, min(1.0, weight)),
+                "evidence_step": evidence_step,
+            })
+        return out
+
+    @staticmethod
+    def _normalise_divisions(value: Any) -> list[dict[str, Any]]:
+        """Drop any element that isn't a dict with a non-empty
+        ``faction`` string. Missing ``share`` defaults to 0;
+        ``concerns`` defaults to empty list."""
+        if not isinstance(value, list):
+            return []
+        out: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            faction = item.get("faction")
+            if not isinstance(faction, str) or not faction.strip():
+                continue
+            try:
+                share = float(item.get("share", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                share = 0.0
+            raw_concerns = item.get("concerns") or []
+            concerns = [
+                CommunityOpinionService._clip_str(c, max_len=200)
+                for c in (raw_concerns if isinstance(raw_concerns, list) else [])
+                if isinstance(c, str) and c.strip()
+            ]
+            out.append({
+                "faction": CommunityOpinionService._clip_str(faction, max_len=200),
+                "share": max(0.0, min(1.0, share)),
+                "concerns": concerns,
+            })
+        return out
+
+    @staticmethod
+    def _normalise_key_quotes(value: Any) -> list[dict[str, Any]]:
+        """Drop any element that isn't a dict with non-empty
+        ``agent_id`` and ``content`` strings."""
+        if not isinstance(value, list):
+            return []
+        out: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            agent_id = item.get("agent_id")
+            content = item.get("content")
+            if not isinstance(agent_id, str) or not agent_id.strip():
+                continue
+            if not isinstance(content, str) or not content.strip():
+                continue
+            try:
+                step = int(item.get("step", 0) or 0)
+            except (TypeError, ValueError):
+                step = 0
+            out.append({
+                "agent_id": CommunityOpinionService._clip_str(agent_id, max_len=64),
+                "content": CommunityOpinionService._clip_str(content, max_len=500),
+                "step": step,
+            })
+        return out
 
     @staticmethod
     def _normalise_sentiment_trend(value: Any) -> str:
@@ -653,38 +753,74 @@ class CommunityOpinionService:
             llm_cost_usd=0.0,
             is_fallback_stub=response.is_fallback_stub,
         )
-        await self._persist_row_with_retry(row, session)
+        persisted = await self._persist_row_with_retry(row, session)
 
         return OverallOpinionSnapshot(
-            overall=CommunityOpinionSnapshot.from_row(row),
+            overall=CommunityOpinionSnapshot.from_row(persisted),
             communities=per_community,
         )
 
-    @staticmethod
     async def _persist_row_with_retry(
+        self,
         row: CommunityOpinion,
         session: AsyncSession,
         *,
         max_attempts: int = 3,
-    ) -> None:
-        """Add + commit + refresh with deadlock retry.
+    ) -> CommunityOpinion:
+        """Add + commit + refresh, handling two distinct race paths.
 
-        The ``community_opinions.simulation_id`` FK takes a RowShareLock
+        **Deadlock retry (sqlstate 40P01).** The
+        ``community_opinions.simulation_id`` FK takes a RowShareLock
         on ``simulations``, which can deadlock against the step-runner's
         writer while a simulation is actively running. PostgreSQL's
         deadlock detector picks one victim and aborts it — retrying the
         same transaction usually succeeds on the next attempt because
         one side of the deadlock will have finished by then.
 
-        We commit the session before each retry so the attempted INSERT
-        from the previous round is discarded; then we re-add the row.
+        **Unique violation (sqlstate 23505).** The
+        ``uq_community_opinions_sim_comm_step`` constraint rejects
+        duplicate ``(sim_id, community_id, step)`` inserts. This can
+        happen when two concurrent synthesis requests both miss the
+        ``_find_cached`` lookup (the request-before-insert race). When
+        this fires, the OTHER writer already persisted a real row;
+        fetch it and return that instead of retrying our own doomed
+        insert.
+
+        Returns the canonical persisted row — either the one we just
+        inserted, or the winner's row if we lost a race. The retry
+        loop tracks deadlocks but unique violations terminate the loop
+        immediately (there's nothing to retry — the constraint will
+        reject us again on the next attempt too).
         """
         for attempt in range(1, max_attempts + 1):
             session.add(row)
             try:
                 await session.commit()
                 await session.refresh(row)
-                return
+                return row
+            except IntegrityError as exc:
+                pgcode = getattr(getattr(exc, "orig", None), "sqlstate", None)
+                if pgcode != "23505":
+                    # Some other integrity violation (FK, NOT NULL, …)
+                    # — roll back and re-raise so the caller sees it.
+                    await session.rollback()
+                    raise
+                await session.rollback()
+                existing = await self._find_cached(
+                    row.simulation_id, row.community_id, row.step,
+                    session=session,
+                )
+                if existing is not None:
+                    logger.info(
+                        "community-opinion unique-violation race — "
+                        "returning existing row sim=%s comm=%s step=%d",
+                        row.simulation_id, row.community_id, row.step,
+                    )
+                    return existing
+                # Constraint says a row exists but our query didn't find
+                # it (transaction isolation quirk). Propagate the error
+                # rather than silently losing data.
+                raise
             except DBAPIError as exc:
                 # asyncpg wraps PG deadlock as DeadlockDetectedError;
                 # SQLAlchemy wraps that as DBAPIError. We match on the
@@ -692,6 +828,10 @@ class CommunityOpinionService:
                 # Python class name to stay provider-agnostic.
                 pgcode = getattr(getattr(exc, "orig", None), "sqlstate", None)
                 if pgcode != "40P01" or attempt == max_attempts:
+                    # Non-deadlock error (or last attempt) — roll back so
+                    # the session isn't left dirty for the caller before
+                    # we propagate the exception upward.
+                    await session.rollback()
                     raise
                 logger.warning(
                     "community-opinion persist deadlock (attempt %d/%d) — "
@@ -701,6 +841,8 @@ class CommunityOpinionService:
                 await session.rollback()
                 # Jittered back-off to avoid another head-on collision
                 await asyncio.sleep(0.1 * attempt)
+        # Unreachable: the loop either returns or raises.
+        raise RuntimeError("unreachable: persist retry loop exited without result")
 
     async def _collect_per_community_snapshots(
         self,

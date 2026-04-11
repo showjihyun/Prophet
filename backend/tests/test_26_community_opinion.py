@@ -632,3 +632,338 @@ class TestOverallSynthesis:
         overall_call = gw.calls[-1]
         # It must contain the per-community summaries (from the canned JSON)
         assert "polarising" in overall_call["prompt_user"]
+
+
+# ===========================================================================
+# Response normalisation (pure functions on the service class)
+# ===========================================================================
+
+
+class TestResponseNormalisation:
+    """SPEC: 25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+
+    Covers the ``_parse_response``, ``_normalise_sentiment_trend``, and
+    ``_clip_str`` helpers that guard against small-LLM edge cases (echoed
+    schema literals, over-long strings, American spellings, etc.).
+    """
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("rising", "rising"),
+            ("Stable", "stable"),
+            ("POLARISING", "polarising"),
+            ("polarizing", "polarising"),  # American → British
+            ("collapse", "collapsing"),
+            ("growing", "rising"),
+            # The classic small-LLM failure: echo the schema literal
+            ("rising|stable|polarising|collapsing", "stable"),
+            # Unknown / garbage values fall back to the safe default
+            ("overwhelming", "stable"),
+            ("", "stable"),
+            (None, "stable"),
+            (42, "stable"),
+        ],
+    )
+    def test_normalise_sentiment_trend(self, raw, expected):
+        assert (
+            CommunityOpinionService._normalise_sentiment_trend(raw) == expected
+        )
+
+    @pytest.mark.parametrize(
+        "raw,max_len,expected",
+        [
+            ("short", 100, "short"),
+            ("x" * 50, 10, "xxxxxxxxxx"),
+            ("", 10, ""),
+            (None, 10, ""),
+            (123, 10, "123"),
+        ],
+    )
+    def test_clip_str(self, raw, max_len, expected):
+        assert CommunityOpinionService._clip_str(raw, max_len=max_len) == expected
+
+    def test_parse_response_normalises_all_fields(self):
+        """A small LLM returns a hostile payload with a schema literal
+        in ``sentiment_trend`` and a missing ``themes`` field. The
+        parser must coerce it into a shape safe for DB persistence."""
+        raw = {
+            "summary": "x" * 5000,  # Over the 2000 clip limit
+            "sentiment_trend": "rising|stable|polarising|collapsing",
+            "dominant_emotions": ["excitement", None, 42],  # mixed garbage
+            "divisions": [{"faction": "a", "share": 0.5, "concerns": []}],
+        }
+        normalised = CommunityOpinionService._parse_response(raw, "")
+        assert len(normalised["summary"]) == 2000
+        assert normalised["sentiment_trend"] == "stable"
+        # Non-string emotions are dropped entirely
+        assert normalised["dominant_emotions"] == ["excitement"]
+        assert normalised["themes"] == []
+        # Divisions round-trip through the normaliser — same shape as input
+        assert normalised["divisions"] == [{
+            "faction": "a", "share": 0.5, "concerns": [],
+        }]
+        assert normalised["key_quotes"] == []
+
+    def test_normalise_themes_drops_garbage_elements(self):
+        raw = [
+            {"theme": "Valid", "weight": 0.5, "evidence_step": 3},
+            "a bare string, not a dict",
+            {"theme": "", "weight": 0.5},  # empty theme
+            {"weight": 0.5},  # missing theme
+            {"theme": "NoWeight"},  # missing weight → defaults to 0
+            None,
+            {"theme": "Clamped", "weight": 99.0, "evidence_step": "not-int"},
+        ]
+        out = CommunityOpinionService._normalise_themes(raw)
+        assert len(out) == 3
+        assert out[0] == {"theme": "Valid", "weight": 0.5, "evidence_step": 3}
+        # Missing weight coerces to 0.0, missing evidence_step to 0
+        assert out[1] == {
+            "theme": "NoWeight", "weight": 0.0, "evidence_step": 0,
+        }
+        # Out-of-range weight is clamped, non-int step coerces to 0
+        assert out[2] == {
+            "theme": "Clamped", "weight": 1.0, "evidence_step": 0,
+        }
+
+    def test_normalise_themes_handles_non_list(self):
+        # Small LLM sometimes returns a string or a dict instead of a list
+        assert CommunityOpinionService._normalise_themes("themes go here") == []
+        assert CommunityOpinionService._normalise_themes({"theme": "x"}) == []
+        assert CommunityOpinionService._normalise_themes(None) == []
+
+    def test_normalise_divisions_drops_garbage_elements(self):
+        raw = [
+            {"faction": "A", "share": 0.4, "concerns": ["cost", "trust"]},
+            {"faction": "", "share": 0.3},  # empty faction
+            "not a dict",
+            {"share": 0.5},  # missing faction
+            # Concerns must be a list of non-empty strings; mixed junk filtered
+            {
+                "faction": "B",
+                "share": 0.3,
+                "concerns": ["ok", "", None, 42, "also-ok"],
+            },
+        ]
+        out = CommunityOpinionService._normalise_divisions(raw)
+        assert len(out) == 2
+        assert out[0]["faction"] == "A"
+        assert out[0]["concerns"] == ["cost", "trust"]
+        assert out[1]["concerns"] == ["ok", "also-ok"]
+
+    def test_normalise_divisions_drops_non_list_concerns(self):
+        raw = [{"faction": "A", "share": 0.5, "concerns": "a single string"}]
+        out = CommunityOpinionService._normalise_divisions(raw)
+        # Non-list concerns → empty list, but faction is still valid
+        assert out == [{"faction": "A", "share": 0.5, "concerns": []}]
+
+    def test_normalise_key_quotes_requires_agent_id_and_content(self):
+        raw = [
+            {"agent_id": "abc", "content": "hello", "step": 3},
+            {"agent_id": "", "content": "missing id"},
+            {"agent_id": "xyz", "content": ""},
+            {"agent_id": "xyz", "content": "ok", "step": "nan"},
+            "bare string",
+            None,
+        ]
+        out = CommunityOpinionService._normalise_key_quotes(raw)
+        assert len(out) == 2
+        assert out[0] == {"agent_id": "abc", "content": "hello", "step": 3}
+        # Non-int step coerces to 0
+        assert out[1] == {"agent_id": "xyz", "content": "ok", "step": 0}
+
+
+# ===========================================================================
+# Deadlock retry path
+# ===========================================================================
+
+
+class _FakeOrig:
+    """Mimics asyncpg.exceptions.DeadlockDetectedError enough for the
+    ``sqlstate`` attribute lookup used by the retry helper."""
+
+    def __init__(self, sqlstate: str) -> None:
+        self.sqlstate = sqlstate
+
+
+def _make_deadlock_error() -> Exception:
+    """Construct a real ``sqlalchemy.exc.DBAPIError`` with ``orig.sqlstate``
+    set to Postgres' deadlock code. Calling ``DBAPIError()`` directly is
+    fussy — easier to use the two-argument form that sets ``orig``."""
+    from sqlalchemy.exc import DBAPIError
+    err = DBAPIError("fake", None, Exception("deadlock"))
+    err.orig = _FakeOrig("40P01")
+    return err
+
+
+class _RetrySession:
+    """Fake session that raises N deadlocks on commit before succeeding."""
+
+    def __init__(self, deadlocks_before_success: int) -> None:
+        self._remaining_deadlocks = deadlocks_before_success
+        self.commit_attempts = 0
+        self.rollbacks = 0
+        self.added: list[Any] = []
+        self.refreshed: list[Any] = []
+
+    def add(self, row: Any) -> None:
+        self.added.append(row)
+
+    async def commit(self) -> None:
+        self.commit_attempts += 1
+        if self._remaining_deadlocks > 0:
+            self._remaining_deadlocks -= 1
+            raise _make_deadlock_error()
+
+    async def rollback(self) -> None:
+        self.rollbacks += 1
+
+    async def refresh(self, row: Any) -> None:
+        self.refreshed.append(row)
+
+
+def _make_row() -> Any:
+    from app.models.community_opinion import CommunityOpinion
+    return CommunityOpinion(
+        opinion_id=uuid4(),
+        simulation_id=uuid4(),
+        community_id="c1",
+        step=0,
+        themes=[], divisions=[], sentiment_trend="stable",
+        dominant_emotions=[], key_quotes=[], summary="",
+        source_step_count=0, source_agent_count=0,
+        llm_provider="x", llm_model="y",
+        llm_cost_usd=0.0, is_fallback_stub=False,
+    )
+
+
+def _unused_service() -> CommunityOpinionService:
+    """Build a service instance whose orchestrator/gateway are never
+    touched — the retry tests only exercise the persist helper."""
+    return CommunityOpinionService(
+        orchestrator=StubOrchestrator(state=None),
+        gateway=StubGateway(content="{}"),
+    )
+
+
+class TestPersistRetry:
+    """SPEC: 25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis"""
+
+    @pytest.mark.asyncio
+    async def test_retries_on_deadlock_then_succeeds(self):
+        service = _unused_service()
+        session = _RetrySession(deadlocks_before_success=2)
+        row = _make_row()
+        result = await service._persist_row_with_retry(row, session)
+        # 2 deadlocks + 1 success = 3 commit attempts
+        assert session.commit_attempts == 3
+        assert session.rollbacks == 2
+        assert session.refreshed == [row]
+        # Newly persisted row is returned unchanged
+        assert result is row
+
+    @pytest.mark.asyncio
+    async def test_gives_up_after_max_attempts(self):
+        from sqlalchemy.exc import DBAPIError
+        service = _unused_service()
+        session = _RetrySession(deadlocks_before_success=99)
+        row = _make_row()
+        with pytest.raises(DBAPIError):
+            await service._persist_row_with_retry(
+                row, session, max_attempts=3,
+            )
+        # All 3 attempts exhausted + final rollback before raise
+        assert session.commit_attempts == 3
+        assert session.rollbacks == 3
+
+
+# ===========================================================================
+# Unique-violation race path
+# ===========================================================================
+
+
+def _make_unique_violation_error() -> Exception:
+    """Build a real ``IntegrityError`` with the Postgres unique_violation
+    sqlstate (23505) — the error we want the retry helper to catch and
+    convert into a "fetch the winner's row" path.
+    """
+    from sqlalchemy.exc import IntegrityError
+    err = IntegrityError("fake", None, Exception("unique violation"))
+    err.orig = _FakeOrig("23505")
+    return err
+
+
+class _UniqueViolationSession:
+    """Session that raises a unique_violation on first commit, then
+    returns a pre-seeded "winner" row when the retry helper asks for
+    the cached one via ``execute(select(...))``.
+    """
+
+    def __init__(self, winner_row: Any) -> None:
+        self._winner = winner_row
+        self.commit_attempts = 0
+        self.rollbacks = 0
+        self.added: list[Any] = []
+        self.refreshed: list[Any] = []
+
+    class _Result:
+        def __init__(self, row: Any) -> None:
+            self._row = row
+
+        def scalar_one_or_none(self) -> Any:
+            return self._row
+
+    def add(self, row: Any) -> None:
+        self.added.append(row)
+
+    async def commit(self) -> None:
+        self.commit_attempts += 1
+        raise _make_unique_violation_error()
+
+    async def rollback(self) -> None:
+        self.rollbacks += 1
+
+    async def refresh(self, row: Any) -> None:
+        self.refreshed.append(row)
+
+    async def execute(self, _stmt: Any) -> Any:
+        return _UniqueViolationSession._Result(self._winner)
+
+
+class TestPersistUniqueViolation:
+    """SPEC: 25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis"""
+
+    @pytest.mark.asyncio
+    async def test_unique_violation_returns_winner_row(self):
+        """When two writers race on (sim, community, step), the loser
+        catches the 23505, re-reads the cache, and returns the winner's
+        row instead of retrying."""
+        service = _unused_service()
+        winner_row = _make_row()  # Stand-in for the other writer's row
+        session = _UniqueViolationSession(winner_row=winner_row)
+        our_row = _make_row()
+
+        result = await service._persist_row_with_retry(our_row, session)
+
+        # Returned the WINNER's row, not ours
+        assert result is winner_row
+        assert result is not our_row
+        # We attempted one commit, caught the violation, rolled back once
+        assert session.commit_attempts == 1
+        assert session.rollbacks == 1
+        # We did not loop / retry — unique violations terminate immediately
+        assert len(session.added) == 1
+
+    @pytest.mark.asyncio
+    async def test_unique_violation_no_winner_row_propagates(self):
+        """If the constraint says a row exists but our own ``_find_cached``
+        can't see it (transaction isolation quirk), re-raise rather than
+        silently returning ``None``."""
+        from sqlalchemy.exc import IntegrityError
+        service = _unused_service()
+        session = _UniqueViolationSession(winner_row=None)
+        row = _make_row()
+
+        with pytest.raises(IntegrityError):
+            await service._persist_row_with_retry(row, session)
