@@ -97,6 +97,8 @@ class CognitionLayer:
         memories: list[MemoryRecord],
         cognition_tier: Literal[1, 2, 3],
         community_bias: float = 0.0,
+        campaign_novelty: float = 0.5,
+        campaign_utility: float = 0.5,
     ) -> CognitionResult:
         """Synchronous evaluate — Tier 3 falls back to Tier 2.
 
@@ -129,6 +131,25 @@ class CognitionLayer:
         # Raw range is approximately [-0.35, 0.75], center ~0.2
         # Map to [-2, 2] by scaling factor
         evaluation = raw_evaluation * 4.0
+
+        # Round 8-6: campaign framing bonus.
+        #
+        # Before this round the rule engine ignored the campaign entirely —
+        # evaluation_score was driven only by the agent's internal state
+        # (emotion + memory + personality) which meant radically different
+        # campaign framings produced bit-identical adoption curves. See
+        # docs/USE_CASE_PILOTS.md for the pilot that caught this.
+        #
+        # The bonus is centered at 0 when the campaign is "neutral"
+        # (novelty == utility == 0.5) so the prior Tier-1 behaviour is
+        # preserved for legacy tests / fixtures that leave the fields
+        # at their defaults. Utility weighs slightly more than novelty
+        # because people adopt based on value first, novelty second.
+        campaign_bonus = (
+            0.3 * (campaign_utility - 0.5)
+            + 0.2 * (campaign_novelty - 0.5)
+        )
+        evaluation += campaign_bonus * 2.0
         evaluation = max(-2.0, min(2.0, evaluation))
 
         tier_used = 1
@@ -176,6 +197,8 @@ class CognitionLayer:
         cognition_tier: Literal[1, 2, 3],
         community_bias: float = 0.0,
         campaign: object | None = None,
+        campaign_novelty: float = 0.5,
+        campaign_utility: float = 0.5,
     ) -> CognitionResult:
         """Async evaluate with real LLM for Tier 3.
 
@@ -185,7 +208,11 @@ class CognitionLayer:
         """
         # Tier 1/2: delegate to sync path
         if cognition_tier < 3 or self._llm_adapter is None:
-            return self.evaluate(agent, perception, memories, cognition_tier, community_bias)
+            return self.evaluate(
+                agent, perception, memories, cognition_tier, community_bias,
+                campaign_novelty=campaign_novelty,
+                campaign_utility=campaign_utility,
+            )
 
         # Tier 3: async LLM path (via Gateway if available, direct adapter otherwise)
         try:
@@ -231,7 +258,11 @@ class CognitionLayer:
                 agent.agent_id,
                 exc_info=True,
             )
-            return self.evaluate(agent, perception, memories, 2, community_bias)
+            return self.evaluate(
+                agent, perception, memories, 2, community_bias,
+                campaign_novelty=campaign_novelty,
+                campaign_utility=campaign_utility,
+            )
 
 
 def _parse_llm_cognition(content: str) -> tuple[float, str]:

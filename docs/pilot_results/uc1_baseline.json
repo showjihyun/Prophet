@@ -1,0 +1,196 @@
+{
+  "case": "uc1_baseline",
+  "readme_section": "### Pre-test a product launch",
+  "readme_claim": "Polarizes skeptics; adoption stalls at 12%",
+  "simulation_id": "fe6048ac-7236-4ffc-ae51-1af26045dc73",
+  "payload": {
+    "name": "UC1 Baseline \u2014 Sustainability (high controversy)",
+    "description": "README use-case 1: beverage brand sustainability launch. Baseline run with high controversy / low utility framing.",
+    "campaign": {
+      "name": "GreenBottle Eco-Launch",
+      "budget": 1200000,
+      "channels": [
+        "sns",
+        "news",
+        "influencer"
+      ],
+      "message": "Switch to sustainable \u2014 every plastic bottle harms the planet.",
+      "target_communities": [
+        "all"
+      ],
+      "novelty": 0.5,
+      "utility": 0.3,
+      "controversy": 0.8
+    },
+    "communities": [
+      {
+        "id": "A",
+        "name": "early_adopters",
+        "size": 200,
+        "agent_type": "early_adopter"
+      },
+      {
+        "id": "B",
+        "name": "mainstream",
+        "size": 600,
+        "agent_type": "consumer"
+      },
+      {
+        "id": "C",
+        "name": "skeptics",
+        "size": 150,
+        "agent_type": "skeptic"
+      },
+      {
+        "id": "D",
+        "name": "experts",
+        "size": 30,
+        "agent_type": "expert"
+      },
+      {
+        "id": "E",
+        "name": "influencers",
+        "size": 50,
+        "agent_type": "influencer"
+      }
+    ],
+    "max_steps": 12,
+    "default_llm_provider": "ollama",
+    "slm_llm_ratio": 0.98,
+    "slm_model": "llama3.1:8b",
+    "budget_usd": 1.0,
+    "random_seed": 42
+  },
+  "started_at": "2026-04-11T15:54:23.957889+00:00",
+  "finished_at": "2026-04-11T15:55:40.701403+00:00",
+  "steps_run": 12,
+  "final_metrics": {
+    "adoption_rate": 0.9669902912621359,
+    "mean_sentiment": 0.6228177734814228,
+    "sentiment_variance": 0.06132240497612563,
+    "diffusion_rate": 9.0
+  },
+  "per_community_final": {
+    "2e0a06bc-5bd8-ab83-2c4b-b04538b31dbe": {
+      "community_id": "2e0a06bc-5bd8-ab83-2c4b-b04538b31dbe",
+      "adoption_count": 30,
+      "adoption_rate": 1.0,
+      "mean_belief": 0.6005584663254029,
+      "dominant_action": "adopt",
+      "new_propagation_count": 0
+    },
+    "4fe33cd2-3aa0-47ba-95bd-137e088add83": {
+      "community_id": "4fe33cd2-3aa0-47ba-95bd-137e088add83",
+      "adoption_count": 597,
+      "adoption_rate": 0.995,
+      "mean_belief": 0.6423318799516623,
+      "dominant_action": "adopt",
+      "new_propagation_count": 23
+    },
+    "2f8aad64-18f3-442c-73cb-266e08a2d562": {
+      "community_id": "2f8aad64-18f3-442c-73cb-266e08a2d562",
+      "adoption_count": 198,
+      "adoption_rate": 0.99,
+      "mean_belief": 0.5772449790715422,
+      "dominant_action": "adopt",
+      "new_propagation_count": 2
+    },
+    "7e9a550f-6660-5be4-16a4-094250356bf7": {
+      "community_id": "7e9a550f-6660-5be4-16a4-094250356bf7",
+      "adoption_count": 49,
+      "adoption_rate": 0.98,
+      "mean_belief": 0.6582053426594419,
+      "dominant_action": "adopt",
+      "new_propagation_count": 4
+    },
+    "e289c364-8ec8-60df-c67e-b29d39d136c4": {
+      "community_id": "e289c364-8ec8-60df-c67e-b29d39d136c4",
+      "adoption_count": 122,
+      "adoption_rate": 0.8133333333333334,
+      "mean_belief": 0.5981810785188357,
+      "dominant_action": "adopt",
+      "new_propagation_count": 6
+    }
+  },
+  "emergent_events_total_by_type": {
+    "viral_cascade": 3
+  },
+  "opinion_overall": {
+    "error": "status=500",
+    "body": "Internal Server Error"
+  },
+  "step_history_summary": [
+    {
+      "step": 0,
+      "adoption_rate": 0.04951456310679612,
+      "mean_sentiment": 0.014537512052026719,
+      "n_emergent": 0
+    },
+    {
+      "step": 1,
+      "adoption_rate": 0.21650485436893205,
+      "mean_sentiment": 0.034456019777131724,
+      "n_emergent": 1
+    },
+    {
+      "step": 2,
+      "adoption_rate": 0.4077669902912621,
+      "mean_sentiment": 0.05881956309591966,
+      "n_emergent": 1
+    },
+    {
+      "step": 3,
+      "adoption_rate": 0.5902912621359223,
+      "mean_sentiment": 0.08874543222560063,
+      "n_emergent": 1
+    },
+    {
+      "step": 4,
+      "adoption_rate": 0.7077669902912621,
+      "mean_sentiment": 0.12406937613791963,
+      "n_emergent": 0
+    },
+    {
+      "step": 5,
+      "adoption_rate": 0.7951456310679612,
+      "mean_sentiment": 0.16418093805149933,
+      "n_emergent": 0
+    },
+    {
+      "step": 6,
+      "adoption_rate": 0.8621359223300971,
+      "mean_sentiment": 0.20766005795617726,
+      "n_emergent": 0
+    },
+    {
+      "step": 7,
+      "adoption_rate": 0.903883495145631,
+      "mean_sentiment": 0.2542812667453646,
+      "n_emergent": 0
+    },
+    {
+      "step": 8,
+      "adoption_rate": 0.9300970873786408,
+      "mean_sentiment": 0.3028087290394104,
+      "n_emergent": 0
+    },
+    {
+      "step": 9,
+      "adoption_rate": 0.9466019417475728,
+      "mean_sentiment": 0.4546838876071062,
+      "n_emergent": 0
+    },
+    {
+      "step": 10,
+      "adoption_rate": 0.958252427184466,
+      "mean_sentiment": 0.5521169095863208,
+      "n_emergent": 0
+    },
+    {
+      "step": 11,
+      "adoption_rate": 0.9669902912621359,
+      "mean_sentiment": 0.6228177734814228,
+      "n_emergent": 0
+    }
+  ]
+}

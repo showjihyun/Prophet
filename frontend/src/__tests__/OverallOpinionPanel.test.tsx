@@ -46,7 +46,7 @@ const MOCK_COMMUNITY: CommunityOpinion = {
   source_step_count: 10,
   source_agent_count: 100,
   llm_provider: 'ollama',
-  llm_model: 'llama3.2:1b',
+  llm_model: 'llama3.1:8b',
   is_fallback_stub: false,
 };
 
@@ -88,7 +88,7 @@ const MOCK_OVERALL: OverallOpinion = {
     source_step_count: 10,
     source_agent_count: 300,
     llm_provider: 'ollama',
-    llm_model: 'llama3.2:1b',
+    llm_model: 'llama3.1:8b',
     is_fallback_stub: false,
   },
   communities: [

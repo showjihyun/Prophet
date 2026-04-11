@@ -76,6 +76,7 @@ that combines LLM + GraphRAG + viral diffusion.
 | `21_SIMULATION_QUALITY_SPEC.md` | Simulation quality (consolidated P1 SQ + P2 EC/BC/CG + P3 RF/HM/MP) | Current |
 | `22_CONVERSATION_THREAD_SPEC.md` | Real thread capture + storage + API | Current |
 | `23_EXPERT_LLM_SPEC.md` | Expert engine LLM integration (+ rule-based fallback) | Current |
+| `26_ANALYTICS_SPEC.md` | Post-Run Analytics page (as-built; replaces IP-protected `07_FRONTEND_SPEC.md#simulationsidanalytics`) | Current |
 
 > **Consolidation history**: the three earlier files `19_SIMULATION_QUALITY_SPEC.md`,
 > `20_SIMULATION_QUALITY_P2_SPEC.md`, and `21_SIMULATION_QUALITY_P3_SPEC.md` were merged
@@ -244,7 +245,10 @@ Agent(subagent_type="feature-dev:code-reviewer", model="sonnet")
 
 
 ### LLM
-- **Ollama** (local, default) — `ollama-python`
+- **Ollama** (local, default) — `ollama-python`. Default model `llama3.1:8b`
+  running on GPU via the `docker-compose.gpu.yml` override (~75 tok/s on
+  RTX 4070-class). CPU-only hosts should override the env vars to
+  `llama3.2:1b`. See README "Quick Start" for the exact command.
 - **Claude API** — `anthropic` SDK
 - **OpenAI API** — `openai` SDK
 

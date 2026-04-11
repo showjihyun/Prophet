@@ -143,3 +143,107 @@ class TestStepRunner:
         runner = StepRunner()
         await runner.execute_step(state, 0)
         assert len(state.injected_events) == 0
+
+
+@pytest.mark.phase6
+class TestCampaignFramingAffectsOutcome:
+    """SPEC: docs/spec/26_DIFFUSION_CALIBRATION_SPEC.md (Round 8-6)
+
+    Regression test for the pre-Round-8-6 wire gap where
+    ``CampaignConfig.{novelty, utility, controversy}`` were silently
+    dropped before reaching ``AgentTick.tick()``. When the bug was
+    present, two simulations with identical seeds + populations but
+    radically different campaign framings produced *identical*
+    step-by-step trajectories. Today's assertion:
+
+        "Two sims with the same seed and population but opposite
+        campaign framings must produce measurably different adoption
+        curves by step 4."
+
+    If this test ever goes green again with ``abs(delta) < 0.02``,
+    something in the campaign → tick wire has regressed.
+    """
+
+    def _config(
+        self,
+        *,
+        novelty: float,
+        utility: float,
+        controversy: float,
+        seed: int = 1234,
+    ) -> SimulationConfig:
+        return SimulationConfig(
+            simulation_id=uuid4(),
+            communities=[
+                CommunityConfig(
+                    id="early", name="early_adopters",
+                    size=60, agent_type="early_adopter",
+                ),
+                CommunityConfig(
+                    id="main", name="mainstream",
+                    size=120, agent_type="consumer",
+                ),
+                CommunityConfig(
+                    id="skeptic", name="skeptics",
+                    size=40, agent_type="skeptic",
+                ),
+            ],
+            campaign=CampaignConfig(
+                name="test",
+                message="test msg",
+                novelty=novelty,
+                utility=utility,
+                controversy=controversy,
+            ),
+            max_steps=6,
+            random_seed=seed,
+            enable_dynamic_edges=False,
+        )
+
+    async def _run_n_steps(self, config: SimulationConfig, n: int) -> list:
+        orch = SimulationOrchestrator()
+        state = orch.create_simulation(config)
+        runner = StepRunner()
+        results = []
+        for step in range(n):
+            result = await runner.execute_step(state, step)
+            results.append(result)
+            state.step_history.append(result)
+            state.current_step = step + 1
+        return results
+
+    @pytest.mark.asyncio
+    async def test_campaign_framing_changes_adoption_curve(self):
+        """Friendly framing (low controversy, high utility/novelty) must
+        produce meaningfully different adoption than hostile framing
+        (high controversy, low utility/novelty) when everything else is
+        held constant. This regression test caught the pre-8-6 bug where
+        campaign attrs were silently ignored."""
+        friendly = await self._run_n_steps(
+            self._config(novelty=0.85, utility=0.85, controversy=0.15),
+            n=5,
+        )
+        hostile = await self._run_n_steps(
+            self._config(novelty=0.15, utility=0.15, controversy=0.85),
+            n=5,
+        )
+
+        # Seed is identical; without the wire fix the trajectories
+        # were bit-identical through step 4.
+        adopt_friendly = friendly[-1].adoption_rate
+        adopt_hostile = hostile[-1].adoption_rate
+        delta = adopt_friendly - adopt_hostile
+        assert abs(delta) >= 0.02, (
+            f"Campaign framing had no measurable effect: friendly="
+            f"{adopt_friendly:.4f} vs hostile={adopt_hostile:.4f} "
+            f"(delta={delta:+.4f}). Check that campaign.novelty/"
+            f"utility/controversy are being passed through "
+            f"step_runner → community_orchestrator → AgentTick.tick()."
+        )
+        # Friendly framing should beat hostile framing (not just differ).
+        assert delta > 0, (
+            f"Friendly framing produced LOWER adoption than hostile "
+            f"({adopt_friendly:.4f} vs {adopt_hostile:.4f}). The "
+            f"MessageStrength formula is inverted or the blend weights "
+            f"are wrong."
+        )

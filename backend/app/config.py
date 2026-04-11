@@ -15,22 +15,28 @@ class Settings(BaseSettings):
 
     # ── LLM Providers ───────────────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
-    # Default Ollama model: llama3.2:1b.
+    # Default Ollama model: llama3.1:8b.
     #
     # History:
     # - Round 7 briefly switched to gemma4:latest (9.6 GB, multimodal),
     #   but 0.20.x Ollama has a regression that crashes the llama
     #   runner on CPU inference.
-    # - Round 8 moved back toward llama3.1:8b, but 5.6 GiB of RAM is
-    #   too much for typical 8 GB VRAM WSL2 hosts when other Docker
-    #   services are running alongside. Round 8-5 drops to
-    #   llama3.2:1b (~1.3 GB on disk, ~2 GB in RAM) — small enough to
-    #   fit comfortably on modest laptops while still being a real
-    #   Meta-Llama completion model. Pairs with the pinned Ollama
-    #   0.11.10 image (see docker-compose.yml).
-    ollama_default_model: str = "llama3.2:1b"
-    slm_model: str = "llama3.2:1b"
-    ollama_embed_model: str = "llama3.2:1b"
+    # - Round 8 moved back toward llama3.1:8b, but 5.6 GiB of RAM was
+    #   too much for CPU-only inference on modest VRAM hosts. Round 8-5
+    #   temporarily dropped to llama3.2:1b (~1.3 GB) so CPU mode stayed
+    #   usable.
+    # - Round 8-6 re-enables GPU inference via
+    #   ``docker compose -f docker-compose.yml -f docker-compose.gpu.yml``.
+    #   An RTX 4070-class card (12 GiB VRAM) runs llama3.1:8b at ~200+
+    #   tok/s which is fast enough for every agent tick and makes the
+    #   smaller 1B fallback unnecessary. 1B hallucinated narratives in
+    #   the opinion synthesis even when given real numeric data; the 8B
+    #   model stays anchored to the provided metrics. 1B is still the
+    #   right choice for CPU-only laptops — override via the
+    #   ``OLLAMA_DEFAULT_MODEL`` / ``SLM_MODEL`` env vars.
+    ollama_default_model: str = "llama3.1:8b"
+    slm_model: str = "llama3.1:8b"
+    ollama_embed_model: str = "llama3.1:8b"
     anthropic_api_key: str = ""
     anthropic_default_model: str = "claude-sonnet-4-6"
     openai_api_key: str = ""

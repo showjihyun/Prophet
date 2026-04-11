@@ -103,6 +103,8 @@ class AgentTick:
         seed: int = 0,
         graph_context: GraphContext | None = None,
         campaign_controversy: float = 0.0,
+        campaign_novelty: float = 0.5,
+        campaign_utility: float = 0.5,
     ) -> AgentTickResult:
         """Full agent execution for one simulation step.
 
@@ -194,7 +196,9 @@ class AgentTick:
         # Update agent emotion for cognition
         agent_with_emotion = replace(agent, emotion=emotion)
         cognition = self._cognition.evaluate(
-            agent_with_emotion, perception, memories, actual_tier, community_bias
+            agent_with_emotion, perception, memories, actual_tier, community_bias,
+            campaign_novelty=campaign_novelty,
+            campaign_utility=campaign_utility,
         )
 
         # Step 6: Decision
@@ -212,10 +216,24 @@ class AgentTick:
         # Step 7: Influence Propagation
         propagation_events: list[PropagationEvent] = []
         if action in {AgentAction.COMMENT, AgentAction.SHARE, AgentAction.REPOST, AgentAction.ADOPT}:
+            # MessageStrength blends two signals:
+            #   1. Campaign-inherent properties from CampaignConfig
+            #      (novelty/utility/controversy — what the message IS)
+            #   2. Agent-derived perception (media_signal, evaluation_score —
+            #      how THIS agent reacts to the message)
+            # The 0.6/0.4 blend makes campaign inputs dominant so a swing
+            # from controversy=0.8 to controversy=0.2 actually moves the
+            # propagation probability. Before Round 8-6, only
+            # campaign_controversy was forwarded (novelty and utility were
+            # agent-only), which made the entire campaign-framing slider
+            # effectively dead — see docs/USE_CASE_PILOTS.md.
+            # SPEC: docs/spec/26_DIFFUSION_CALIBRATION_SPEC.md (Round 8-6)
+            agent_novelty = min(media_signal, 1.0)
+            agent_utility = max(0.0, min(1.0, cognition.evaluation_score / 2.0))
             ms = MessageStrength(
-                novelty=min(media_signal, 1.0),
+                novelty=min(1.0, 0.6 * campaign_novelty + 0.4 * agent_novelty),
                 controversy=campaign_controversy,
-                utility=max(0.0, min(1.0, cognition.evaluation_score / 2.0)),
+                utility=min(1.0, 0.6 * campaign_utility + 0.4 * agent_utility),
             )
             neighbor_ids: list[UUID] = []
             edges: dict[tuple[UUID, UUID], float] = {}
@@ -331,6 +349,8 @@ class AgentTick:
         graph_context: GraphContext | None = None,
         campaign: object | None = None,
         campaign_controversy: float = 0.0,
+        campaign_novelty: float = 0.5,
+        campaign_utility: float = 0.5,
     ) -> AgentTickResult:
         """Async agent execution for Tier 3 agents using embedding-based memory and real LLM.
 
@@ -417,6 +437,8 @@ class AgentTick:
         cognition = await self._cognition.evaluate_async(
             agent_with_emotion, perception, memories, cognition_tier, community_bias,
             campaign=campaign,
+            campaign_novelty=campaign_novelty,
+            campaign_utility=campaign_utility,
         )
         llm_call_log = None  # placeholder; real logging wired at gateway level
 
@@ -435,10 +457,24 @@ class AgentTick:
         # Step 7: Influence Propagation
         propagation_events: list[PropagationEvent] = []
         if action in {AgentAction.COMMENT, AgentAction.SHARE, AgentAction.REPOST, AgentAction.ADOPT}:
+            # MessageStrength blends two signals:
+            #   1. Campaign-inherent properties from CampaignConfig
+            #      (novelty/utility/controversy — what the message IS)
+            #   2. Agent-derived perception (media_signal, evaluation_score —
+            #      how THIS agent reacts to the message)
+            # The 0.6/0.4 blend makes campaign inputs dominant so a swing
+            # from controversy=0.8 to controversy=0.2 actually moves the
+            # propagation probability. Before Round 8-6, only
+            # campaign_controversy was forwarded (novelty and utility were
+            # agent-only), which made the entire campaign-framing slider
+            # effectively dead — see docs/USE_CASE_PILOTS.md.
+            # SPEC: docs/spec/26_DIFFUSION_CALIBRATION_SPEC.md (Round 8-6)
+            agent_novelty = min(media_signal, 1.0)
+            agent_utility = max(0.0, min(1.0, cognition.evaluation_score / 2.0))
             ms = MessageStrength(
-                novelty=min(media_signal, 1.0),
+                novelty=min(1.0, 0.6 * campaign_novelty + 0.4 * agent_novelty),
                 controversy=campaign_controversy,
-                utility=max(0.0, min(1.0, cognition.evaluation_score / 2.0)),
+                utility=min(1.0, 0.6 * campaign_utility + 0.4 * agent_utility),
             )
             neighbor_ids: list[UUID] = []
             edges: dict[tuple[UUID, UUID], float] = {}

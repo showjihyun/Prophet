@@ -65,7 +65,7 @@ const MOCK_OPINION: CommunityOpinion = {
   source_step_count: 5,
   source_agent_count: 80,
   llm_provider: 'ollama',
-  llm_model: 'llama3.2:1b',
+  llm_model: 'llama3.1:8b',
   is_fallback_stub: false,
 };
 
