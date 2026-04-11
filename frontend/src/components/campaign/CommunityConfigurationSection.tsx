@@ -155,25 +155,35 @@ function CommunityCard({
 
       <div className="flex flex-col gap-2">
         <span className="text-xs font-medium text-[var(--muted-foreground)]">Personality Profile</span>
-        {PERSONALITY_KEYS.map((key) => (
-          <div key={key} className="flex items-center gap-2">
-            <span className="text-[11px] text-[var(--muted-foreground)] w-28 shrink-0">
-              {PERSONALITY_LABELS[key]}
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={community.personality_profile[key as keyof typeof community.personality_profile]}
-              onChange={(e) => onUpdatePersonality(key, Number(e.target.value))}
-              className="flex-1 accent-[var(--foreground)] h-1"
-            />
-            <span className="text-[10px] font-mono text-[var(--muted-foreground)] w-8 text-right">
-              {community.personality_profile[key as keyof typeof community.personality_profile].toFixed(2)}
-            </span>
-          </div>
-        ))}
+        {PERSONALITY_KEYS.map((key) => {
+          // `personality_profile` is optional + partial on the wire — the
+          // backend fills any missing trait with 0.5 at agent generation,
+          // so we mirror that default in the slider UI when the user
+          // hasn't configured a specific trait yet.
+          const traitValue =
+            community.personality_profile?.[
+              key as keyof NonNullable<typeof community.personality_profile>
+            ] ?? 0.5;
+          return (
+            <div key={key} className="flex items-center gap-2">
+              <span className="text-[11px] text-[var(--muted-foreground)] w-28 shrink-0">
+                {PERSONALITY_LABELS[key]}
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={traitValue}
+                onChange={(e) => onUpdatePersonality(key, Number(e.target.value))}
+                className="flex-1 accent-[var(--foreground)] h-1"
+              />
+              <span className="text-[10px] font-mono text-[var(--muted-foreground)] w-8 text-right">
+                {traitValue.toFixed(2)}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

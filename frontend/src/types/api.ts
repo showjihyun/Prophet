@@ -9,18 +9,34 @@
 
 // ── Simulation ────────────────────────────────────────────────────────
 
+/**
+ * The shape ``/api/v1/simulations`` accepts for a community entry.
+ *
+ * ``personality_profile`` is **optional and partial** because:
+ *   - The backend fills any missing trait with a 0.5 default at agent
+ *     generation time (see ``orchestrator.create_simulation`` and the
+ *     ``_trait`` helper in ``app/engine/simulation/orchestrator.py``).
+ *   - The frontend API client already documents it as optional
+ *     (``src/api/client.ts:130,132``).
+ *   - ``communitySimilarity.personalityVector`` defensively uses
+ *     ``c.personality_profile ?? {}`` and falls back to 0.5 per trait.
+ *
+ * Treating it as required with all five fields forced every caller to
+ * pass the full profile, including tests that intentionally exercise
+ * the "missing profile" fallback. The runtime shape was always partial.
+ */
 export interface CommunityConfigInput {
   id: string;
   name: string;
   size: number;
   agent_type: string;
-  personality_profile: {
+  personality_profile?: Partial<{
     openness: number;
     skepticism: number;
     trend_following: number;
     brand_loyalty: number;
     social_influence: number;
-  };
+  }>;
 }
 
 export interface CreateSimulationConfig {
