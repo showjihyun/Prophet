@@ -1,6 +1,6 @@
 """Agent Reflection Engine — periodic belief revision from accumulated experience.
 
-SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1
+SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1
 
 Simulacra-style (Park et al. 2023): agents periodically reflect on accumulated
 memories to update their beliefs. Triggered by memory count or step interval.
@@ -15,7 +15,7 @@ from app.engine.agent.memory import MemoryRecord
 class ReflectionInput:
     """Structured input for reflection processing.
 
-    SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1 RF-02
+    SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-02
     """
     agent_id: UUID
     recent_memories: list[MemoryRecord]
@@ -27,7 +27,7 @@ class ReflectionInput:
 class ReflectionResult:
     """Output of reflection processing.
 
-    SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1 RF-02
+    SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-02
     """
     belief_delta: float         # [-0.3, 0.3]
     insight: str                # 1-line summary of what agent "learned"
@@ -37,7 +37,7 @@ class ReflectionResult:
 class ReflectionEngine:
     """Periodic reflection engine for agent belief revision.
 
-    SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1
+    SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1
 
     Tier 1/2 agents use heuristic reflection (deterministic).
     Tier 3 agents use LLM via PromptBuilder.build_memory_reflection_prompt().
@@ -49,7 +49,7 @@ class ReflectionEngine:
         step_interval: int = 10,
         reflection_weight: float = 0.2,
     ) -> None:
-        """SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1 RF-03"""
+        """SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-03"""
         self._memory_threshold = memory_threshold
         self._step_interval = step_interval
         self._reflection_weight = reflection_weight
@@ -62,7 +62,7 @@ class ReflectionEngine:
     ) -> bool:
         """Returns True when agent should perform reflection.
 
-        SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1 RF-01
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-01
 
         Conditions (ANY triggers reflection):
         - memory_count_since_last >= MEMORY_THRESHOLD
@@ -83,7 +83,7 @@ class ReflectionEngine:
     ) -> ReflectionInput:
         """Prepare structured input for reflection.
 
-        SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1 RF-01
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-01
         """
         return ReflectionInput(
             agent_id=agent_id or uuid4(),
@@ -98,7 +98,7 @@ class ReflectionEngine:
     ) -> ReflectionResult:
         """Tier 1/2 fallback: compute belief_delta from memory patterns.
 
-        SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1 RF-01
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-01
 
         Algorithm:
         - Count positive vs negative memories (emotion_weight > 0.5 → positive)

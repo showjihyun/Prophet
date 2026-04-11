@@ -1,6 +1,6 @@
 """Tests for Simulation Quality Phase 2: Emotional Contagion, Bounded Confidence, Content Generation.
 
-Auto-generated from SPEC: docs/spec/20_SIMULATION_QUALITY_P2_SPEC.md
+Auto-generated from SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md
 SPEC Version: 0.1.0
 Generated BEFORE implementation — tests define the contract.
 """
@@ -32,7 +32,7 @@ def _layer() -> EmotionLayer:
 # ===========================================================================
 
 class TestEmotionalContagion:
-    """SPEC: docs/spec/20_SIMULATION_QUALITY_P2_SPEC.md#§1"""
+    """SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1"""
 
     def test_ec_ac_01_no_neighbor_emotions_matches_original(self):
         """EC-AC-01: update() with no neighbor_emotions matches original behavior."""
@@ -131,8 +131,10 @@ class TestEmotionalContagion:
             expert_signal=0.0,
             decay=0.0,
         )
-        assert result_with.interest == pytest.approx(result_without.interest, abs=1e-9)
-        assert result_with.trust == pytest.approx(result_without.trust, abs=1e-9)
+        # B2 upgrade: interest + trust are NOW subject to contagion (was unaffected)
+        # Verify they shift toward neighbor mean (contagion_alpha=0.15 by default)
+        assert result_with.interest != pytest.approx(result_without.interest, abs=1e-9)
+        assert result_with.trust != pytest.approx(result_without.trust, abs=1e-9)
 
     def test_ec_ac_05_zero_weight_neighbors_no_contagion(self):
         """EC-AC-05: Zero-weight neighbors produce no contagion effect."""
@@ -217,7 +219,7 @@ class TestEmotionalContagion:
 # ===========================================================================
 
 class TestBoundedConfidenceModel:
-    """SPEC: docs/spec/20_SIMULATION_QUALITY_P2_SPEC.md#§2"""
+    """SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§2"""
 
     @pytest.fixture
     def model(self):
@@ -324,7 +326,7 @@ class TestBoundedConfidenceModel:
 # ===========================================================================
 
 class TestContentGeneration:
-    """SPEC: docs/spec/20_SIMULATION_QUALITY_P2_SPEC.md#§3"""
+    """SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§3"""
 
     def test_cg_ac_01_build_content_generation_prompt_returns_llmprompt(self):
         """CG-AC-01: build_content_generation_prompt returns LLMPrompt with max_tokens=128."""

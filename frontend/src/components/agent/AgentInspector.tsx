@@ -5,9 +5,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, User, Cpu, Activity, Brain, Clock } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
-import { apiClient } from "../../api/client";
 import type { AgentDetail } from "../../api/client";
-import { useAgent } from "../../api/queries";
+import { useAgent, useModifyAgent } from "../../api/queries";
 
 interface AgentInspectorProps {
   agentId: string;
@@ -110,8 +109,9 @@ export default function AgentInspector({
   const [editPersonality, setEditPersonality] = useState<Record<string, number>>({});
   const [editEmotion, setEditEmotion] = useState<Record<string, number>>({});
   const [editBelief, setEditBelief] = useState<number>(0);
-  const [saving, setSaving] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
+
+  const modifyAgent = useModifyAgent();
 
   // TanStack Query — cached agent detail. Re-opening the same agent
   // is instant; clicking a different agent uses a fresh query.
@@ -156,21 +156,23 @@ export default function AgentInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestStep]);
 
-  async function handleSave() {
+  function handleSave() {
     if (!isPaused) return;
-    setSaving(true);
-    try {
-      await apiClient.agents.modify(simulationId, agentId, {
-        personality: editPersonality,
-        emotion: editEmotion,
-        belief: editBelief,
-      });
-      addToast({ type: "success", message: "Agent updated successfully" });
-    } catch {
-      addToast({ type: "error", message: "Failed to save agent changes" });
-    } finally {
-      setSaving(false);
-    }
+    modifyAgent.mutate(
+      {
+        simId: simulationId,
+        agentId,
+        body: {
+          personality: editPersonality,
+          emotion: editEmotion,
+          belief: editBelief,
+        },
+      },
+      {
+        onSuccess: () => addToast({ type: "success", message: "Agent updated successfully" }),
+        onError: () => addToast({ type: "error", message: "Failed to save agent changes" }),
+      },
+    );
   }
 
   const agent = fetchState.status === "success" ? fetchState.data : null;
@@ -257,7 +259,17 @@ export default function AgentInspector({
                 <div className="rounded-lg bg-[var(--background)] border border-[var(--border)] p-3 flex flex-col gap-1.5">
                   <InfoRow label="Agent ID" value={agent.agent_id} mono />
                   <InfoRow label="Type" value={agent.agent_type} />
-                  <InfoRow label="Community" value={agent.community_id} mono />
+                  <InfoRow
+                    label="Community"
+                    // Prefer the backend-resolved human name; fall back to a
+                    // short UUID prefix when the backend couldn't resolve
+                    // one. No font swap → no layout shift while the query
+                    // settles.
+                    value={
+                      agent.community_name ??
+                      `${agent.community_id.slice(0, 8)}…`
+                    }
+                  />
                   <InfoRow
                     label="Status"
                     value={agent.adopted ? "Adopted" : "Not adopted"}
@@ -451,10 +463,10 @@ export default function AgentInspector({
 
                     <button
                       onClick={handleSave}
-                      disabled={saving}
+                      disabled={modifyAgent.isPending}
                       className="h-8 px-4 text-xs font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
                     >
-                      {saving ? "Saving..." : "Apply Changes"}
+                      {modifyAgent.isPending ? "Saving..." : "Apply Changes"}
                     </button>
                   </div>
                 </section>

@@ -9,6 +9,7 @@ import time
 from collections import Counter, defaultdict
 from dataclasses import replace
 from typing import TYPE_CHECKING
+import uuid
 from uuid import UUID, uuid4
 
 from app.engine.agent.perception import EnvironmentEvent, NeighborAction
@@ -69,7 +70,12 @@ def _build_campaign_events(
         if not target_ids:
             target_ids = all_community_ids  # fallback if no match
 
-    campaign_id = UUID(int=hash(campaign.name) % (2**128))
+    # Deterministic name-based UUID. Using ``hash()`` here would be
+    # non-deterministic across Python processes (PYTHONHASHSEED randomizes
+    # string hashing) — ``uuid5`` is a stable SHA-1-based namespace UUID
+    # so the same campaign config always produces the same campaign_id,
+    # which is required for simulation replay and comparison.
+    campaign_id = uuid.uuid5(uuid.NAMESPACE_OID, f"prophet.campaign:{campaign.name}")
 
     return [
         CampaignEvent(
@@ -235,16 +241,23 @@ class StepRunner:
         9. Increment current_step, return StepResult
     """
 
-    def __init__(self, llm_adapter=None, gateway=None) -> None:
-        """SPEC: docs/spec/04_SIMULATION_SPEC.md"""
-        from app.config import settings
-        self._agent_tick = AgentTick(llm_adapter=llm_adapter, gateway=gateway)
+    def __init__(self, llm_adapter=None, gateway=None, session_factory=None, simulation_id=None) -> None:
+        """SPEC: docs/spec/04_SIMULATION_SPEC.md
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§3 MP-02
+        """
+        self._session_factory = session_factory
+        self._simulation_id = simulation_id
+        self._agent_tick = AgentTick(
+            llm_adapter=llm_adapter, gateway=gateway,
+            session_factory=session_factory, simulation_id=simulation_id,
+        )
         self._tier_selector = TierSelector()
         self._exposure_model = ExposureModel()
         self._sentiment_model = SentimentModel()
+        # Domain defaults for cascade config (no config singleton dependency)
         cascade_config = CascadeConfig(
-            viral_cascade_threshold=settings.cascade_viral_threshold,
-            slow_adoption_steps=settings.cascade_slow_adoption_steps,
+            viral_cascade_threshold=0.15,
+            slow_adoption_steps=5,
         )
         self._cascade_detector = CascadeDetector(config=cascade_config)
         self._network_evolver = NetworkEvolver()
@@ -321,6 +334,8 @@ class StepRunner:
                 bridge_node_ids=comm_bridge_nodes,
                 llm_adapter=self._agent_tick._llm_adapter,
                 gateway=self._gateway,
+                session_factory=self._session_factory,
+                simulation_id=self._simulation_id,
             ))
 
         return orchestrators
@@ -388,9 +403,18 @@ class StepRunner:
             else:
                 global_env_events.append(ev)
 
-        # Tier config for communities
+        # Tier config for communities.
+        #
+        # ``slm_llm_ratio`` is the user-facing knob: 1.0 = pure SLM (no Tier 3
+        # LLM calls at all), 0.0 = full Tier 3 budget. Linearly interpolate
+        # the cap so the API parameter actually controls inference cost.
+        # Round 7-a fix: previously this hardcoded ``config.llm_tier3_ratio``
+        # so ``slm_llm_ratio=1.0`` did nothing — every step still made
+        # ~10% of agents call Tier 3, which was the dominant runtime cost.
+        sim_slm_ratio = max(0.0, min(1.0, config.slm_llm_ratio))
+        effective_tier3 = config.llm_tier3_ratio * (1.0 - sim_slm_ratio)
         tier_config = TierConfig(
-            max_tier3_ratio=config.llm_tier3_ratio,
+            max_tier3_ratio=effective_tier3,
             max_tier2_ratio=config.llm_tier3_ratio,
         )
 
@@ -447,6 +471,7 @@ class StepRunner:
         total_llm_calls = 0
         action_dist: dict[str, int] = {}
 
+        all_thread_messages = []
         for cr in community_results:
             for ua in cr.updated_agents:
                 updated_agent = replace(ua, step=step_num + 1)
@@ -459,6 +484,7 @@ class StepRunner:
 
             all_propagation_events.extend(cr.propagation_events)
             total_llm_calls += cr.llm_calls
+            all_thread_messages.extend(cr.thread_messages)
 
             for action_name, count in cr.action_distribution.items():
                 action_dist[action_name] = action_dist.get(action_name, 0) + count
@@ -614,6 +640,7 @@ class StepRunner:
             llm_calls_this_step=total_llm_calls,
             llm_tier_distribution=tier_dist,
             step_duration_ms=elapsed_ms,
+            thread_messages=all_thread_messages,
         )
 
 

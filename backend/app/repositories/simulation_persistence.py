@@ -1,10 +1,19 @@
 """DB persistence layer for simulation state.
+
 SPEC: docs/spec/08_DB_SPEC.md
+SPEC: docs/spec/20_CLEAN_ARCHITECTURE_SPEC.md#2.4
 
 Writes simulation lifecycle events to PostgreSQL without blocking
 the in-memory orchestrator flow. Failures are logged but do not
 crash the simulation — in-memory state remains the runtime source
 of truth, DB is the durable audit trail.
+
+**Round 6 move**: previously lived at
+``app/engine/simulation/persistence.py`` which violated CA-01 (the
+engine layer must not depend on SQLAlchemy). Moved under
+``repositories/`` so the file sits on the correct side of the
+dependency arrow — ``SqlSimulationRepository`` wraps it behind the
+``SimulationRepository`` Protocol.
 """
 from __future__ import annotations
 
@@ -30,6 +39,29 @@ if TYPE_CHECKING:
     from app.engine.simulation.schema import SimulationConfig, StepResult
 
 logger = logging.getLogger(__name__)
+
+
+def _node_id_to_int(node_id: Any) -> int:
+    """Map a NetworkX node id to a stable 32-bit signed integer.
+
+    The ``network_edges`` table stores endpoints as ``INTEGER`` columns.
+    NetworkGenerator always produces integer node ids, but older
+    NetworkX graphs or custom networks may use strings. We must map
+    any node id to an int **deterministically** — using Python's
+    built-in ``hash()`` would randomize the mapping across processes
+    (PYTHONHASHSEED), breaking simulation replay.
+
+    :returns: ``int(node_id)`` if already numeric, otherwise a
+        deterministic 31-bit digest of its string form (SHA-1 truncated,
+        masked to fit a signed INTEGER column).
+    """
+    if isinstance(node_id, (int, float)):
+        return int(node_id)
+    import hashlib as _hashlib
+    digest = _hashlib.sha1(str(node_id).encode()).digest()
+    # Take first 4 bytes as unsigned int, then mask to 31 bits so the
+    # value fits a signed PostgreSQL INTEGER (max 2,147,483,647).
+    return int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
 
 
 class SimulationPersistence:
@@ -73,132 +105,166 @@ class SimulationPersistence:
         agents: list[Any],
         network_edges: list[tuple[Any, Any, dict]],
     ) -> None:
-        """Persist a newly created simulation to DB.
+        """Persist a newly created simulation to DB — **strict with retry**.
 
-        IMPORTANT: We mix ORM `session.add` with bulk Core `session.execute(insert)`.
-        The bulk Core path bypasses the ORM unit-of-work and triggers an
-        autoflush of pending ORM objects, but autoflush ordering does NOT
-        always honour FK dependencies — Campaign can flush before Simulation
-        and produce a `campaigns_simulation_id_fkey` violation. To avoid this,
-        we explicitly flush the Simulation row first so its INSERT lands
-        before anything that references it. Failures here re-raise so the
-        caller knows the row is gone (otherwise downstream code happily
-        updates `scenarios.simulation_id` to a non-existent UUID).
+        Unlike the other ``persist_*`` methods in this class, which are
+        fire-and-forget (log + swallow), ``persist_creation`` is a REQUIRED
+        step in the simulation lifecycle. If it fails, the caller must know
+        so downstream code does not create FK references to a non-existent
+        row (e.g. ``scenarios.simulation_id``) or leave a ghost simulation
+        running in memory with no DB backing.
+
+        Retry policy (same pattern as :meth:`persist_step`):
+          * Attempts the full transaction up to ``_RETRY_COUNT`` times.
+          * Back-off sleep between attempts (``_RETRY_DELAY_BASE * attempt``).
+          * After all attempts fail, the failure is recorded on
+            :attr:`failed_queue` and the last exception is **re-raised**
+            so the caller can abort cleanly.
+
+        IMPORTANT: We mix ORM ``session.add`` with bulk Core
+        ``session.execute(insert)``. The bulk Core path bypasses the ORM
+        unit-of-work and triggers an autoflush of pending ORM objects, but
+        autoflush ordering does NOT always honour FK dependencies — Campaign
+        can flush before Simulation and produce a
+        ``campaigns_simulation_id_fkey`` violation. To avoid this, we
+        explicitly flush the Simulation row first so its INSERT lands before
+        anything that references it.
+
+        Raises:
+            The last DB exception after all retries are exhausted. The
+            session is rolled back before the exception propagates.
         """
-        try:
-            # 1. Simulation row — flush IMMEDIATELY so child FKs resolve.
-            sim_row = Simulation(
-                simulation_id=sim_id,
-                name=config.name,
-                description=config.description,
-                status="configured",
-                current_step=0,
-                max_steps=config.max_steps,
-                config=_config_to_dict(config),
-                random_seed=config.random_seed,
-            )
-            session.add(sim_row)
-            await session.flush()
+        import asyncio as _aio
 
-            # 2. Campaign row
-            if config.campaign:
-                campaign_row = Campaign(
-                    campaign_id=uuid.uuid4(),
+        last_exc: Exception | None = None
+        for attempt in range(1, self._RETRY_COUNT + 1):
+            try:
+                # 1. Simulation row — flush IMMEDIATELY so child FKs resolve.
+                sim_row = Simulation(
                     simulation_id=sim_id,
-                    name=config.campaign.name,
-                    budget=config.campaign.budget,
-                    channels=config.campaign.channels,
-                    message=config.campaign.message,
-                    controversy=config.campaign.controversy,
-                    novelty=config.campaign.novelty,
-                    utility=config.campaign.utility,
+                    name=config.name,
+                    description=config.description,
+                    status="configured",
+                    current_step=0,
+                    max_steps=config.max_steps,
+                    config=_config_to_dict(config),
+                    random_seed=config.random_seed,
                 )
-                session.add(campaign_row)
+                session.add(sim_row)
                 await session.flush()
 
-            # 3. Community rows — single-pass size count (was O(n²))
-            community_sizes: dict[str, int] = {}
-            for agent in agents:
-                cid = str(agent.community_id)
-                community_sizes[cid] = community_sizes.get(cid, 0) + 1
+                # 2. Campaign row
+                if config.campaign:
+                    campaign_row = Campaign(
+                        campaign_id=uuid.uuid4(),
+                        simulation_id=sim_id,
+                        name=config.campaign.name,
+                        budget=config.campaign.budget,
+                        channels=config.campaign.channels,
+                        message=config.campaign.message,
+                        controversy=config.campaign.controversy,
+                        novelty=config.campaign.novelty,
+                        utility=config.campaign.utility,
+                    )
+                    session.add(campaign_row)
+                    await session.flush()
 
-            community_values = [
-                {
-                    "community_id": uuid.UUID(cid) if len(cid) > 8 else uuid.uuid4(),
-                    "simulation_id": sim_id,
-                    "name": cid[:8],
-                    "community_key": cid[:10],
-                    "agent_type": "consumer",
-                    "size": size,
-                }
-                for cid, size in community_sizes.items()
-            ]
-            if community_values:
-                await session.execute(insert(Community), community_values)
+                # 3. Community rows — single-pass size count (was O(n²))
+                community_sizes: dict[str, int] = {}
+                for agent in agents:
+                    cid = str(agent.community_id)
+                    community_sizes[cid] = community_sizes.get(cid, 0) + 1
 
-            # 4. Agent rows — bulk insert
-            agent_values = [
-                {
-                    "agent_id": agent.agent_id,
-                    "simulation_id": sim_id,
-                    "community_id": agent.community_id,
-                    "agent_type": (
-                        agent.agent_type.value
-                        if hasattr(agent.agent_type, "value")
-                        else str(agent.agent_type)
-                    ),
-                    "openness": agent.personality.openness,
-                    "skepticism": agent.personality.skepticism,
-                    "trend_following": agent.personality.trend_following,
-                    "brand_loyalty": agent.personality.brand_loyalty,
-                    "social_influence": agent.personality.social_influence,
-                    "emotion_interest": agent.emotion.interest,
-                    "emotion_trust": agent.emotion.trust,
-                    "emotion_skepticism": agent.emotion.skepticism,
-                    "emotion_excitement": agent.emotion.excitement,
-                    "influence_score": agent.influence_score,
-                }
-                for agent in agents
-            ]
-            if agent_values:
-                await session.execute(insert(Agent), agent_values)
-
-            # 5. Network edge rows — batch insert (no cap)
-            # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#5.3c
-            _EDGE_BATCH_SIZE = 1000
-            for i in range(0, len(network_edges), _EDGE_BATCH_SIZE):
-                edge_chunk = network_edges[i:i + _EDGE_BATCH_SIZE]
-                edge_values = [
+                community_values = [
                     {
-                        "edge_id": uuid.uuid4(),
+                        "community_id": uuid.UUID(cid) if len(cid) > 8 else uuid.uuid4(),
                         "simulation_id": sim_id,
-                        "source_node_id": (
-                            int(src)
-                            if isinstance(src, (int, float))
-                            else hash(str(src)) % 2147483647
-                        ),
-                        "target_node_id": (
-                            int(tgt)
-                            if isinstance(tgt, (int, float))
-                            else hash(str(tgt)) % 2147483647
-                        ),
-                        "weight": data.get("weight", 1.0),
-                        "is_bridge": data.get("is_bridge", False),
+                        "name": cid[:8],
+                        "community_key": cid[:10],
+                        "agent_type": "consumer",
+                        "size": size,
                     }
-                    for src, tgt, data in edge_chunk
+                    for cid, size in community_sizes.items()
                 ]
-                if edge_values:
-                    await session.execute(insert(NetworkEdge), edge_values)
+                if community_values:
+                    await session.execute(insert(Community), community_values)
 
-            await session.commit()
-            logger.info("Persisted simulation %s: %d agents, %d edges", sim_id, len(agents), len(network_edges))
-        except Exception:
-            await session.rollback()
-            logger.exception("Failed to persist simulation creation %s", sim_id)
-            # Swallow (legacy fire-and-forget): the API layer treats DB
-            # persistence as best-effort. Callers that need the row to exist
-            # for FK references (e.g. run_scenario linking scenario.simulation_id)
-            # MUST verify existence separately via `simulation_row_exists`.
+                # 4. Agent rows — bulk insert
+                agent_values = [
+                    {
+                        "agent_id": agent.agent_id,
+                        "simulation_id": sim_id,
+                        "community_id": agent.community_id,
+                        "agent_type": (
+                            agent.agent_type.value
+                            if hasattr(agent.agent_type, "value")
+                            else str(agent.agent_type)
+                        ),
+                        "openness": agent.personality.openness,
+                        "skepticism": agent.personality.skepticism,
+                        "trend_following": agent.personality.trend_following,
+                        "brand_loyalty": agent.personality.brand_loyalty,
+                        "social_influence": agent.personality.social_influence,
+                        "emotion_interest": agent.emotion.interest,
+                        "emotion_trust": agent.emotion.trust,
+                        "emotion_skepticism": agent.emotion.skepticism,
+                        "emotion_excitement": agent.emotion.excitement,
+                        "influence_score": agent.influence_score,
+                    }
+                    for agent in agents
+                ]
+                if agent_values:
+                    await session.execute(insert(Agent), agent_values)
+
+                # 5. Network edge rows — batch insert (no cap)
+                # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#5.3c
+                _EDGE_BATCH_SIZE = 1000
+                for i in range(0, len(network_edges), _EDGE_BATCH_SIZE):
+                    edge_chunk = network_edges[i:i + _EDGE_BATCH_SIZE]
+                    edge_values = [
+                        {
+                            "edge_id": uuid.uuid4(),
+                            "simulation_id": sim_id,
+                            "source_node_id": _node_id_to_int(src),
+                            "target_node_id": _node_id_to_int(tgt),
+                            "weight": data.get("weight", 1.0),
+                            "is_bridge": data.get("is_bridge", False),
+                        }
+                        for src, tgt, data in edge_chunk
+                    ]
+                    if edge_values:
+                        await session.execute(insert(NetworkEdge), edge_values)
+
+                await session.commit()
+                if attempt == 1:
+                    logger.info(
+                        "Persisted simulation %s: %d agents, %d edges",
+                        sim_id, len(agents), len(network_edges),
+                    )
+                else:
+                    logger.info(
+                        "persist_creation retry %d succeeded for sim %s",
+                        attempt, sim_id,
+                    )
+                return
+            except Exception as exc:
+                last_exc = exc
+                await session.rollback()
+                logger.warning(
+                    "persist_creation attempt %d/%d failed for sim %s: %s",
+                    attempt, self._RETRY_COUNT, sim_id, exc,
+                )
+                if attempt < self._RETRY_COUNT:
+                    await _aio.sleep(self._RETRY_DELAY_BASE * attempt)
+
+        # All retries exhausted — record + re-raise (strict contract).
+        self._record_failure("persist_creation", sim_id, str(last_exc))
+        logger.error(
+            "persist_creation PERMANENTLY FAILED for sim=%s after %d attempts: %s",
+            sim_id, self._RETRY_COUNT, last_exc,
+        )
+        assert last_exc is not None  # loop ran at least once
+        raise last_exc
 
     async def persist_status(
         self,
@@ -207,7 +273,14 @@ class SimulationPersistence:
         status: str,
         current_step: int | None = None,
     ) -> None:
-        """Persist a status change."""
+        """Persist a status change — **best-effort, swallows failures**.
+
+        Unlike :meth:`persist_creation`, this is deliberately tolerant of
+        transient DB errors: a single failed status write should not abort
+        an in-progress simulation step. Failures are logged and the row
+        stays out-of-sync until the next successful write (typically the
+        next ``persist_step`` or status change).
+        """
         try:
             values: dict[str, Any] = {"status": status}
             if current_step is not None:
@@ -233,9 +306,16 @@ class SimulationPersistence:
         agents: list[Any] | None = None,
         propagation_pairs: list[tuple[Any, Any, str, float]] | None = None,
     ) -> None:
-        """Persist a step result, agent state snapshots, and propagation events.
+        """Persist a step result — **best-effort with retry + failed_queue**.
 
         SPEC: docs/spec/08_DB_SPEC.md
+
+        Retries up to ``_RETRY_COUNT`` times with exponential back-off.
+        If all attempts fail, the failure is recorded on
+        :attr:`failed_queue` for operational recovery and the method
+        returns normally — the simulation keeps running even if a single
+        step could not be persisted. Use :meth:`persist_creation` when
+        strict all-or-nothing semantics are required.
 
         Args:
             agents: list of AgentState dataclass instances (from orchestrator).
@@ -510,7 +590,7 @@ class SimulationPersistence:
                     emotion_weight=float(mem.get("emotion_weight", 0.5)),
                     step=int(mem.get("step", 0)),
                     social_weight=float(mem.get("social_weight", 0.0)),
-                    embedding=None,
+                    embedding=mem.get("embedding"),
                 )
                 session.add(row)
             await session.commit()
@@ -518,6 +598,41 @@ class SimulationPersistence:
         except Exception:
             await session.rollback()
             logger.exception("Failed to persist agent memories for %s", sim_id)
+
+    async def persist_thread_messages(
+        self,
+        session: AsyncSession,
+        messages: list,
+    ) -> None:
+        """Persist thread messages captured during a simulation step.
+
+        SPEC: docs/spec/22_CONVERSATION_THREAD_SPEC.md#CT-05
+
+        Fire-and-forget — exceptions are logged but do not raise.
+        """
+        if not messages:
+            return
+        try:
+            from app.models.thread import ThreadMessageRow
+            for msg in messages[:200]:  # cap per step
+                row = ThreadMessageRow(
+                    message_id=msg.message_id,
+                    simulation_id=msg.simulation_id,
+                    community_id=msg.community_id,
+                    agent_id=msg.agent_id,
+                    step=msg.step,
+                    action=msg.action,
+                    content=msg.content,
+                    belief=msg.belief,
+                    emotion_valence=msg.emotion_valence,
+                    reply_to_id=msg.reply_to_id,
+                )
+                session.add(row)
+            await session.commit()
+            logger.debug("Persisted %d thread messages", len(messages[:200]))
+        except Exception:
+            await session.rollback()
+            logger.exception("Failed to persist thread messages")
 
     @staticmethod
     def _row_to_dict(r: Simulation) -> dict:
@@ -637,6 +752,79 @@ class SimulationPersistence:
         except Exception:
             logger.exception("Failed to load steps for %s", sim_id)
             return []
+
+
+    async def restore_simulation_state(
+        self,
+        session: AsyncSession,
+        sim_id: uuid.UUID,
+    ) -> dict | None:
+        """Reconstruct a SimulationState-compatible dict from DB for crash recovery.
+
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.3 — Data Integrity A-
+
+        Returns a dict with keys matching SimulationState fields, or None if
+        the simulation doesn't exist in DB. The caller (orchestrator) is
+        responsible for converting this into a live SimulationState with
+        network regeneration.
+
+        Fields returned:
+            simulation_id, config (raw dict), status, current_step,
+            agents (list of dicts), step_history (list of dicts)
+        """
+        try:
+            # 1. Load simulation row
+            sim_result = await session.execute(
+                select(Simulation).where(Simulation.simulation_id == sim_id)
+            )
+            sim_row = sim_result.scalar_one_or_none()
+            if sim_row is None:
+                return None
+
+            # 2. Load latest agent states
+            agent_result = await session.execute(
+                select(AgentStateORM)
+                .where(AgentStateORM.simulation_id == sim_id)
+                .where(AgentStateORM.step == sim_row.current_step)
+            )
+            agent_rows = agent_result.scalars().all()
+
+            agents = [
+                {
+                    "agent_id": str(r.agent_id),
+                    "belief": r.belief,
+                    "action": r.action,
+                    "adopted": r.adopted,
+                    "exposure_count": r.exposure_count,
+                    "community_id": str(r.community_id),
+                    "openness": r.openness,
+                    "skepticism": r.skepticism,
+                    "trend_following": r.trend_following,
+                    "brand_loyalty": r.brand_loyalty,
+                    "social_influence": r.social_influence,
+                    "emotion_interest": r.emotion_interest,
+                    "emotion_trust": r.emotion_trust,
+                    "emotion_skepticism": r.emotion_skepticism,
+                    "emotion_excitement": r.emotion_excitement,
+                    "llm_tier_used": r.llm_tier_used,
+                }
+                for r in agent_rows
+            ]
+
+            # 3. Load step history
+            steps = await self.load_steps(session, sim_id)
+
+            return {
+                "simulation_id": str(sim_id),
+                "config": sim_row.config or {},
+                "status": sim_row.status,
+                "current_step": sim_row.current_step or 0,
+                "agents": agents,
+                "step_history": steps,
+            }
+        except Exception:
+            logger.exception("Failed to restore simulation state for %s", sim_id)
+            return None
 
 
 def _config_to_dict(config: SimulationConfig) -> dict:

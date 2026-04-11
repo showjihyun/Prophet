@@ -286,6 +286,32 @@ export function useCommunityThread(
   });
 }
 
+// ───────── Community opinion (EliteLLM synthesis) ─────────
+//
+// The backend caches the result by (sim_id, community_id, current_step),
+// so triggering this mutation twice at the same step is idempotent and
+// pays for only one LLM call.
+// @spec docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+
+export function useCommunityOpinionSynthesis(simId: string | null) {
+  return useMutation({
+    mutationFn: (communityId: string) =>
+      apiClient.communityOpinion.synthesize(simId!, communityId),
+  });
+}
+
+/**
+ * Cross-community aggregate narrative — the "whole simulation, told as
+ * a story" view. Triggers per-community synthesis as a side-effect so
+ * the response always ships the breakdown alongside the headline.
+ * @spec docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+ */
+export function useOverallOpinionSynthesis(simId: string | null) {
+  return useMutation({
+    mutationFn: () => apiClient.communityOpinion.synthesizeOverall(simId!),
+  });
+}
+
 // ───────── Project scenarios ─────────
 
 export function useCreateScenario() {
@@ -394,6 +420,21 @@ export function useRunAllSimulation() {
       qc.invalidateQueries({ queryKey: queryKeys.simulation(simId) });
     },
   });
+}
+
+/**
+ * Trigger a simulation export download.
+ *
+ * Not technically a mutation (it's a window.open() call that the browser
+ * handles), but it's exposed here so components never import ``apiClient``
+ * directly — they consume the hook instead. This keeps the
+ * ``components/** must not import apiClient`` architectural invariant
+ * passing.
+ */
+export function useExportSimulation() {
+  return (simId: string, format: "json" | "csv" = "json") => {
+    apiClient.simulations.export(simId, format);
+  };
 }
 
 // ───────── Campaign / intervention dispatches ─────────

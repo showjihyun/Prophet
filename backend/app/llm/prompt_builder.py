@@ -1,7 +1,7 @@
 """Prompt construction for agent cognition, expert analysis, and memory reflection.
 SPEC: docs/spec/05_LLM_SPEC.md#5-prompt-builder
-SPEC: docs/spec/19_SIMULATION_QUALITY_SPEC.md#sq-04
-SPEC: docs/spec/20_SIMULATION_QUALITY_P2_SPEC.md#§3
+SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#sq-04
+SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§3
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class PromptBuilder:
     def sanitize_content(self, content: str) -> str:
         """사용자/캠페인 제공 콘텐츠에서 프롬프트 인젝션 패턴을 제거한다.
 
-        SPEC: docs/spec/19_SIMULATION_QUALITY_SPEC.md#sq-04
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#sq-04
 
         처리 규칙:
         1. 500자 초과 시 잘라내기 + "[truncated]" 추가
@@ -70,7 +70,7 @@ class PromptBuilder:
         """Build prompt for agent cognition (Tier 3 evaluation).
 
         SPEC: docs/spec/05_LLM_SPEC.md#5-prompt-builder
-        SPEC: docs/spec/19_SIMULATION_QUALITY_SPEC.md#sq-04
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#sq-04
 
         System: agent identity + personality + response format
         User: campaign exposure (격리) + memories + emotion + neighbor actions
@@ -236,7 +236,7 @@ class PromptBuilder:
     ) -> LLMPrompt:
         """Build prompt for Tier 3 agent content generation (SHARE/COMMENT).
 
-        SPEC: docs/spec/20_SIMULATION_QUALITY_P2_SPEC.md#§3 CG-01/CG-02
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§3 CG-01/CG-02
 
         Generates a short user post (≤ 140 chars) reflecting agent's personal framing.
         Response format: JSON with key generated_text (str).

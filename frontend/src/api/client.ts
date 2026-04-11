@@ -25,6 +25,11 @@ export type {
   ScenarioInfo,
   ProjectDetail,
   CommunityInfo,
+  CommunityOpinion,
+  CommunityOpinionTheme,
+  CommunityOpinionDivision,
+  CommunityOpinionKeyQuote,
+  OverallOpinion,
   ThreadSummary,
   ThreadMessage,
   ThreadDetail,
@@ -45,6 +50,8 @@ import type {
   ProjectDetail,
   ScenarioInfo,
   CommunityInfo,
+  CommunityOpinion,
+  OverallOpinion,
   ThreadSummary,
   ThreadDetail,
   CommunityTemplate,
@@ -134,6 +141,27 @@ export const apiClient = {
       request<{ threads: ThreadSummary[] }>(`/simulations/${simId}/communities/${communityId}/threads`),
     get: (simId: string, communityId: string, threadId: string) =>
       request<ThreadDetail>(`/simulations/${simId}/communities/${communityId}/threads/${threadId}`),
+  },
+  communityOpinion: {
+    /**
+     * Synthesize (or return cached) EliteLLM narrative for a community.
+     * @spec docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+     */
+    synthesize: (simId: string, communityId: string) =>
+      request<CommunityOpinion>(
+        `/simulations/${simId}/communities/${communityId}/opinion-summary`,
+        { method: "POST" },
+      ),
+    /**
+     * Synthesize (or return cached) cross-community EliteLLM narrative.
+     * Returns the aggregate plus per-community snapshots that fed it.
+     * @spec docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+     */
+    synthesizeOverall: (simId: string) =>
+      request<OverallOpinion>(
+        `/simulations/${simId}/communities/__overall__/opinion-summary`,
+        { method: "POST" },
+      ),
   },
   communityTemplates: {
     list: () => request<{ templates: CommunityTemplate[] }>("/communities/templates/"),

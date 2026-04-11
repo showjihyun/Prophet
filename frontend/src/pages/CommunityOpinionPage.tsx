@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
+import EliteLLMNarrativePanel from "../components/community/EliteLLMNarrativePanel";
 import { useSimulationSteps } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 
@@ -224,6 +225,13 @@ export default function CommunityOpinionPage() {
           Showing demo data. Run a simulation to see real results.
         </div>
       )}
+
+      {/* EliteLLM synthesised narrative (on-demand) */}
+      <EliteLLMNarrativePanel
+        simulationId={simId}
+        communityId={communityId ?? null}
+      />
+
 
       {/* Body: 2 columns */}
       <div className="flex flex-1 min-h-0 overflow-hidden">

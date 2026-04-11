@@ -102,10 +102,9 @@ class MonteCarloRunner:
             - p5/p50/p95: percentiles of final adoption
             - community_adoption: real per-community mean adoption rate
         """
-        from app.config import settings
         if n_runs is None:
-            n_runs = settings.monte_carlo_default_runs
-        base_seed = simulation_config.random_seed or settings.sim_default_random_seed
+            n_runs = 10  # domain default
+        base_seed = simulation_config.random_seed or 42
 
         concurrency = max_concurrency if parallel else 1
         semaphore = asyncio.Semaphore(concurrency)

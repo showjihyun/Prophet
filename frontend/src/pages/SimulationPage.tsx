@@ -14,6 +14,8 @@ import { apiClient } from "../api/client";
 import { LS_KEY_SIMULATION_ID, SIM_STATUS } from "@/config/constants";
 import { FolderOpen, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
+import WorkflowStepper from "../components/layout/WorkflowStepper";
+import EmergentEventsPanel from "../components/emergent/EmergentEventsPanel";
 import CommunityPanel from "../components/graph/CommunityPanel";
 // GraphPanel pulls three.js + react-force-graph-3d (~1 MB raw / 375 KB gzipped).
 // Lazy-load it so the empty state ("No Active Simulation") below renders
@@ -107,6 +109,7 @@ export default function SimulationPage() {
     return (
       <div className="h-screen w-screen flex flex-col bg-[var(--background)]">
         <ControlPanel />
+        <WorkflowStepper />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center flex flex-col items-center gap-4">
             <Brain className="w-16 h-16 text-[var(--muted-foreground)]" />
@@ -142,6 +145,9 @@ export default function SimulationPage() {
     >
       {/* Zone 1: Simulation Control Bar — 56px */}
       <ControlPanel />
+
+      {/* Workflow Stepper — 6-stage progress indicator */}
+      <WorkflowStepper />
 
       {/* WebSocket retry exhausted banner */}
       {retryExhausted && (
@@ -179,12 +185,19 @@ export default function SimulationPage() {
       </div>
 
       {/* Zone 3: Bottom Area — 220px */}
-      <div className="shrink-0" style={{ height: "var(--bottom-area-height)" }}>
-        {/* Timeline + Diffusion Wave — 120px */}
+      <div className="shrink-0 flex flex-col" style={{ height: "var(--bottom-area-height)" }}>
+        {/* Timeline + Diffusion Wave — 120px (with emergent event markers) */}
         <TimelinePanel />
 
-        {/* Conversations / Expert Agent — remaining */}
-        <ConversationPanel />
+        {/* Conversations | Emergent Events — split horizontally */}
+        <div className="flex-1 min-h-0 flex">
+          <div className="flex-1 min-w-0">
+            <ConversationPanel />
+          </div>
+          <div className="w-[280px] shrink-0 hidden lg:flex">
+            <EmergentEventsPanel />
+          </div>
+        </div>
       </div>
 
       {/* LLM Dashboard — collapsible overlay at bottom */}

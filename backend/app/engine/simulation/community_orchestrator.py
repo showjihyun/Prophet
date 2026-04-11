@@ -40,6 +40,7 @@ class CommunityTickResult:
     action_distribution: dict[str, int] = field(default_factory=dict)
     llm_calls: int = 0
     tick_duration_ms: float = 0.0
+    thread_messages: list = field(default_factory=list)  # CapturedMessage list
 
 
 class CommunityOrchestrator:
@@ -47,7 +48,7 @@ class CommunityOrchestrator:
     SPEC: docs/spec/04_SIMULATION_SPEC.md#communityorchestrator
     """
 
-    BATCH_SIZE = 32
+    BATCH_SIZE = 32  # configurable via constructor or config injection
 
     def __init__(
         self,
@@ -59,6 +60,8 @@ class CommunityOrchestrator:
         bridge_node_ids: set[int] | None = None,
         llm_adapter: object | None = None,
         gateway: 'LLMGateway | None' = None,
+        session_factory=None,
+        simulation_id: UUID | None = None,
     ):
         self.community_id = community_id
         self.community_config = community_config
@@ -68,7 +71,13 @@ class CommunityOrchestrator:
         self._bridge_node_ids = bridge_node_ids or set()
         self._gateway = gateway
 
-        self._agent_tick = AgentTick(llm_adapter=llm_adapter, gateway=gateway)
+        self._simulation_id = simulation_id
+        self._agent_tick = AgentTick(
+            llm_adapter=llm_adapter,
+            gateway=gateway,
+            session_factory=session_factory,
+            simulation_id=simulation_id,
+        )
         self._tier_selector = TierSelector()
         self._exposure_model = ExposureModel()
         self._sentiment_model = SentimentModel()
@@ -210,6 +219,7 @@ class CommunityOrchestrator:
         outbound: list[PropagationEvent] = []
         llm_calls = 0
         action_counter: Counter[str] = Counter()
+        all_tick_results: list[AgentTickResult] = []  # for thread capture
 
         # Tier 3 agents are run via async_tick() which uses embedding-based memory
         # and real LLM cognition (GraphRAG path). Tier 1/2 use the fast sync tick().
@@ -247,6 +257,7 @@ class CommunityOrchestrator:
         def _process_result(result: AgentTickResult) -> None:
             """Apply a single AgentTickResult to the running accumulators."""
             nonlocal llm_calls
+            all_tick_results.append(result)
             new_agent = result.updated_state
             updated.append(new_agent)
             action_counter[result.action.value] += 1
@@ -294,11 +305,15 @@ class CommunityOrchestrator:
                 _process_result(result)
 
             # Process Tier 3 agents concurrently (slow, I/O-bound LLM calls)
+            # Sort results by agent_id for deterministic processing order
             if tier3_tasks:
                 tier3_results = await asyncio.gather(
                     *[_run_agent_tick(agent, tier) for agent, tier in tier3_tasks]
                 )
-                for result in tier3_results:
+                tier3_sorted = sorted(
+                    tier3_results, key=lambda r: r.updated_state.agent_id,
+                )
+                for result in tier3_sorted:
                     _process_result(result)
 
             # Yield to event loop between batches (allows other communities to progress)
@@ -315,6 +330,21 @@ class CommunityOrchestrator:
             expert_opinions=[],
         )
 
+        # 7. Capture thread messages from agent actions
+        # SPEC: docs/spec/22_CONVERSATION_THREAD_SPEC.md#CT-03
+        # 7. Capture thread messages from agent actions
+        # SPEC: docs/spec/22_CONVERSATION_THREAD_SPEC.md#CT-03
+        from app.engine.simulation.thread_capture import collect_thread_messages
+        campaign_msg = campaign_events[0].message if campaign_events else ""
+        thread_msgs = collect_thread_messages(
+            community_id=self.community_id,
+            simulation_id=self._simulation_id or self.community_id,
+            step=step,
+            tick_results=all_tick_results,
+            agents=agent_map,
+            campaign_message=campaign_msg,
+        )
+
         elapsed = (time.perf_counter() - start) * 1000
 
         return CommunityTickResult(
@@ -326,6 +356,7 @@ class CommunityOrchestrator:
             action_distribution=dict(action_counter),
             llm_calls=llm_calls,
             tick_duration_ms=elapsed,
+            thread_messages=thread_msgs,
         )
 
 

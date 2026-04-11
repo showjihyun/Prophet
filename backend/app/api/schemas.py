@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 class SimulationStatus(str, Enum):
     """SPEC: docs/spec/06_API_SPEC.md#2-simulation-endpoints"""
+    CREATED = "created"
     CONFIGURED = "configured"
     RUNNING = "running"
     PAUSED = "paused"
@@ -267,6 +268,11 @@ class AgentDetailResponse(BaseModel):
     """
     agent_id: str
     community_id: str = ""
+    #: Human-readable community name resolved by the orchestrator. ``None``
+    #: when the backend could not map ``community_id`` to a config entry
+    #: (e.g. transiently during sim creation). Frontend falls back to a
+    #: truncated ``community_id`` for display in that case.
+    community_name: str | None = None
     agent_type: str = ""
     action: str = "idle"
     adopted: bool = False
@@ -501,6 +507,41 @@ class ThreadDetailResponse(BaseModel):
     message_count: int
     avg_sentiment: float
     messages: list[ThreadMessage] = Field(default_factory=list)
+
+
+class CommunityOpinionResponse(BaseModel):
+    """EliteLLM-synthesized community opinion snapshot.
+
+    SPEC: docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+    """
+    opinion_id: str
+    simulation_id: str
+    community_id: str
+    step: int
+    summary: str
+    sentiment_trend: str
+    themes: list[dict] = Field(default_factory=list)
+    divisions: list[dict] = Field(default_factory=list)
+    dominant_emotions: list[str] = Field(default_factory=list)
+    key_quotes: list[dict] = Field(default_factory=list)
+    source_step_count: int
+    source_agent_count: int
+    llm_provider: str
+    llm_model: str
+    is_fallback_stub: bool
+
+
+class OverallOpinionResponse(BaseModel):
+    """Cross-community aggregate opinion snapshot.
+
+    SPEC: docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+
+    The ``overall`` field is the aggregate narrative; ``communities``
+    carries the per-community snapshots that fed it so the UI can show
+    both at once without a second round-trip.
+    """
+    overall: CommunityOpinionResponse
+    communities: list[CommunityOpinionResponse] = Field(default_factory=list)
 
 
 # --- Error ---

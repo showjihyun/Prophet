@@ -72,6 +72,20 @@ class NetworkEvolver:
             ]
             new_graph.remove_edges_from(edges_to_remove)
 
+        # Cap total edges to prevent unbounded growth
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md — scalability A-
+        max_edges = 100_000  # domain default
+        if new_graph.number_of_edges() > max_edges:
+            # Remove weakest edges until under cap
+            sorted_edges = sorted(
+                new_graph.edges(data=True),
+                key=lambda e: e[2].get("weight", 0.5),
+            )
+            excess = new_graph.number_of_edges() - max_edges
+            new_graph.remove_edges_from(
+                [(u, v) for u, v, _ in sorted_edges[:excess]]
+            )
+
         # Return updated network with new graph
         return SocialNetwork(
             graph=new_graph,

@@ -5,7 +5,7 @@ import random as stdlib_random
 from dataclasses import dataclass, field, replace
 from uuid import UUID
 
-from app.engine.agent.schema import AgentAction, AgentEmotion, AgentState
+from app.engine.agent.schema import AgentAction, AgentEmotion, AgentState, DiffusionState
 from app.engine.agent.perception import (
     PerceptionLayer, PerceptionResult, EnvironmentEvent, NeighborAction,
 )
@@ -74,10 +74,16 @@ class AgentTick:
         perception -> memory -> emotion -> cognition -> decision -> influence -> store memory
     """
 
-    def __init__(self, llm_adapter=None, gateway=None):
-        """SPEC: docs/spec/01_AGENT_SPEC.md#agent-tick"""
+    def __init__(self, llm_adapter=None, gateway=None, session_factory=None, simulation_id=None):
+        """SPEC: docs/spec/01_AGENT_SPEC.md#agent-tick
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§3 MP-02
+        """
         self._perception = PerceptionLayer(feed_capacity=20)
-        self._memory = MemoryLayer(llm_adapter=llm_adapter)
+        self._memory = MemoryLayer(
+            llm_adapter=llm_adapter,
+            session_factory=session_factory,
+            simulation_id=simulation_id,
+        )
         self._emotion = EmotionLayer()
         self._cognition = CognitionLayer(llm_adapter=llm_adapter, gateway=gateway)
         self._decision = DecisionLayer()
@@ -199,7 +205,8 @@ class AgentTick:
             agent.agent_id, neighbor_actions, trust_matrix
         )
         action = self._decision.choose_action(
-            cognition, social_pressure, agent.personality, agent_seed
+            cognition, social_pressure, agent.personality, agent_seed,
+            agent_type=agent.agent_type,
         )
 
         # Step 7: Influence Propagation
@@ -232,10 +239,11 @@ class AgentTick:
         # Step 9: Personality Drift — evolve personality based on action taken
         new_personality, new_cumulative_drift = self._drift.apply_drift(
             agent.personality, action, agent.cumulative_drift,
+            emotion=emotion,
         )
 
         # Step 9.5: Reflection — periodic belief revision from accumulated memories
-        # SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1 RF-01~05
+        # SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-01~05
         reflection_belief_delta = 0.0
         last_reflection_step = agent.last_reflection_step
         memories_since = len(self._memory._store.get(agent.agent_id, [])) - (
@@ -268,9 +276,28 @@ class AgentTick:
                 for nid in nids
                 if nid in graph_context.agent_beliefs
             ]
-            new_belief = self._opinion.batch_update(stimulus_belief, neighbor_beliefs)
+            new_belief = self._opinion.batch_update(
+                stimulus_belief, neighbor_beliefs,
+                stubbornness=agent.personality.skepticism,
+            )
         else:
             new_belief = stimulus_belief
+
+        # DiffusionState transitions (SEIAR)
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#3.1
+        ds = agent.diffusion_state
+        if ds == DiffusionState.SUSCEPTIBLE and agent.exposure_count > 0:
+            ds = DiffusionState.EXPOSED
+        if ds == DiffusionState.EXPOSED:
+            if agent.personality.skepticism > 0.8 and action == AgentAction.IGNORE:
+                ds = DiffusionState.RESISTANT
+            elif emotion.interest > 0.5:
+                ds = DiffusionState.INTERESTED
+        if ds == DiffusionState.INTERESTED and action == AgentAction.ADOPT:
+            ds = DiffusionState.ADOPTED
+        if ds == DiffusionState.ADOPTED and new_belief < -0.3:
+            ds = DiffusionState.RECOVERED
+        is_adopted = ds == DiffusionState.ADOPTED or agent.adopted or (action == AgentAction.ADOPT)
 
         updated_state = replace(
             agent,
@@ -278,7 +305,8 @@ class AgentTick:
             emotion=emotion,
             action=action,
             belief=new_belief,
-            adopted=agent.adopted or (action == AgentAction.ADOPT),
+            adopted=is_adopted,
+            diffusion_state=ds,
             llm_tier_used=cognition.tier_used,
             cumulative_drift=new_cumulative_drift,
             last_reflection_step=last_reflection_step,
@@ -400,7 +428,8 @@ class AgentTick:
             agent.agent_id, neighbor_actions, trust_matrix
         )
         action = self._decision.choose_action(
-            cognition, social_pressure, agent.personality, agent_seed
+            cognition, social_pressure, agent.personality, agent_seed,
+            agent_type=agent.agent_type,
         )
 
         # Step 7: Influence Propagation
@@ -429,7 +458,7 @@ class AgentTick:
         except Exception:
             embedding = None  # graceful fallback: store without embedding
 
-        memory_stored = self._memory.store(
+        memory_stored = await self._memory.store_async(
             agent.agent_id, "episodic", step_summary,
             emotion_weight=emotion_mean, step=agent.step,
             embedding=embedding,
@@ -438,10 +467,11 @@ class AgentTick:
         # Step 9: Personality Drift — evolve personality based on action taken
         new_personality, new_cumulative_drift = self._drift.apply_drift(
             agent.personality, action, agent.cumulative_drift,
+            emotion=emotion,
         )
 
         # Step 9.5: Reflection — periodic belief revision from accumulated memories
-        # SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1 RF-01~05
+        # SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-01~05
         reflection_belief_delta = 0.0
         last_reflection_step = agent.last_reflection_step
         memories_since = len(self._memory._store.get(agent.agent_id, [])) - (
@@ -456,7 +486,7 @@ class AgentTick:
             reflection_belief_delta = refl_result.belief_delta
             last_reflection_step = agent.step
             if refl_result.new_memories_generated > 0:
-                self._memory.store(
+                await self._memory.store_async(
                     agent.agent_id, "semantic", refl_result.insight,
                     emotion_weight=abs(refl_result.belief_delta), step=agent.step,
                 )
@@ -474,9 +504,28 @@ class AgentTick:
                 for nid in nids
                 if nid in graph_context.agent_beliefs
             ]
-            new_belief = self._opinion.batch_update(stimulus_belief, neighbor_beliefs)
+            new_belief = self._opinion.batch_update(
+                stimulus_belief, neighbor_beliefs,
+                stubbornness=agent.personality.skepticism,
+            )
         else:
             new_belief = stimulus_belief
+
+        # DiffusionState transitions (SEIAR)
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#3.1
+        ds = agent.diffusion_state
+        if ds == DiffusionState.SUSCEPTIBLE and agent.exposure_count > 0:
+            ds = DiffusionState.EXPOSED
+        if ds == DiffusionState.EXPOSED:
+            if agent.personality.skepticism > 0.8 and action == AgentAction.IGNORE:
+                ds = DiffusionState.RESISTANT
+            elif emotion.interest > 0.5:
+                ds = DiffusionState.INTERESTED
+        if ds == DiffusionState.INTERESTED and action == AgentAction.ADOPT:
+            ds = DiffusionState.ADOPTED
+        if ds == DiffusionState.ADOPTED and new_belief < -0.3:
+            ds = DiffusionState.RECOVERED
+        is_adopted = ds == DiffusionState.ADOPTED or agent.adopted or (action == AgentAction.ADOPT)
 
         updated_state = replace(
             agent,
@@ -484,7 +533,8 @@ class AgentTick:
             emotion=emotion,
             action=action,
             belief=new_belief,
-            adopted=agent.adopted or (action == AgentAction.ADOPT),
+            adopted=is_adopted,
+            diffusion_state=ds,
             llm_tier_used=cognition.tier_used,
             cumulative_drift=new_cumulative_drift,
             last_reflection_step=last_reflection_step,

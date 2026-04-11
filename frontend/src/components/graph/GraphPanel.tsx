@@ -36,14 +36,21 @@
  *     win on integrated GPUs).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import { type CytoscapeGraph } from "../../api/client";
 import { useNetwork } from "../../api/queries";
 import { useSimulationStore } from "../../store/simulationStore";
 import { COMMUNITIES } from "@/config/constants";
 import type { PropagationPair } from "@/types/simulation";
-import { getAnimationTier, TIER_LIMITS, ACTION_COLORS } from "./propagationAnimationUtils";
+import {
+  getAnimationTier,
+  TIER_LIMITS,
+  buildAgentIdToNodeId,
+  buildActivePropLinks,
+  type AnimationTier,
+} from "./propagationAnimationUtils";
+import GraphLegend from "./GraphLegend";
+import ZoomTierBadge from "./ZoomTierBadge";
 
 // --------------------------------------------------------------------------- //
 // Types                                                                       //
@@ -52,7 +59,10 @@ import { getAnimationTier, TIER_LIMITS, ACTION_COLORS } from "./propagationAnima
 interface GraphNode {
   id: string;
   label: string;
+  /** Short community key as returned by the backend (e.g. "M", "S", "A"). */
   community: string;
+  /** Human-readable community name from config (e.g. "mainstream"). */
+  community_name?: string;
   agent_id?: string;
   agent_type?: string;
   influence_score?: number;
@@ -76,14 +86,64 @@ interface GraphData {
 }
 
 // --------------------------------------------------------------------------- //
-// Community color palette — single source of truth for legend + graph         //
+// Community color palette                                                     //
 // --------------------------------------------------------------------------- //
+//
+// The palette is built dynamically from the communities that actually appear
+// in the loaded graph, because the backend simulation uses whatever ids the
+// user configured (e.g. "M", "E", "S", "I" for mainstream/early_adopters/
+// skeptics/influencers). The hardcoded A/B/C/D/E list in `@/config/constants`
+// only covered a single default profile and made every real simulation fall
+// through to the gray fallback color.
+//
+// The fallback color palette is used when a community has no entry in the
+// static `COMMUNITIES` table. We rotate through it in insertion order so the
+// assignment is stable across re-renders of the same graph.
 
-const COMMUNITY_COLOR: Record<string, string> = Object.fromEntries(
+const FALLBACK_COMMUNITY_PALETTE: readonly string[] = [
+  "#3b82f6", // blue
+  "#22c55e", // green
+  "#f97316", // orange
+  "#a855f7", // purple
+  "#ef4444", // red
+  "#06b6d4", // cyan
+  "#ec4899", // pink
+  "#84cc16", // lime
+  "#eab308", // yellow
+  "#14b8a6", // teal
+];
+
+const STATIC_COMMUNITY_COLOR: Record<string, string> = Object.fromEntries(
   COMMUNITIES.map((c) => [c.id, c.color]),
 );
 
+/**
+ * Stable palette-slot assignment for communities that have no entry in the
+ * static `COMMUNITIES` table. Hashes the community id (not the insertion
+ * order) so the same community always picks the same fallback color across
+ * graph re-fetches — otherwise pagination, reseeding, or backend node-order
+ * changes would flip "mainstream" from blue to orange on refresh.
+ */
+function fallbackColorFor(communityId: string): string {
+  let h = 0;
+  for (let i = 0; i < communityId.length; i++) {
+    h = (h * 31 + communityId.charCodeAt(i)) | 0;
+  }
+  return FALLBACK_COMMUNITY_PALETTE[
+    Math.abs(h) % FALLBACK_COMMUNITY_PALETTE.length
+  ];
+}
+
 const DEFAULT_NODE_COLOR = "#64748b";
+
+/**
+ * Vertical offset applied to the left-side overlays (community legend and
+ * the full graph legend) so they don't crowd the middle of the viewport.
+ * One constant keeps the two stacked overlays moving together — if you
+ * change this, both `top-[calc(50%-…)]` and `bottom-[calc(…)]` styles
+ * stay aligned.
+ */
+const LEFT_LEGEND_OFFSET_PX = 200;
 const ADOPTED_GLOW_COLOR = "#22c55e";
 const HIGHLIGHT_DIM_COLOR = "#1e293b";
 
@@ -116,7 +176,8 @@ function cytoscapeToForceGraph(api: CytoscapeGraph): GraphData {
     return {
       id: String(d.id ?? ""),
       label: String(d.label ?? ""),
-      community: String(d.community ?? "A"),
+      community: String(d.community ?? ""),
+      community_name: d.community_name as string | undefined,
       agent_id: d.agent_id as string | undefined,
       agent_type: d.agent_type as string | undefined,
       influence_score: d.influence_score as number | undefined,
@@ -151,17 +212,18 @@ function cytoscapeToForceGraph(api: CytoscapeGraph): GraphData {
 // --------------------------------------------------------------------------- //
 
 export default function GraphPanel() {
-  const navigate = useNavigate();
   const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [dims, setDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
+  const [zoomTier, setZoomTier] = useState<AnimationTier>("overview");
 
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const latestStep = useSimulationStore((s) => s.latestStep);
   const highlightedCommunity = useSimulationStore((s) => s.highlightedCommunity);
   const setHighlightedCommunity = useSimulationStore((s) => s.setHighlightedCommunity);
+  const selectAgent = useSimulationStore((s) => s.selectAgent);
   const propagationAnimEnabled = useSimulationStore((s) => s.propagationAnimationsEnabled);
 
   // Per-node mutable highlight flags kept off React state to avoid re-renders.
@@ -214,6 +276,16 @@ export default function GraphPanel() {
     fgRef.current?.refresh();
   }, [latestStep, graphData.nodes]);
 
+  // Agent UUID → graph node_id lookup. See the explanation on
+  // `buildAgentIdToNodeId` in `propagationAnimationUtils.ts` — this bridge
+  // is load-bearing because the backend emits propagation pairs with agent
+  // UUIDs while force-graph indexes links by numeric node_ids. Rebuilt only
+  // when the graph itself changes.
+  const agentIdToNodeId = useMemo(
+    () => buildAgentIdToNodeId(graphData.nodes),
+    [graphData.nodes],
+  );
+
   // ---- GAP-7: Propagation animation effect -------------------------------- //
   useEffect(() => {
     if (!propagationAnimEnabled || !latestStep?.propagation_pairs?.length) {
@@ -228,19 +300,21 @@ export default function GraphPanel() {
     // Normalize zoom: closer = higher value (inverse distance, capped at 1.0)
     const normalizedZoom = Math.min(1.0, 300 / Math.max(zoomDist, 1));
     const tier = getAnimationTier(normalizedZoom);
+    // Defer setState out of the effect body to avoid the
+    // react-hooks/set-state-in-effect rule. The camera is external
+    // three.js state that we're synchronising INTO React — the
+    // microtask boundary keeps the render cascade linear.
+    queueMicrotask(() => setZoomTier(tier));
     const limit = TIER_LIMITS[tier];
 
-    // Filter out "ignore" actions and take top pairs by probability
-    const pairs = (latestStep.propagation_pairs as PropagationPair[])
-      .filter((p) => p.action in ACTION_COLORS)
-      .slice(0, limit);
-
-    const newMap = new Map<string, string>();
-    for (const p of pairs) {
-      const key = `${p.source}__${p.target}`;
-      newMap.set(key, ACTION_COLORS[p.action] ?? "#94a3b8");
-    }
-    activePropLinksRef.current = newMap;
+    // Delegate filter + UUID→node_id translation + LOD cap to the shared
+    // utility. GraphPanel and its regression tests both exercise the same
+    // code path, so a behaviour drift here fails loudly in CI.
+    activePropLinksRef.current = buildActivePropLinks(
+      latestStep.propagation_pairs as PropagationPair[],
+      agentIdToNodeId,
+      limit,
+    );
     fgRef.current?.refresh();
 
     // Clear particles after CASCADE_TTL_MS (fade out)
@@ -253,7 +327,57 @@ export default function GraphPanel() {
     return () => {
       if (propTimerRef.current) clearTimeout(propTimerRef.current);
     };
-  }, [propagationAnimEnabled, latestStep]);
+  }, [propagationAnimEnabled, latestStep, agentIdToNodeId]);
+
+  // Derive the effective community table from the graph itself — ids, names,
+  // colors, counts — so we always reflect whatever the simulation is actually
+  // using (not the hardcoded A/B/C/D/E profile). Preserves first-seen order so
+  // color assignments stay stable across renders of the same graph.
+  //
+  // This must live BEFORE the render callbacks below because
+  // `nodeColorFn`/`linkColorFn` capture `communityColorMap` in their deps
+  // arrays — referencing it before initialization throws a ReferenceError at
+  // hook-evaluation time.
+  const graphCommunities = useMemo<
+    Array<{ id: string; name: string; color: string; count: number }>
+  >(() => {
+    const order: string[] = [];
+    const meta: Record<string, { name: string; count: number }> = {};
+    for (const n of graphData.nodes) {
+      const id = n.community || "unknown";
+      if (!(id in meta)) {
+        order.push(id);
+        meta[id] = { name: n.community_name ?? id, count: 0 };
+      }
+      meta[id].count += 1;
+      // Upgrade the display name as soon as we see one (first node may be
+      // missing it if the backend didn't include community_name).
+      if (n.community_name && meta[id].name === id) {
+        meta[id].name = n.community_name;
+      }
+    }
+    return order.map((id) => ({
+      id,
+      name: meta[id].name,
+      color: STATIC_COMMUNITY_COLOR[id] ?? fallbackColorFor(id),
+      count: meta[id].count,
+    }));
+  }, [graphData.nodes]);
+
+  // id → color lookup for the render callbacks. Rebuilt only when the
+  // community set changes (not on every frame).
+  const communityColorMap = useMemo<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const c of graphCommunities) m[c.id] = c.color;
+    return m;
+  }, [graphCommunities]);
+
+  // id → display name lookup for hover tooltip and accessibility labels.
+  const communityNameMap = useMemo<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const c of graphCommunities) m[c.id] = c.name;
+    return m;
+  }, [graphCommunities]);
 
   // ---- Color + size callbacks (built-in InstancedMesh path) --------------- //
   const nodeColorFn = useCallback(
@@ -263,9 +387,9 @@ export default function GraphPanel() {
         highlightedCommunity !== null && n.community !== highlightedCommunity;
       if (dimmed) return HIGHLIGHT_DIM_COLOR;
       if (adoptedSetRef.current.has(n.id)) return ADOPTED_GLOW_COLOR;
-      return COMMUNITY_COLOR[n.community] ?? DEFAULT_NODE_COLOR;
+      return communityColorMap[n.community] ?? DEFAULT_NODE_COLOR;
     },
-    [highlightedCommunity],
+    [highlightedCommunity, communityColorMap],
   );
 
   const nodeValFn = useCallback((node: object): number => {
@@ -296,10 +420,10 @@ export default function GraphPanel() {
       if (highlightedCommunity !== null && community !== highlightedCommunity) {
         return "rgba(30,41,59,0.08)";
       }
-      const hex = COMMUNITY_COLOR[community] ?? DEFAULT_NODE_COLOR;
+      const hex = communityColorMap[community] ?? DEFAULT_NODE_COLOR;
       return hexToRgba(hex, 0.35);
     },
-    [highlightedCommunity],
+    [highlightedCommunity, communityColorMap],
   );
 
   // ---- Interaction callbacks --------------------------------------------- //
@@ -307,9 +431,12 @@ export default function GraphPanel() {
     (node: object) => {
       const n = node as GraphNode;
       const id = n.agent_id ?? n.id;
-      navigate(`/agents/${id}`);
+      // Open AgentInspector side drawer instead of full-page navigation so
+      // the graph context is preserved. User can still navigate to the
+      // standalone AgentDetail page from inside the inspector.
+      selectAgent(id);
     },
-    [navigate],
+    [selectAgent],
   );
 
   const handleNodeHover = useCallback((node: object | null) => {
@@ -325,16 +452,6 @@ export default function GraphPanel() {
   const linkCount = graphData.links.length;
   const isLarge = nodeCount > 500;
   const isHuge = nodeCount > 2000;
-
-  // Per-community node counts for the left legend overlay. Recomputed only
-  // when the underlying node list changes (cheap O(n) single pass).
-  const communityCounts = useMemo<Record<string, number>>(() => {
-    const counts: Record<string, number> = {};
-    for (const n of graphData.nodes) {
-      counts[n.community] = (counts[n.community] ?? 0) + 1;
-    }
-    return counts;
-  }, [graphData.nodes]);
 
   const rendererConfig = useMemo(
     () => ({
@@ -442,6 +559,18 @@ export default function GraphPanel() {
         </div>
       )}
 
+      {/* Zoom tier badge — shows current LOD level (Close-up/Mid/Overview) */}
+      <ZoomTierBadge tier={zoomTier} />
+
+      {/* Comprehensive legend — communities + node states + edges.
+          Communities are derived from the live graph so the list always
+          reflects the actual simulation (not the hardcoded default profile).
+          Stacked above the 3D Controls bottom-right overlay. */}
+      <GraphLegend
+        communities={graphCommunities}
+        bottomOffsetPx={LEFT_LEGEND_OFFSET_PX}
+      />
+
       <div className="absolute top-4 left-4 z-10 pointer-events-none">
         <h2 className="text-lg font-bold text-white">AI Social World — 3D</h2>
         <p className="text-xs text-white/60">
@@ -467,16 +596,15 @@ export default function GraphPanel() {
         </div>
       </div>
 
-      {/* Community color legend — left side, vertically centered.
-          Single source of truth: COMMUNITIES from @/config/constants.
-          Counts come from the live graph; rows with 0 nodes are still
-          shown so the user can see the full palette.
-          Click a row to highlight that community (other communities dim
-          in both the graph and this legend). Click the active row again
-          to clear the highlight. */}
+      {/* Community color legend — left side, offset 200px above vertical
+          center so it doesn't crowd the middle of the graph viewport.
+          Counts come from the live graph; click a row to highlight that
+          community (other communities dim). Click the active row again to
+          clear the highlight. */}
       <div
         data-testid="graph-community-legend"
-        className="absolute top-1/2 left-4 z-10 -translate-y-1/2 bg-slate-900/80 border border-slate-700/70 rounded-lg px-2 py-3 text-xs text-white shadow-lg backdrop-blur-sm"
+        className="absolute left-4 z-10 -translate-y-1/2 bg-slate-900/80 border border-slate-700/70 rounded-lg px-2 py-3 text-xs text-white shadow-lg backdrop-blur-sm"
+        style={{ top: `calc(50% - ${LEFT_LEGEND_OFFSET_PX}px)` }}
       >
         <div className="text-[10px] uppercase tracking-wide text-white/50 mb-2 px-1 font-semibold flex items-center justify-between gap-3">
           <span>Communities</span>
@@ -492,51 +620,62 @@ export default function GraphPanel() {
           )}
         </div>
         <ul className="flex flex-col gap-0.5">
-          {COMMUNITIES.map((c) => {
-            const count = communityCounts[c.id] ?? 0;
-            const isActive = highlightedCommunity === c.id;
-            const dimmed =
-              highlightedCommunity !== null && !isActive;
-            return (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  data-testid={`legend-community-${c.id}`}
-                  onClick={() =>
-                    setHighlightedCommunity(isActive ? null : c.id)
-                  }
-                  aria-pressed={isActive}
-                  aria-label={`Highlight ${c.name} community`}
-                  className={`w-full flex items-center gap-2 px-2 py-1 rounded transition-all cursor-pointer ${
-                    isActive
-                      ? "bg-white/15 ring-1 ring-white/40"
-                      : "hover:bg-white/10"
-                  } ${dimmed ? "opacity-30" : "opacity-100"}`}
-                >
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: c.color }}
-                    aria-hidden="true"
-                  />
-                  <span className="flex-1 text-left text-white/90">{c.name}</span>
-                  <span className="tabular-nums text-white/60 text-[11px] ml-2">
-                    {count.toLocaleString()}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+          {graphCommunities.length === 0 ? (
+            <li className="px-2 py-1 text-[10px] text-white/40 italic">
+              No communities loaded
+            </li>
+          ) : (
+            graphCommunities.map((c) => {
+              const isActive = highlightedCommunity === c.id;
+              const dimmed = highlightedCommunity !== null && !isActive;
+              return (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    data-testid={`legend-community-${c.id}`}
+                    onClick={() =>
+                      setHighlightedCommunity(isActive ? null : c.id)
+                    }
+                    aria-pressed={isActive}
+                    aria-label={`Highlight ${c.name} community`}
+                    className={`w-full flex items-center gap-2 px-2 py-1 rounded transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-white/15 ring-1 ring-white/40"
+                        : "hover:bg-white/10"
+                    } ${dimmed ? "opacity-30" : "opacity-100"}`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: c.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 text-left text-white/90 truncate">
+                      {c.name}
+                    </span>
+                    <span className="tabular-nums text-white/60 text-[11px] ml-2">
+                      {c.count.toLocaleString()}
+                    </span>
+                  </button>
+                </li>
+              );
+            })
+          )}
         </ul>
       </div>
 
       {hoverNode && (
         <div
           data-testid="graph-hover-tooltip"
-          className="absolute bottom-4 right-4 z-10 pointer-events-none bg-slate-900/90 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white shadow-lg"
+          // Lifted above the 3D Controls overlay (now bottom-right) so a
+          // hovered node's metadata never sits underneath the controls hint.
+          className="absolute bottom-20 right-4 z-10 pointer-events-none bg-slate-900/90 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white shadow-lg"
         >
           <div className="font-semibold">{hoverNode.label}</div>
           <div className="text-white/70">
-            Community: {hoverNode.community}
+            Community:{" "}
+            {hoverNode.community_name ??
+              communityNameMap[hoverNode.community] ??
+              hoverNode.community}
             {hoverNode.agent_type ? ` · ${hoverNode.agent_type}` : ""}
           </div>
           {typeof hoverNode.influence_score === "number" && (
@@ -547,7 +686,10 @@ export default function GraphPanel() {
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 z-10 bg-black/40 rounded-lg p-3 backdrop-blur-sm text-xs text-white/70 pointer-events-none">
+      {/* 3D Controls hint — bottom-right corner. Moved off the bottom-left
+          so it no longer overlaps the GraphLegend and the middle-left
+          Communities legend when the viewport is narrow. */}
+      <div className="absolute bottom-4 right-4 z-10 bg-black/40 rounded-lg p-3 backdrop-blur-sm text-xs text-white/70 pointer-events-none">
         <div className="font-semibold text-white/90 mb-1">3D Controls</div>
         <div>Left-drag: rotate · Scroll: zoom · Right-drag: pan</div>
       </div>

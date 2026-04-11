@@ -11,6 +11,8 @@ from app.models.propagation import PropagationEvent, ExpertOpinion, EmergentEven
 from app.models.project import Project, Scenario
 from app.models.llm_cache import LLMVectorCache
 from app.models.user import User
+from app.models.thread import ThreadMessageRow
+from app.models.community_opinion import CommunityOpinion
 
 __all__ = [
     "Simulation", "SimStep", "SimulationEvent",
@@ -23,4 +25,6 @@ __all__ = [
     "Project", "Scenario",
     "LLMVectorCache",
     "User",
+    "ThreadMessageRow",
+    "CommunityOpinion",
 ]

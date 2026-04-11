@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
+import OverallOpinionPanel from "../components/community/OverallOpinionPanel";
 import { useSimulationSteps } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 
@@ -251,6 +252,11 @@ export default function ScenarioOpinionsPage() {
             Showing demo data. Run a simulation to see real results.
           </div>
         )}
+
+        {/* Cross-community EliteLLM narrative (on-demand) */}
+        <div className="mb-6">
+          <OverallOpinionPanel simulationId={simId} />
+        </div>
 
         {/* 4 Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

@@ -13,6 +13,13 @@ import CommunityOpinionPage from '@/pages/CommunityOpinionPage';
 
 vi.mock('@/api/queries', () => ({
   useSimulationSteps: () => ({ data: undefined, isLoading: false }),
+  useCommunityOpinionSynthesis: () => ({
+    mutate: vi.fn(),
+    data: undefined,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
 }));
 
 const MOCK_STEP = {

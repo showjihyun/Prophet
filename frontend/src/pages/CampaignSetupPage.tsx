@@ -6,6 +6,7 @@
  * in section components under src/components/campaign/. This page just
  * wires them together.
  */
+import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import { useCampaignForm } from "../hooks/useCampaignForm";
@@ -15,10 +16,32 @@ import TargetCommunitiesSection from "../components/campaign/TargetCommunitiesSe
 import CampaignAttributesSection from "../components/campaign/CampaignAttributesSection";
 import CommunityConfigurationSection from "../components/campaign/CommunityConfigurationSection";
 import AdvancedSettingsSection from "../components/campaign/AdvancedSettingsSection";
+import FormProgressBanner from "../components/campaign/FormProgressBanner";
+import SimilarityWarningBanner from "../components/campaign/SimilarityWarningBanner";
+import { analyzeCommunitySimilarity } from "../components/campaign/communitySimilarity";
 
 export default function CampaignSetupPage() {
   const { projectId: urlProjectId } = useParams<{ projectId: string }>();
   const form = useCampaignForm({ urlProjectId });
+  const [quickStart, setQuickStart] = useState(false);
+
+  // Required fields for a minimum-viable submission. The "Quick Start"
+  // toggle hides everything that isn't in this list.
+  const requiredFields = [
+    { label: "Project", satisfied: !!form.selectedProjectId },
+    { label: "Campaign name", satisfied: form.name.trim().length > 0 },
+    { label: "Message", satisfied: form.message.trim().length > 0 },
+    { label: "Channel", satisfied: form.channels.size > 0 },
+  ];
+
+  // Round 7-b: pre-flight similarity advisor — warn the user when their
+  // community personality_profiles are too similar to produce meaningful
+  // diffusion differentiation. Recomputed only when the communities array
+  // changes; the calculation is microsecond-cheap.
+  const similarityReport = useMemo(
+    () => analyzeCommunitySimilarity(form.communities),
+    [form.communities],
+  );
 
   return (
     <div data-testid="campaign-setup-page" className="min-h-screen bg-[var(--background)] flex flex-col">
@@ -35,6 +58,12 @@ export default function CampaignSetupPage() {
           <h1 className="text-xl font-bold font-display text-[var(--foreground)]">
             Create New Simulation
           </h1>
+
+          <FormProgressBanner
+            fields={requiredFields}
+            quickStart={quickStart}
+            onToggleQuickStart={() => setQuickStart((v) => !v)}
+          />
 
           <ProjectSelector
             projects={form.projects}
@@ -60,36 +89,42 @@ export default function CampaignSetupPage() {
             onToggle={form.toggleCommunity}
           />
 
-          <CampaignAttributesSection
-            controversy={form.controversy}
-            onControversyChange={form.setControversy}
-            novelty={form.novelty}
-            onNoveltyChange={form.setNovelty}
-            utility={form.utility}
-            onUtilityChange={form.setUtility}
-          />
+          {!quickStart && (
+            <>
+              <CampaignAttributesSection
+                controversy={form.controversy}
+                onControversyChange={form.setControversy}
+                novelty={form.novelty}
+                onNoveltyChange={form.setNovelty}
+                utility={form.utility}
+                onUtilityChange={form.setUtility}
+              />
 
-          <CommunityConfigurationSection
-            communities={form.communities}
-            open={form.communityOpen}
-            onToggleOpen={form.setCommunityOpen}
-            onLoadTemplates={form.loadTemplates}
-            onUpdateCommunity={form.updateCommunity}
-            onUpdatePersonality={form.updatePersonality}
-            onRemoveCommunity={form.removeCommunity}
-            onAddCommunity={form.addCommunity}
-          />
+              <CommunityConfigurationSection
+                communities={form.communities}
+                open={form.communityOpen}
+                onToggleOpen={form.setCommunityOpen}
+                onLoadTemplates={form.loadTemplates}
+                onUpdateCommunity={form.updateCommunity}
+                onUpdatePersonality={form.updatePersonality}
+                onRemoveCommunity={form.removeCommunity}
+                onAddCommunity={form.addCommunity}
+              />
 
-          <AdvancedSettingsSection
-            maxSteps={form.maxSteps}
-            onMaxStepsChange={form.setMaxSteps}
-            randomSeed={form.randomSeed}
-            onRandomSeedChange={form.setRandomSeed}
-            llmProvider={form.llmProvider}
-            onLlmProviderChange={form.setLlmProvider}
-            slmLlmRatio={form.slmLlmRatio}
-            onSlmLlmRatioChange={form.setSlmLlmRatio}
-          />
+              <SimilarityWarningBanner report={similarityReport} />
+
+              <AdvancedSettingsSection
+                maxSteps={form.maxSteps}
+                onMaxStepsChange={form.setMaxSteps}
+                randomSeed={form.randomSeed}
+                onRandomSeedChange={form.setRandomSeed}
+                llmProvider={form.llmProvider}
+                onLlmProviderChange={form.setLlmProvider}
+                slmLlmRatio={form.slmLlmRatio}
+                onSlmLlmRatioChange={form.setSlmLlmRatio}
+              />
+            </>
+          )}
 
           {form.error && (
             <div className="rounded-md bg-[var(--destructive)]/10 border border-[var(--destructive)]/30 p-3 text-sm text-[var(--destructive)]">

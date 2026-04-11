@@ -13,6 +13,13 @@ import ScenarioOpinionsPage from '@/pages/ScenarioOpinionsPage';
 
 vi.mock('@/api/queries', () => ({
   useSimulationSteps: () => ({ data: undefined, isLoading: false }),
+  useOverallOpinionSynthesis: () => ({
+    mutate: vi.fn(),
+    data: undefined,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
 }));
 
 // 5 communities: alpha, beta, gamma, delta, bridge

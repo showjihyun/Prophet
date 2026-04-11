@@ -2,12 +2,12 @@
 SPEC: docs/spec/03_DIFFUSION_SPEC.md#propagationmodel
 """
 import logging
-import math
 import random
 from uuid import UUID, uuid4
 
 from app.engine.agent.schema import AgentAction, AgentState
 from app.engine.network.schema import SocialNetwork
+from app.engine.diffusion.propagation_calibration import propagation_probability
 from app.engine.diffusion.schema import ContextualPacket, PropagationEvent
 
 logger = logging.getLogger(__name__)
@@ -46,10 +46,12 @@ class PropagationModel:
         seed: int | None = None,
         campaign_message: str = "",
         agent_node_map: dict[UUID, int] | None = None,
+        campaign_attrs: tuple[float, float, float] | None = None,
     ) -> list[PropagationEvent]:
         """Generate propagation events based on agent action.
 
         SPEC: docs/spec/03_DIFFUSION_SPEC.md#propagationmodel
+        SPEC: docs/spec/26_DIFFUSION_CALIBRATION_SPEC.md (Round 7-d)
 
         Only COMMENT/SHARE/REPOST/ADOPT generate events.
         Returns empty list for other actions.
@@ -61,6 +63,12 @@ class PropagationModel:
         Args:
             agent_node_map: Optional pre-built map of agent_id -> node id for O(1)
                 lookups (PERF-01). When provided, avoids O(N) linear node scan.
+            campaign_attrs: Optional ``(controversy, novelty, utility)`` triple
+                in [0, 1] each. Round 7-d wires these into the message_strength
+                calculation: high utility + high novelty raise propagation
+                probability, while high controversy depresses it. Without this
+                parameter, the call defaults to neutral (1.0×) which preserves
+                pre-Round-7 behavior for callers that don't supply it.
         """
         if action not in _PROPAGATION_ACTIONS:
             return []
@@ -95,22 +103,43 @@ class PropagationModel:
             targets = []
 
         events: list[PropagationEvent] = []
-        # Apply a floor so low-influence agents still have a chance to propagate.
-        # influence_score is 0.1–0.9 in typical agents, but guard against edge cases.
-        influence = max(0.1, source_agent.influence_score)
 
-        # Emotion factor: excitement - skepticism
+        # Emotion factor: excitement - skepticism. The influence floor and
+        # sigmoid smoothing live inside ``propagation_probability`` so they
+        # stay in lock-step with the agent-tick path.
         emotion_factor = (
             source_agent.emotion.excitement - source_agent.emotion.skepticism
         )
 
         # Message strength approximation (based on action weight)
-        message_strength = {
+        base_message_strength = {
             AgentAction.COMMENT: 0.6,
             AgentAction.SHARE: 0.8,
             AgentAction.REPOST: 0.7,
             AgentAction.ADOPT: 1.0,
         }.get(action, 0.5)
+
+        # Round 7-d: campaign attribute multiplier on message_strength.
+        #
+        # The user controls 3 knobs from CampaignSetupPage:
+        #   utility    — practical value, raises propagation
+        #   novelty    — newsworthiness, raises propagation
+        #   controversy — divisiveness, lowers propagation (avg agent
+        #                 won't share what they're afraid of)
+        #
+        # Pre-Round-7 these knobs were carried through ``campaign.controversy``
+        # to the cognition layer but never reached the propagation step,
+        # so reframing a campaign (controversy 0.7 → 0.2) had no measurable
+        # effect on adoption_rate. The multiplier here is bounded to
+        # [0.4, 1.6] so the user can produce ~4x swing between the worst
+        # and best campaign config without breaking probability bounds.
+        if campaign_attrs is not None:
+            controversy, novelty, utility = campaign_attrs
+            attr_factor = 1.0 + (utility - 0.5) * 0.6 + (novelty - 0.5) * 0.4 - (controversy - 0.5) * 0.6
+            attr_factor = max(0.4, min(1.6, attr_factor))
+        else:
+            attr_factor = 1.0
+        message_strength = base_message_strength * attr_factor
 
         # Build contextual packet once for all events from this source agent.
         # Only attached when a campaign_message is available.
@@ -140,11 +169,14 @@ class PropagationModel:
             if action == AgentAction.REPOST:
                 trust *= 0.7
 
-            # P(i→j) = influence_i * trust_ij * smoothed_emotion * message_strength
-            # Sigmoid smoothing: never exactly 0, graceful degradation (P4)
-            # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#3.2
-            smoothed_emotion = 0.01 + 0.99 / (1.0 + math.exp(-4.0 * emotion_factor))
-            prob = influence * trust * smoothed_emotion * message_strength
+            # Single source of truth for the calibration formula — see
+            # ``app.engine.diffusion.propagation_calibration``.
+            prob = propagation_probability(
+                influence_score=source_agent.influence_score,
+                trust=trust,
+                emotion_factor=emotion_factor,
+                message_strength=message_strength,
+            )
 
             # ADOPT: passive propagation → P * 0.5
             if action == AgentAction.ADOPT:

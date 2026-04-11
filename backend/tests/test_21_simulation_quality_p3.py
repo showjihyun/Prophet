@@ -1,6 +1,6 @@
 """Tests for Simulation Quality Phase 3: Reflection, Homophily, Memory Persistence.
 
-Auto-generated from SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md
+Auto-generated from SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md
 SPEC Version: 0.1.0
 Generated BEFORE implementation — tests define the contract.
 """
@@ -38,7 +38,7 @@ def _memory(
 # ===========================================================================
 
 class TestReflectionEngine:
-    """SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§1"""
+    """SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1"""
 
     @pytest.fixture
     def engine(self):
@@ -156,7 +156,7 @@ class TestReflectionEngine:
 # ===========================================================================
 
 class TestHomophilyEdgeWeighting:
-    """SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§2"""
+    """SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§2"""
 
     def _build_small_network_with_personalities(self, homophily_weight: float = 0.0):
         """Build a 10-node network with personality attributes on nodes."""

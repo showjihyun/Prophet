@@ -300,7 +300,7 @@ describe('FLOW-29: Settings Defaults', () => {
   it('should have correct default LLM settings', async () => {
     const constants = await import('@/config/constants');
     expect(constants.DEFAULT_LLM_PROVIDER).toBe('ollama');
-    expect(constants.DEFAULT_OLLAMA_MODEL).toBe('llama3.1:8b');
+    expect(constants.DEFAULT_OLLAMA_MODEL).toBe('gemma4:latest');
     expect(constants.DEFAULT_ANTHROPIC_MODEL).toBe('claude-sonnet-4-6');
     expect(constants.DEFAULT_OPENAI_MODEL).toBe('gpt-4o');
     expect(constants.DEFAULT_LLM_CACHE_TTL_SECONDS).toBe(3600);

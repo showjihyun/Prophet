@@ -3,7 +3,7 @@ SPEC: docs/spec/08_DB_SPEC.md#simulations
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, Index, UniqueConstraint, func
+from sqlalchemy import String, Integer, BigInteger, Float, Text, DateTime, ForeignKey, Index, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,7 +24,9 @@ class Simulation(Base):
     max_steps: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
     config: Mapped[dict] = mapped_column(JSONB, nullable=False)
     network_metrics: Mapped[dict | None] = mapped_column(JSONB)
-    random_seed: Mapped[int | None] = mapped_column(Integer)
+    # BigInteger so seeds generated via ``os.urandom(4)`` (unsigned 32-bit,
+    # up to 4,294,967,295) fit safely — signed INTEGER tops out at ~2.1B.
+    random_seed: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

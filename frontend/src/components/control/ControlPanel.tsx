@@ -30,12 +30,14 @@ import {
   Plus,
   Copy,
   Zap,
+  Sparkles,
 } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
 import { SIM_STATUS } from "@/config/constants";
 import ThemeToggle from "../shared/ThemeToggle";
 import InjectEventModal from "../shared/InjectEventModal";
 import ReplayModal from "../shared/ReplayModal";
+import DecidePanel from "../decide/DecidePanel";
 import EngineControlPanel from "./EngineControlPanel";
 import ControlButton from "./ControlButton";
 import LoadPrevDropdown from "./LoadPrevDropdown";
@@ -100,6 +102,7 @@ export default function ControlPanel() {
   } = usePrevSimulations();
 
   const [injectOpen, setInjectOpen] = useState(false);
+  const [decideOpen, setDecideOpen] = useState(false);
   const [replayOpen, setReplayOpen] = useState(false);
   const [engineOpen, setEngineOpen] = useState(false);
 
@@ -329,6 +332,12 @@ export default function ControlPanel() {
           label={propagationAnimEnabled ? "Animations ON" : "Animations OFF"}
           onClick={togglePropagationAnimations}
         />
+        <ControlButton
+          testId="decide-btn"
+          icon={<Sparkles className="w-4 h-4" />}
+          label="Decide"
+          onClick={() => setDecideOpen(true)}
+        />
 
         <div className="w-px h-6 bg-[var(--border)] mx-1" />
 
@@ -352,6 +361,7 @@ export default function ControlPanel() {
       {/* Modals */}
       <InjectEventModal isOpen={injectOpen} onClose={() => setInjectOpen(false)} />
       <ReplayModal isOpen={replayOpen} onClose={() => setReplayOpen(false)} />
+      {decideOpen && <DecidePanel onClose={() => setDecideOpen(false)} />}
 
       {/* Engine Control modal */}
       <EngineControlPanel isOpen={engineOpen} onClose={() => setEngineOpen(false)} />

@@ -1,6 +1,6 @@
 """Layer 1: Perception — filters and weights incoming stimuli.
 SPEC: docs/spec/01_AGENT_SPEC.md#layer-1-perceptionlayer
-SPEC: docs/spec/19_SIMULATION_QUALITY_SPEC.md#sq-01-sq-03
+SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#sq-01-sq-03
 """
 from dataclasses import dataclass, field
 from typing import Literal
@@ -125,7 +125,7 @@ class PerceptionLayer:
         """Filters and weights incoming stimuli from the environment.
 
         SPEC: docs/spec/01_AGENT_SPEC.md#layer-1-perceptionlayer
-        SPEC: docs/spec/19_SIMULATION_QUALITY_SPEC.md#sq-01-sq-03
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#sq-01-sq-03
 
         Args:
             edge_weights: neighbor_id -> trust weight from network (SQ-02).

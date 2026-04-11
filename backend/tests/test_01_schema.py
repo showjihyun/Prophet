@@ -132,12 +132,48 @@ class TestMemoryConfig:
 
 @pytest.mark.phase2
 class TestMessageStrength:
-    """SPEC: 01_AGENT_SPEC.md#layer-6-influencelayer — MessageStrength"""
+    """SPEC: 01_AGENT_SPEC.md#layer-6-influencelayer — MessageStrength
+    SPEC: 26_DIFFUSION_CALIBRATION_SPEC.md (Round 8-3)
 
-    def test_score_is_mean(self):
+    Round 8-3 formula: 0.6·utility + 0.5·novelty − 0.7·controversy + 0.3.
+    Stronger coefficients than R7-d so extreme campaign designs can
+    actually produce "stuck at 12%" and "viral cascade" outcomes in
+    community-level simulations.
+    """
+
+    def test_score_neutral_inputs_equals_baseline(self):
+        """Neutral 0.5/0.5/0.5 → 0.3 + 0.25 − 0.35 + 0.3 = 0.50."""
         from app.engine.agent.influence import MessageStrength
-        ms = MessageStrength(novelty=0.6, controversy=0.3, utility=0.9)
-        assert abs(ms.score - 0.6) < 0.01  # (0.6+0.3+0.9)/3 = 0.6
+        ms = MessageStrength(novelty=0.5, controversy=0.5, utility=0.5)
+        assert abs(ms.score - 0.50) < 0.001
+
+    def test_score_best_case_clamps_to_one(self):
+        """Best (u=1, n=1, c=0) → 0.6 + 0.5 + 0 + 0.3 = 1.4 → clamp 1.0."""
+        from app.engine.agent.influence import MessageStrength
+        ms = MessageStrength(novelty=1.0, controversy=0.0, utility=1.0)
+        assert ms.score == 1.0
+
+    def test_score_worst_case_clamps_to_zero(self):
+        """Worst (u=0, n=0, c=1) → 0 + 0 − 0.7 + 0.3 = −0.4 → clamp 0.0.
+
+        Crucial for "stuck at 12%" scenarios: the worst possible
+        campaign produces zero propagation headroom, so downstream
+        factors (influence × trust × emotion) can drive cohort
+        adoption all the way to stall.
+        """
+        from app.engine.agent.influence import MessageStrength
+        ms = MessageStrength(novelty=0.0, controversy=1.0, utility=0.0)
+        assert ms.score == 0.0
+
+    def test_reframed_campaign_scores_higher_than_controversial_one(self):
+        """Round 8-3 spread: reframed (0.86) vs high-controversy (0.31)."""
+        from app.engine.agent.influence import MessageStrength
+        reframed = MessageStrength(novelty=0.8, controversy=0.2, utility=0.5)
+        hot = MessageStrength(novelty=0.4, controversy=0.7, utility=0.5)
+        assert abs(reframed.score - 0.86) < 0.01
+        assert abs(hot.score - 0.31) < 0.01
+        # Spread should be > 2× so community-level divergence is visible
+        assert reframed.score / hot.score > 2.0
 
     def test_rejects_out_of_range(self):
         from app.engine.agent.influence import MessageStrength

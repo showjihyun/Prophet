@@ -1,6 +1,6 @@
 """Hybrid Network Generator — main generation pipeline.
 SPEC: docs/spec/02_NETWORK_SPEC.md#interface-contracts
-SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§2
+SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§2
 """
 import logging
 import math
@@ -26,7 +26,7 @@ _PERSONALITY_DIMS = ("openness", "skepticism", "trend_following", "brand_loyalty
 def _personality_similarity(p1: dict[str, float], p2: dict[str, float]) -> float:
     """Compute personality similarity as 1 - normalized Manhattan distance.
 
-    SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§2 HM-04
+    SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§2 HM-04
 
     Returns value in [0.0, 1.0]. 1.0 = identical personalities.
     """
@@ -342,7 +342,7 @@ class NetworkGenerator:
     ) -> None:
         """Step 5: Compute edge weights based on community trust + homophily.
         SPEC: docs/spec/02_NETWORK_SPEC.md#step-5-edge-weight-computation
-        SPEC: docs/spec/21_SIMULATION_QUALITY_P3_SPEC.md#§2 HM-01
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§2 HM-01
 
         For edges without pre-computed weights, assign based on
         community similarity, random interaction frequency, and

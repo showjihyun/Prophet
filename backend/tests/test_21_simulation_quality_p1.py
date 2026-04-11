@@ -1,5 +1,5 @@
 """
-Auto-generated from SPEC: docs/spec/19_SIMULATION_QUALITY_SPEC.md
+Auto-generated from SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md
 SPEC Version: 0.1.0
 Generated BEFORE implementation — tests define the contract.
 
@@ -71,7 +71,7 @@ def _make_neighbor_action(agent_id=None):
 # ─────────────────────────────────────────────
 
 class TestExposureFatigue:
-    """SPEC: 19_SIMULATION_QUALITY_SPEC.md#sq-01"""
+    """SPEC: 21_SIMULATION_QUALITY_SPEC.md#sq-01"""
 
     def test_zero_exposure_returns_1(self):
         """exposure_count=0 이면 피로 없음 → factor=1.0"""
@@ -126,7 +126,7 @@ class TestExposureFatigue:
 # ─────────────────────────────────────────────
 
 class TestEdgeWeightPerception:
-    """SPEC: 19_SIMULATION_QUALITY_SPEC.md#sq-02"""
+    """SPEC: 21_SIMULATION_QUALITY_SPEC.md#sq-02"""
 
     def test_uses_real_edge_weight(self):
         """edge_weights dict가 제공되면 실제 가중치가 weighted_score에 반영"""
@@ -186,7 +186,7 @@ class TestEdgeWeightPerception:
 # ─────────────────────────────────────────────
 
 class TestExpertOpinionScore:
-    """SPEC: 19_SIMULATION_QUALITY_SPEC.md#sq-03"""
+    """SPEC: 21_SIMULATION_QUALITY_SPEC.md#sq-03"""
 
     def test_dynamic_score_in_valid_range(self):
         """opinion_score는 항상 [0.0, 1.0] 범위"""
@@ -237,7 +237,7 @@ class TestExpertOpinionScore:
 # ─────────────────────────────────────────────
 
 class TestPromptInjection:
-    """SPEC: 19_SIMULATION_QUALITY_SPEC.md#sq-04"""
+    """SPEC: 21_SIMULATION_QUALITY_SPEC.md#sq-04"""
 
     def test_sanitize_removes_prompt_tokens(self):
         """프롬프트 구조 토큰이 [SEP]으로 대체됨"""

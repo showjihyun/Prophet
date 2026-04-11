@@ -12,7 +12,10 @@ import {
   getAnimationTier,
   TIER_LIMITS,
   ACTION_COLORS,
+  buildAgentIdToNodeId,
+  buildActivePropLinks,
   type AnimationTier,
+  type NodeWithAgentId,
 } from '@/components/graph/propagationAnimationUtils';
 
 // ---------------------------------------------------------------------------
@@ -263,5 +266,130 @@ describe('GAP-7 — Toggle disables animation processing', () => {
       ? pairs.filter((p) => p.action in ACTION_COLORS)
       : [];
     expect(animated).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REGRESSION — agent UUID → graph node_id translation
+// ---------------------------------------------------------------------------
+//
+// The backend emits `propagation_pairs` with **agent UUIDs** in source/target.
+// The force-graph library identifies links by numeric **graph node_ids**
+// (integers serialised as strings). Without translating UUID → node_id before
+// populating the active-links map, `linkDirectionalParticles` never finds a
+// match and NO animation is ever drawn.
+//
+// These tests call the **real exported utility** that GraphPanel uses, so a
+// regression inside GraphPanel that stops calling the utility (or mutates its
+// contract) will fail here, not pass silently against a duplicate helper.
+
+describe('GAP-7 — agent UUID ↔ node_id key translation', () => {
+  const nodes: NodeWithAgentId[] = [
+    { id: '0', agent_id: '00000000-0000-0000-0000-000000000001' },
+    { id: '1', agent_id: '00000000-0000-0000-0000-000000000002' },
+    { id: '2', agent_id: '00000000-0000-0000-0000-000000000003' },
+  ];
+
+  it('builds keys using node_ids so force-graph link lookup succeeds', () => {
+    const lookup = buildAgentIdToNodeId(nodes);
+    const pairs: PropagationPair[] = [
+      {
+        source: '00000000-0000-0000-0000-000000000001',
+        target: '00000000-0000-0000-0000-000000000002',
+        action: 'share',
+        probability: 0.9,
+      },
+    ];
+
+    const active = buildActivePropLinks(pairs, lookup, 50);
+
+    // Key must be `"0__1"` (node_ids), not the raw agent UUIDs.
+    expect(active.has('0__1')).toBe(true);
+    expect(active.get('0__1')).toBe(ACTION_COLORS.share);
+
+    // The raw UUID key must NOT be present — this was the bug.
+    expect(
+      active.has(
+        '00000000-0000-0000-0000-000000000001__00000000-0000-0000-0000-000000000002',
+      ),
+    ).toBe(false);
+  });
+
+  it('silently drops pairs whose agent UUID is not in the graph', () => {
+    const lookup = buildAgentIdToNodeId(nodes);
+    const pairs: PropagationPair[] = [
+      // Source is in graph, target is stale/removed.
+      {
+        source: '00000000-0000-0000-0000-000000000001',
+        target: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+        action: 'share',
+        probability: 0.9,
+      },
+    ];
+    expect(buildActivePropLinks(pairs, lookup, 50).size).toBe(0);
+  });
+
+  it('handles the realistic batch produced by a single live step', () => {
+    const lookup = buildAgentIdToNodeId(nodes);
+    const pairs: PropagationPair[] = [
+      {
+        source: '00000000-0000-0000-0000-000000000001',
+        target: '00000000-0000-0000-0000-000000000002',
+        action: 'share',
+        probability: 0.9,
+      },
+      {
+        source: '00000000-0000-0000-0000-000000000002',
+        target: '00000000-0000-0000-0000-000000000003',
+        action: 'comment',
+        probability: 0.8,
+      },
+      // ignore is filtered out before the translation step.
+      {
+        source: '00000000-0000-0000-0000-000000000001',
+        target: '00000000-0000-0000-0000-000000000003',
+        action: 'ignore',
+        probability: 0.5,
+      },
+    ];
+    const active = buildActivePropLinks(pairs, lookup, 50);
+    expect(active.size).toBe(2);
+    expect(active.get('0__1')).toBe(ACTION_COLORS.share);
+    expect(active.get('1__2')).toBe(ACTION_COLORS.comment);
+  });
+
+  it('enforces the tier limit by dropping tail pairs', () => {
+    const lookup = buildAgentIdToNodeId(nodes);
+    const pairs: PropagationPair[] = [
+      {
+        source: '00000000-0000-0000-0000-000000000001',
+        target: '00000000-0000-0000-0000-000000000002',
+        action: 'share',
+        probability: 0.9,
+      },
+      {
+        source: '00000000-0000-0000-0000-000000000002',
+        target: '00000000-0000-0000-0000-000000000003',
+        action: 'comment',
+        probability: 0.8,
+      },
+    ];
+    // Overview tier cap is 5; with limit=1 only the first resolves.
+    const active = buildActivePropLinks(pairs, lookup, 1);
+    expect(active.size).toBe(1);
+    expect(active.has('0__1')).toBe(true);
+    expect(active.has('1__2')).toBe(false);
+  });
+
+  it('returns an empty map when agentIdToNodeId is empty (no graph loaded)', () => {
+    const pairs: PropagationPair[] = [
+      {
+        source: '00000000-0000-0000-0000-000000000001',
+        target: '00000000-0000-0000-0000-000000000002',
+        action: 'share',
+        probability: 0.9,
+      },
+    ];
+    expect(buildActivePropLinks(pairs, new Map(), 50).size).toBe(0);
   });
 });

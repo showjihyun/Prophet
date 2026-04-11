@@ -18,9 +18,15 @@ from fastapi.responses import StreamingResponse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_orchestrator, get_session, get_persistence
+from app.api.deps import (
+    get_orchestrator,
+    get_session,
+    get_simulation_repo,
+    get_simulation_service,
+)
 from app.api.ws import manager as ws_manager
-from app.engine.simulation.persistence import SimulationPersistence
+from app.repositories.protocols import SimulationRepository
+from app.services.simulation_service import SimulationService
 from app.engine.simulation.exceptions import (
     InvalidStateError,
     InvalidStateTransitionError,
@@ -49,13 +55,9 @@ from app.api.schemas import (
 )
 from app.engine.agent.group_chat import GroupChatManager, GroupChat, GroupMessage
 from app.engine.agent.interview import AgentInterviewer, InterviewResponse
-from app.engine.network.schema import CommunityConfig
-from app.engine.simulation.schema import (
-    CampaignConfig,
-    SimulationConfig,
-    StepResult,
-)
+from app.engine.simulation.schema import StepResult
 from app.llm.engine_control import EngineController
+from app.services.ports import SimulationNotFoundError, StopOutcome
 
 import logging
 
@@ -80,16 +82,6 @@ def _fire_and_forget(coro, *, label: str = "ws_broadcast") -> asyncio.Task:
 
     task.add_done_callback(_log_exc)
     return task
-
-# ---- Default communities when none are provided ----
-_DEFAULT_COMMUNITIES: list[CommunityConfig] = [
-    CommunityConfig(id="A", name="early_adopters", size=100, agent_type="early_adopter"),
-    CommunityConfig(id="B", name="general_consumers", size=500, agent_type="consumer"),
-    CommunityConfig(id="C", name="skeptics", size=200, agent_type="skeptic"),
-    CommunityConfig(id="D", name="experts", size=30, agent_type="expert"),
-    CommunityConfig(id="E", name="influencers", size=170, agent_type="influencer"),
-]
-
 
 def _community_metric_dict(metric: Any) -> dict:
     """Convert CommunityStepMetrics to a plain dict (handles dataclass and dict)."""
@@ -164,59 +156,13 @@ def _require_status(state: Any, *allowed: SimulationStatus) -> None:
 @router.post("/", status_code=201, response_model=SimulationResponse)
 async def create_simulation(
     body: CreateSimulationRequest,
-    orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> SimulationResponse:
     """Create a new simulation run.
     SPEC: docs/spec/06_API_SPEC.md#post-simulations
     """
-    sim_id = uuid.uuid4()
-
-    # Build communities from request or use defaults
-    if body.communities and isinstance(body.communities, list):
-        communities = [
-            CommunityConfig(
-                id=c.get("id", str(i)),
-                name=c.get("name", f"community_{i}"),
-                size=c.get("size", 100),
-                agent_type=c.get("agent_type", "consumer"),
-                personality_profile=c.get("personality_profile", {}),
-            )
-            for i, c in enumerate(body.communities)
-        ]
-    else:
-        communities = list(_DEFAULT_COMMUNITIES)
-
-    config = SimulationConfig(
-        simulation_id=sim_id,
-        name=body.name,
-        description=body.description or "",
-        communities=communities,
-        campaign=CampaignConfig(
-            name=body.campaign.name,
-            budget=body.campaign.budget or 0,
-            channels=body.campaign.channels,
-            message=body.campaign.message,
-            target_communities=body.campaign.target_communities,
-            novelty=body.campaign.novelty or 0.5,
-            utility=body.campaign.utility or 0.5,
-            controversy=body.campaign.controversy or 0.0,
-        ),
-        max_steps=body.max_steps or 50,
-        random_seed=body.random_seed,
-        default_llm_provider=body.default_llm_provider,
-        slm_llm_ratio=body.slm_llm_ratio,
-        slm_model=body.slm_model,
-        budget_usd=body.budget_usd,
-        platform=body.platform,
-    )
-
-    state = orchestrator.create_simulation(config)
-
-    # Persist to DB (fire-and-forget, does not block response)
-    edges = list(state.network.graph.edges(data=True)) if state.network else []
-    await persist.persist_creation(session, state.simulation_id, config, state.agents, edges)
+    state = await service.create(body, session=session)
 
     # Network metrics are computed lazily via GET /network/metrics — avoid
     # running O(n^2) NetworkX algorithms on the create hot path.
@@ -238,17 +184,15 @@ async def list_simulations(
     offset: int = Query(0, ge=0),
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    repo: SimulationRepository = Depends(get_simulation_repo),
 ) -> PaginatedResponse:
     """List all simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulations
     """
     # Build a dict of in-memory simulations (live, takes precedence).
-    # Snapshot values() to a list to avoid mutation-during-iteration.
+    # ``list_states`` returns a snapshot — safe against concurrent mutation.
     mem_items: dict[str, dict] = {}
-    for state in list(orchestrator._simulations.values()):
-        if status is not None and state.status != status:
-            continue
+    for state in orchestrator.list_states(status=status):
         mem_items[str(state.simulation_id)] = {
             "simulation_id": str(state.simulation_id),
             "name": state.config.name,
@@ -260,8 +204,8 @@ async def list_simulations(
     # Pull a windowed slice from DB with SQL-side filter/limit.
     # Fetch a bit extra to absorb in-memory overrides that collide by id.
     db_limit = limit + offset + len(mem_items)
-    db_sims = await persist.load_simulations(
-        session, status=status, limit=db_limit, offset=0
+    db_sims = await repo.list_all(
+        status=status, limit=db_limit, offset=0, session=session,
     )
     for db_sim in db_sims:
         sid = db_sim["simulation_id"]
@@ -276,7 +220,7 @@ async def list_simulations(
 
     items = list(mem_items.values())
     # Total = DB count (SQL) + in-memory-only rows not present in DB.
-    db_total = await persist.count_simulations(session, status=status)
+    db_total = await repo.count(status=status, session=session)
     db_ids = {s["simulation_id"] for s in db_sims}
     mem_only = sum(1 for sid in mem_items if sid not in db_ids)
     total = db_total + mem_only
@@ -289,7 +233,7 @@ async def get_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    repo: SimulationRepository = Depends(get_simulation_repo),
 ) -> SimulationDetailResponse:
     """Get simulation details.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_id
@@ -317,7 +261,7 @@ async def get_simulation(
         pass  # simulation not in memory — fall through to DB lookup
 
     # Fallback: point-lookup from DB (read-only, completed/historical sims)
-    db_sim = await persist.load_simulation(session, sim_uuid)
+    db_sim = await repo.find_by_id(sim_uuid, session=session)
     if db_sim is None:
         raise HTTPException(
             status_code=404,
@@ -351,7 +295,7 @@ async def start_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Start the simulation.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstart
@@ -359,13 +303,7 @@ async def start_simulation(
     state = _get_state_or_404(orchestrator, simulation_id)
     _require_status(state, SimulationStatus.CONFIGURED, SimulationStatus.PAUSED)
     now = datetime.now(timezone.utc)
-    sim_uuid = _sim_id_to_uuid(simulation_id)
-    await orchestrator.start(sim_uuid)
-    await persist.persist_status(session, sim_uuid, "running")
-    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": "running"},
-    }))
+    await service.start(_sim_id_to_uuid(simulation_id), session=session)
     return StatusResponse(status=SimulationStatus.RUNNING, started_at=now)
 
 
@@ -374,7 +312,7 @@ async def step_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StepResultResponse:
     """Execute exactly one step.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstep
@@ -384,16 +322,8 @@ async def step_simulation(
 
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        result = await orchestrator.run_step(sim_uuid)
+        result = await service.step(sim_uuid, session=session)
     except Exception as exc:
-        # Orchestrator has already flipped state to FAILED. Persist that and
-        # broadcast so the frontend can swap to the recover UI instead of
-        # repeatedly hitting /resume and getting 409.
-        await persist.persist_status(session, sim_uuid, state.status, state.current_step)
-        _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-            "type": "status_change",
-            "data": {"status": state.status},
-        }))
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -404,165 +334,6 @@ async def step_simulation(
                 instance=f"/api/v1/simulations/{simulation_id}/step",
             ).model_dump(),
         ) from exc
-
-    # Persist step result + agent snapshots + status update
-    await persist.persist_step(session, sim_uuid, result, agents=state.agents)
-    await persist.persist_status(session, sim_uuid, state.status, state.current_step)
-
-    # Persist LLM call summary for this step (one synthetic record per LLM call)
-    if result.llm_calls_this_step > 0:
-        # Build LLM call records from tier distribution and orchestrator config
-        from app.config import settings as _cfg
-        tier_dist = result.llm_tier_distribution  # {tier: count}
-        llm_records = []
-        for tier, count in tier_dist.items():
-            provider = _cfg.default_llm_provider if tier <= 2 else "ollama"
-            model = _cfg.slm_model if tier <= 2 else _cfg.anthropic_default_model
-            for _ in range(count):
-                llm_records.append({
-                    "agent_id": None,
-                    "step": result.step,
-                    "provider": provider,
-                    "model": model,
-                    "prompt_hash": "",
-                    "latency_ms": result.step_duration_ms / max(1, result.llm_calls_this_step),
-                    "tokens": None,
-                    "cached": False,
-                    "tier": int(tier),
-                })
-        if not llm_records:
-            # Fallback: at least record that LLM calls happened
-            llm_records = [{"agent_id": None, "step": result.step, "provider": _cfg.default_llm_provider, "model": _cfg.slm_model, "prompt_hash": "", "tier": 1}]
-        await persist.persist_llm_calls(session, sim_uuid, llm_records)
-
-    # M-5: Persist expert opinions (from emergent events with "expert" in type)
-    expert_events = [
-        e for e in result.emergent_events
-        if "expert" in (e.event_type or "").lower()
-    ]
-    if expert_events:
-        opinions = [
-            {
-                "agent_id": e.community_id,  # use community_id as proxy agent_id when available
-                "opinion_text": e.description,
-                "score": (e.severity * 2) - 1,  # severity [0,1] → score [-1,1]
-                "confidence": e.severity,
-                "step": result.step,
-            }
-            for e in expert_events
-            if e.community_id is not None
-        ]
-        if opinions:
-            async def _persist_opinions_bg(sim_id, step, ops):
-                from app.database import async_session as _async_session
-                async with _async_session() as bg_session:
-                    await persist.persist_expert_opinions(bg_session, sim_id, step, ops)
-            _fire_and_forget(_persist_opinions_bg(sim_uuid, result.step, opinions), label="persist_opinions")
-
-    # M-7: Persist agent memories (collect from agent state, cap at 100)
-    agent_memories: list[dict] = []
-    for agent in state.agents:
-        memories = getattr(agent, 'memories', None) or []
-        for mem in memories:
-            if isinstance(mem, dict):
-                mem_entry = dict(mem)
-                mem_entry.setdefault("agent_id", agent.agent_id)
-                mem_entry.setdefault("step", result.step)
-                agent_memories.append(mem_entry)
-            elif hasattr(mem, 'content'):
-                agent_memories.append({
-                    "agent_id": agent.agent_id,
-                    "memory_type": getattr(mem, 'memory_type', 'episodic'),
-                    "content": getattr(mem, 'content', ''),
-                    "emotion_weight": getattr(mem, 'emotion_weight', 0.5),
-                    "step": result.step,
-                    "social_weight": getattr(mem, 'social_weight', 0.0),
-                })
-            if len(agent_memories) >= 100:
-                break
-        if len(agent_memories) >= 100:
-            break
-    if agent_memories:
-        async def _persist_memories_bg(sim_id, mems):
-            from app.database import async_session as _async_session
-            async with _async_session() as bg_session:
-                await persist.persist_agent_memories(bg_session, sim_id, mems)
-        _fire_and_forget(_persist_memories_bg(sim_uuid, agent_memories), label="persist_memories")
-
-    # Broadcast step result via WebSocket
-    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-        "type": "step_result",
-        "data": {
-            "simulation_id": str(sim_uuid),
-            "step": result.step,
-            "total_adoption": result.total_adoption,
-            "adoption_rate": result.adoption_rate,
-            "diffusion_rate": result.diffusion_rate,
-            "mean_sentiment": result.mean_sentiment,
-            "sentiment_variance": result.sentiment_variance,
-            "community_metrics": {
-                k: _community_metric_dict(v)
-                for k, v in result.community_metrics.items()
-            },
-            "emergent_events": [
-                {
-                    "event_type": e.event_type,
-                    "step": e.step,
-                    "community_id": str(e.community_id) if e.community_id else None,
-                    "severity": e.severity,
-                    "description": e.description,
-                }
-                for e in result.emergent_events
-            ],
-            "action_distribution": {k: v for k, v in result.action_distribution.items()},
-            "propagation_pairs": result.propagation_pairs,
-            "llm_calls_this_step": result.llm_calls_this_step,
-            "step_duration_ms": result.step_duration_ms,
-        },
-    }))
-
-    # Broadcast individual emergent events
-    for event in result.emergent_events:
-        _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-            "type": "emergent_event",
-            "data": {
-                "event_type": event.event_type,
-                "step": event.step,
-                "community_id": str(event.community_id) if event.community_id else None,
-                "severity": event.severity,
-                "description": event.description,
-            },
-        }))
-
-    # C-4: Broadcast agent_update for subscribed agents
-    agent_state_map: dict[str, dict] = {}
-    for agent in state.agents:
-        aid = str(agent.agent_id)
-        agent_state_map[aid] = {
-            "agent_id": aid,
-            "step": result.step,
-            "belief": agent.belief,
-            "action": agent.action.value if hasattr(agent.action, 'value') else str(agent.action),
-            "adopted": agent.adopted,
-            "exposure_count": agent.exposure_count,
-            "emotion": {
-                "interest": agent.emotion.interest,
-                "trust": agent.emotion.trust,
-                "skepticism": agent.emotion.skepticism,
-                "excitement": agent.emotion.excitement,
-            },
-        }
-    _fire_and_forget(
-        ws_manager.broadcast_agent_updates(str(sim_uuid), agent_state_map),
-        label="broadcast_agent_updates",
-    )
-
-    # Broadcast status change if simulation completed
-    if state.status == "completed":
-        _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-            "type": "status_change",
-            "data": {"status": "completed"},
-        }))
 
     cm_resp: dict[str, Any] = {}
     for cid, metric in result.community_metrics.items():
@@ -592,7 +363,7 @@ async def run_all_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> RunAllResponse:
     """Run all remaining steps to completion and return a report.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idrun-all
@@ -601,15 +372,8 @@ async def run_all_simulation(
     _require_status(state, SimulationStatus.CONFIGURED, SimulationStatus.RUNNING)
     sim_uuid = _sim_id_to_uuid(simulation_id)
 
-    async def _persist_each_step(result: StepResult) -> None:
-        """Persist each intermediate step during run_all.
-        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.2
-        """
-        step_state = _get_state_or_404(orchestrator, simulation_id)
-        await persist.persist_step(session, sim_uuid, result, agents=step_state.agents)
-
     try:
-        report = await orchestrator.run_all(sim_uuid, step_callback=_persist_each_step)
+        report = await service.run_all(sim_uuid, session=session)
     except SimulationCapacityError as exc:
         raise HTTPException(
             status_code=429,
@@ -645,27 +409,6 @@ async def run_all_simulation(
             ).model_dump(),
         )
 
-    # Persist final status
-    await persist.persist_status(session, sim_uuid, report["status"], report["total_steps"])
-
-    # Broadcast completion via WebSocket
-    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-        "type": "run_all_complete",
-        "data": {
-            "simulation_id": simulation_id,
-            "total_steps": report["total_steps"],
-            "final_adoption_rate": report["final_adoption_rate"],
-            "final_mean_sentiment": report["final_mean_sentiment"],
-            "emergent_events_count": report["emergent_events_count"],
-            "duration_ms": report["duration_ms"],
-            "status": report["status"],
-        },
-    }))
-    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": report["status"]},
-    }))
-
     return RunAllResponse(
         simulation_id=simulation_id,
         status=report["status"],
@@ -683,20 +426,14 @@ async def pause_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Pause after current step completes.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idpause
     """
     state = _get_state_or_404(orchestrator, simulation_id)
     _require_status(state, SimulationStatus.RUNNING)
-    sim_uuid = _sim_id_to_uuid(simulation_id)
-    await orchestrator.pause(sim_uuid)
-    await persist.persist_status(session, sim_uuid, "paused", state.current_step)
-    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": "paused"},
-    }))
+    await service.pause(_sim_id_to_uuid(simulation_id), session=session)
     return StatusResponse(
         status=SimulationStatus.PAUSED, current_step=state.current_step,
     )
@@ -706,18 +443,15 @@ async def pause_simulation(
 async def resume_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Resume from paused state.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idresume
     """
     state = _get_state_or_404(orchestrator, simulation_id)
     _require_status(state, SimulationStatus.PAUSED)
-    sim_uuid = _sim_id_to_uuid(simulation_id)
-    await orchestrator.resume(sim_uuid)
-    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": "running"},
-    }))
+    await service.resume(_sim_id_to_uuid(simulation_id), session=session)
     return StatusResponse(status=SimulationStatus.RUNNING)
 
 
@@ -726,62 +460,48 @@ async def stop_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Stop and mark as completed.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstop
     """
     sim_uuid = _sim_id_to_uuid(simulation_id)
 
-    # Historical sims (DB-only after restart): no in-memory state to stop.
-    # Update DB status directly so the frontend recovery flow (stop → start)
-    # does not break with a 404.
+    # Validate status transition if sim is in memory — preserve 409 behavior
+    # for unexpected states. DB-only sims skip this check.
     try:
         state = _get_state_or_404(orchestrator, simulation_id)
     except HTTPException as e:
         if e.status_code != 404:
             raise
-        # Verify the sim exists in DB before blindly marking completed.
-        if not await persist.simulation_row_exists(session, sim_uuid):
-            raise HTTPException(
-                status_code=404,
-                detail=ErrorResponse(
-                    type="https://prophet.io/errors/not-found",
-                    title="Simulation Not Found",
-                    status=404,
-                    detail=f"Simulation uuid={simulation_id} does not exist",
-                    instance=f"/api/v1/simulations/{simulation_id}",
-                ).model_dump(),
-            )
-        await persist.persist_status(session, sim_uuid, "completed")
-        return StatusResponse(status=SimulationStatus.COMPLETED)
+        state = None
 
-    _require_status(
-        state,
-        SimulationStatus.RUNNING,
-        SimulationStatus.PAUSED,
-        SimulationStatus.CONFIGURED,
-        SimulationStatus.FAILED,
-        SimulationStatus.COMPLETED,
-    )
+    if state is not None:
+        _require_status(
+            state,
+            SimulationStatus.RUNNING,
+            SimulationStatus.PAUSED,
+            SimulationStatus.CONFIGURED,
+            SimulationStatus.FAILED,
+            SimulationStatus.COMPLETED,
+        )
 
-    # If stopping from failed/completed, reset to created for restart
-    if state.status in ("failed", "completed"):
-        state.status = "created"
-        state.current_step = 0
-        await persist.persist_status(session, sim_uuid, "created")
-        _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-            "type": "status_change",
-            "data": {"status": "created"},
-        }))
+    try:
+        outcome = await service.stop(sim_uuid, session=session)
+    except SimulationNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/not-found",
+                title="Simulation Not Found",
+                status=404,
+                detail=f"Simulation uuid={simulation_id} does not exist",
+                instance=f"/api/v1/simulations/{simulation_id}",
+            ).model_dump(),
+        )
+
+    if outcome is StopOutcome.RESET:
         return StatusResponse(status=SimulationStatus.CREATED)
-
-    state.status = "completed"
-    await persist.persist_status(session, sim_uuid, "completed")
-    _fire_and_forget(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": "completed"},
-    }))
     return StatusResponse(status=SimulationStatus.COMPLETED)
 
 
@@ -793,7 +513,7 @@ async def get_steps(
     metrics: str | None = Query(None),
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    repo: SimulationRepository = Depends(get_simulation_repo),
 ) -> StepHistoryResponse:
     """Get step history.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idsteps
@@ -838,7 +558,7 @@ async def get_steps(
             ))
     else:
         # Fallback: load from DB (completed/historical sims not in memory)
-        db_steps = await persist.load_steps(session, sim_uuid)
+        db_steps = await repo.load_steps(sim_uuid, session=session)
         for sr in db_steps:
             step_num = sr.get("step", 0)
             if from_step is not None and step_num < from_step:
@@ -1278,7 +998,7 @@ async def export_simulation(
     format: str = Query("json", pattern="^(json|csv)$"),
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    repo: SimulationRepository = Depends(get_simulation_repo),
 ) -> StreamingResponse:
     """Export simulation results as JSON or CSV download.
     SPEC: docs/spec/06_API_SPEC.md#simulation-endpoints
@@ -1311,13 +1031,13 @@ async def export_simulation(
             })
     except (ValueError, KeyError):
         # Historical sim — load from DB
-        db_sim = await persist.load_simulation(session, sim_uuid)
+        db_sim = await repo.find_by_id(sim_uuid, session=session)
         if db_sim:
             sim_name = db_sim.get("name", simulation_id)
             sim_status = db_sim.get("status", "completed")
             sim_step = db_sim.get("current_step", 0)
             sim_max_steps = db_sim.get("max_steps", 0)
-        db_steps = await persist.load_steps(session, sim_uuid)
+        db_steps = await repo.load_steps(sim_uuid, session=session)
         for sr in db_steps:
             step_rows.append({
                 "step": sr.get("step", 0),

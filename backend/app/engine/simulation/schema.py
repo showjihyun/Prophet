@@ -183,6 +183,9 @@ class StepResult:
     # Performance
     step_duration_ms: float = 0.0
 
+    # Thread messages captured during this step (CT-03)
+    thread_messages: list = field(default_factory=list)
+
 
 @dataclass
 class ScenarioComparison:

@@ -107,6 +107,12 @@ export interface MemoryRecord {
 }
 
 export interface AgentDetail extends AgentSummary {
+  /**
+   * Human-readable community name resolved by the backend (e.g. "skeptics").
+   * ``null`` when the backend couldn't resolve one — the frontend should
+   * fall back to ``community_id`` for display.
+   */
+  community_name?: string | null;
   personality: Record<string, number>;
   emotion: Record<string, number>;
   memories: MemoryRecord[];
@@ -147,6 +153,49 @@ export interface CommunityInfo {
   mean_belief: number;
   sentiment_variance: number;
   dominant_action: string;
+}
+
+// ── Community Opinion (EliteLLM synthesis) ────────────────────────────
+
+export interface CommunityOpinionTheme {
+  theme: string;
+  weight: number;
+  evidence_step: number;
+}
+
+export interface CommunityOpinionDivision {
+  faction: string;
+  share: number;
+  concerns: string[];
+}
+
+export interface CommunityOpinionKeyQuote {
+  agent_id: string;
+  content: string;
+  step: number;
+}
+
+export interface CommunityOpinion {
+  opinion_id: string;
+  simulation_id: string;
+  community_id: string;
+  step: number;
+  summary: string;
+  sentiment_trend: 'rising' | 'stable' | 'polarising' | 'collapsing' | string;
+  themes: CommunityOpinionTheme[];
+  divisions: CommunityOpinionDivision[];
+  dominant_emotions: string[];
+  key_quotes: CommunityOpinionKeyQuote[];
+  source_step_count: number;
+  source_agent_count: number;
+  llm_provider: string;
+  llm_model: string;
+  is_fallback_stub: boolean;
+}
+
+export interface OverallOpinion {
+  overall: CommunityOpinion;
+  communities: CommunityOpinion[];
 }
 
 // ── Threads ───────────────────────────────────────────────────────────

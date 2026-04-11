@@ -63,9 +63,8 @@ _VALID_TRANSITIONS: dict[str, set[str]] = {
     },
 }
 
-from app.config import settings as _settings
-
-_MAX_CONCURRENT = _settings.sim_max_concurrent
+# Domain defaults — overridable via constructor injection
+_MAX_CONCURRENT_DEFAULT = 3
 
 # Allowed event types for inject_event
 # SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idinject-event
@@ -108,16 +107,21 @@ class SimulationOrchestrator:
     for simulations. Uses in-memory state for Phase 6.
     """
 
-    MAX_SIMULATIONS = _settings.sim_max_simulations
-    SIMULATION_TTL_SECONDS = _settings.sim_ttl_seconds
+    MAX_SIMULATIONS = 50
+    SIMULATION_TTL_SECONDS = 86400  # 24h
 
-    def __init__(self, llm_adapter=None, slm_adapter=None, gateway=None) -> None:
+    def __init__(self, llm_adapter=None, slm_adapter=None, gateway=None, session_factory=None) -> None:
         """Initialize the orchestrator.
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§3 MP-02
         """
         self._simulations: dict[UUID, SimulationState] = {}
         self._locks: defaultdict[UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
-        self._step_runner = StepRunner(llm_adapter=llm_adapter, gateway=gateway)
+        self._session_factory = session_factory
+        self._step_runner = StepRunner(
+            llm_adapter=llm_adapter, gateway=gateway,
+            session_factory=session_factory,
+        )
         self._llm_adapter = llm_adapter
         self._slm_adapter = slm_adapter
         self._gateway = gateway
@@ -144,6 +148,10 @@ class SimulationOrchestrator:
         now = _dt.now(_tz.utc)
         expired: list[UUID] = []
         for sim_id, state in self._simulations.items():
+            # Never evict RUNNING simulations — they may be mid-step
+            # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.1
+            if state.status == SimulationStatus.RUNNING.value:
+                continue
             created_at = getattr(state, 'created_at', None)
             if created_at is not None:
                 age = (now - created_at).total_seconds()
@@ -155,14 +163,16 @@ class SimulationOrchestrator:
             self._network_payload_cache.pop(sim_id, None)
             self._network_metrics_cache.pop(sim_id, None)
 
-        # Also enforce max count (remove oldest first)
+        # Also enforce max count (remove oldest first, skip RUNNING)
         if len(self._simulations) > self.MAX_SIMULATIONS:
             sorted_sims = sorted(
                 self._simulations.keys(),
                 key=lambda k: getattr(self._simulations[k], 'created_at', _dt.min),
             )
-            while len(self._simulations) > self.MAX_SIMULATIONS:
+            while len(self._simulations) > self.MAX_SIMULATIONS and sorted_sims:
                 oldest = sorted_sims.pop(0)
+                if self._simulations[oldest].status == SimulationStatus.RUNNING.value:
+                    continue
                 del self._simulations[oldest]
                 self._locks.pop(oldest, None)
                 self._network_payload_cache.pop(oldest, None)
@@ -206,15 +216,43 @@ class SimulationOrchestrator:
         agents: list[AgentState] = []
         nodes = list(network.graph.nodes(data=True))
 
-        # Compute degree centrality for influence scores
-        centrality = nx.degree_centrality(network.graph)
+        # Compute blended influence score: degree + betweenness centrality
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#5.1 — Network A-
+        degree_cent = nx.degree_centrality(network.graph)
+        # Sampled betweenness for scalability (k=100 max)
+        _k = min(100, len(network.graph))
+        between_cent = nx.betweenness_centrality(network.graph, k=_k, seed=seed)
+        centrality = {
+            n: 0.6 * degree_cent.get(n, 0.0) + 0.4 * between_cent.get(n, 0.0)
+            for n in network.graph.nodes()
+        }
+
+        # Cache community UUIDs so every agent in the same community sees the
+        # same UUID without re-hashing per node. The UUID is derived from
+        # ``(sim_id, community_string)`` so it is:
+        #   (a) deterministic within a simulation (for seed repeatability) and
+        #   (b) globally unique across simulations (avoiding the
+        #       ``communities_pkey`` violation that bare ``hash(cid_str)``
+        #       caused when two sims shared community ids like "A", "B").
+        import hashlib as _hashlib
+        community_uuid_cache: dict[str, UUID] = {}
+
+        def _community_uuid(cid_str: str) -> UUID:
+            if cid_str in community_uuid_cache:
+                return community_uuid_cache[cid_str]
+            if seed is None:
+                uid = uuid4()
+            else:
+                digest = _hashlib.sha256(
+                    f"{sim_id}:{cid_str}".encode()
+                ).digest()
+                uid = UUID(bytes=digest[:16])
+            community_uuid_cache[cid_str] = uid
+            return uid
 
         for node_id, node_data in nodes:
             community_id_str = node_data.get("community_id", "default")
-            # Map community string id to a deterministic UUID
-            community_uuid = uuid4() if seed is None else UUID(
-                int=hash(community_id_str) % (2**128)
-            )
+            community_uuid = _community_uuid(community_id_str)
             # Store the UUID on the node for later lookup
             network.graph.nodes[node_id]["community_uuid"] = community_uuid
 
@@ -306,9 +344,9 @@ class SimulationOrchestrator:
                 1 for s in self._simulations.values()
                 if s.status == SimulationStatus.RUNNING.value
             )
-            if running_count >= _MAX_CONCURRENT:
+            if running_count >= _MAX_CONCURRENT_DEFAULT:
                 raise SimulationCapacityError(
-                    f"Max {_MAX_CONCURRENT} concurrent simulations exceeded"
+                    f"Max {_MAX_CONCURRENT_DEFAULT} concurrent simulations exceeded"
                 )
 
             state.status = SimulationStatus.RUNNING.value
@@ -332,6 +370,8 @@ class SimulationOrchestrator:
                     oldest_key = min(state.agent_snapshots)
                     del state.agent_snapshots[oldest_key]
 
+                # Set simulation_id for pgvector memory persistence (MP-02)
+                self._step_runner._simulation_id = simulation_id
                 result = await self._step_runner.execute_step(state, state.current_step)
                 state.step_history.append(result)
                 state.current_step += 1
@@ -453,6 +493,35 @@ class SimulationOrchestrator:
             state = self._get_state(simulation_id)
             self._validate_transition(state.status, SimulationStatus.RUNNING.value)
             state.status = SimulationStatus.RUNNING.value
+
+    async def reset(self, simulation_id: UUID) -> None:
+        """Reset a COMPLETED or FAILED simulation back to CREATED.
+
+        SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+
+        This is the domain-owned counterpart of the previous
+        ``state.status = "created"`` mutation that used to live in the
+        API route handler. It puts the simulation back to an initial
+        state so it can be re-configured and restarted, and it is the
+        **only** sanctioned way for the Service layer to roll an
+        in-memory simulation backwards.
+
+        Raises:
+            InvalidStateError: when the current status is not
+                ``COMPLETED`` or ``FAILED``.
+        """
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            if state.status not in (
+                SimulationStatus.COMPLETED.value,
+                SimulationStatus.FAILED.value,
+            ):
+                raise InvalidStateError(
+                    "reset only allowed from COMPLETED or FAILED, "
+                    f"current status: {state.status}"
+                )
+            state.status = SimulationStatus.CREATED.value
+            state.current_step = 0
 
     async def modify_agent(
         self,
@@ -639,6 +708,43 @@ class SimulationOrchestrator:
             raise ValueError(f"Simulation {simulation_id} not found")
         return self._simulations[simulation_id]
 
+    def _community_name_map(self, sim_uuid: UUID) -> dict[str, str]:
+        """Build a ``community_uuid → config community name`` map for a sim.
+
+        Walks the graph exactly once per call. Use this instead of an O(N)
+        graph scan per endpoint hit — the AgentInspector triggers
+        ``get_agent`` on every node click, and a 5k-node graph made that a
+        ~5k-iteration linear walk per interaction.
+
+        Caching one level deeper (per ``(sim_uuid, current_step)``) is not
+        worth the invalidation cost: community membership doesn't change
+        between steps for the lifetime of a simulation, and the build cost
+        is already dominated by the graph walk which is O(N) once.
+
+        Returns an empty dict if the sim has no network yet.
+        """
+        state = self._get_state(sim_uuid)
+        if state.network is None or state.network.graph is None:
+            return {}
+
+        # uuid → short key (one walk)
+        short_key_by_uuid: dict[str, str] = {}
+        for _nid, ndata in state.network.graph.nodes(data=True):
+            cuuid = str(ndata.get("community_uuid", ""))
+            if cuuid and cuuid not in short_key_by_uuid:
+                short_key = str(ndata.get("community_id", ""))
+                if short_key:
+                    short_key_by_uuid[cuuid] = short_key
+
+        # short key → config.name
+        name_by_short: dict[str, str] = {cc.id: cc.name for cc in state.config.communities}
+
+        return {
+            cuuid: name_by_short[short]
+            for cuuid, short in short_key_by_uuid.items()
+            if short in name_by_short
+        }
+
     def _validate_transition(self, from_status: str, to_status: str) -> None:
         """Validate state transition.
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulation-lifecycle
@@ -652,6 +758,24 @@ class SimulationOrchestrator:
     def get_state(self, simulation_id: UUID) -> SimulationState:
         """Public accessor for simulation state."""
         return self._get_state(simulation_id)
+
+    def list_states(
+        self, *, status: str | None = None,
+    ) -> list[SimulationState]:
+        """Return a snapshot list of all in-memory simulation states.
+
+        SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+
+        The returned list is a **snapshot** — callers can iterate without
+        worrying about concurrent mutation of the underlying dict.
+
+        :param status: optional status filter (e.g. ``"running"``,
+            ``"configured"``). When ``None``, all states are returned.
+        """
+        states = list(self._simulations.values())
+        if status is not None:
+            states = [s for s in states if s.status == status]
+        return states
 
     # ------------------------------------------------------------------ #
     # Agent / Community query methods (called from API endpoints)
@@ -722,9 +846,20 @@ class SimulationOrchestrator:
         if agent is None:
             raise ValueError(f"Agent {agent_id_str} not found in simulation {simulation_id}")
 
+        # Resolve human-readable community name so the frontend doesn't have
+        # to show a raw UUID in the inspector. Uses the cached
+        # community_uuid → cc.name map so this endpoint is O(1) per call
+        # regardless of graph size (previously walked every node on every
+        # inspector click — 5000 iterations per click on large sims).
+        # Falls back to ``None`` (not the raw UUID) so downstream code
+        # can treat "missing human name" honestly.
+        community_uuid_str = str(agent.community_id)
+        community_name = self._community_name_map(sim_uuid).get(community_uuid_str)
+
         return {
             "agent_id": str(agent.agent_id),
             "community_id": str(agent.community_id),
+            "community_name": community_name,
             "agent_type": agent.agent_type.value,
             "action": agent.action.value,
             "adopted": agent.adopted,
@@ -989,13 +1124,18 @@ class SimulationOrchestrator:
             # Bug 3+4 fix: add `community` (short key) and `label` fields
             community_key = community_uuid_to_key.get(community_uuid, node_data.get("community_id", ""))
             agent_id_str = str(agent.agent_id) if agent else str(node_id)
-            short_id = agent_id_str[:8]
+            # Deterministic agent UUIDs pack most entropy into the low bits
+            # (first 8 chars are often "00000000"), so prefer the node_id —
+            # which is guaranteed unique within the graph — for the display
+            # label. Falls back to the agent UUID tail if node_id is missing.
+            label_suffix = str(node_id) if node_id is not None else agent_id_str[-8:]
+            community_display = community_names.get(community_uuid, str(community_key))
             node_dict: dict = {
                 "id": str(node_id),
-                "label": f"Agent {short_id}",
+                "label": f"Agent #{label_suffix}",
                 "community": str(community_key),
                 "community_id": community_uuid,
-                "community_name": community_names.get(community_uuid, str(community_key)),
+                "community_name": community_display,
             }
             if agent:
                 node_dict.update({
