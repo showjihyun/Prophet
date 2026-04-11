@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -34,6 +35,15 @@ class CommunityOpinion(Base):
     __table_args__ = (
         Index("idx_community_opinions_sim_comm", "simulation_id", "community_id"),
         Index("idx_community_opinions_sim_step", "simulation_id", "step"),
+        # SPEC: docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+        # Enforces the cache contract: one synthesis per (sim, community, step).
+        # Two concurrent writers collide on this constraint instead of both
+        # paying for a Tier-3 LLM call. Applied via migration
+        # ``e2_community_opinion_unique``.
+        UniqueConstraint(
+            "simulation_id", "community_id", "step",
+            name="uq_community_opinions_sim_comm_step",
+        ),
     )
 
     opinion_id: Mapped[uuid.UUID] = mapped_column(
