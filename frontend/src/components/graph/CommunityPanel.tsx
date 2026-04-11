@@ -4,11 +4,32 @@
  *
  * Shows search input, community list with color dots, agent counts,
  * sentiment bars, and total agent count.
+ *
+ * Data sources — two layered sources, same pattern as GraphPanel:
+ *
+ *   1. `useCommunities(simulationId)` — the stable list from
+ *      `GET /api/v1/simulations/{id}/communities/`. Provides the real
+ *      human names ("mainstream", "skeptics"…), UUID ids, and baseline
+ *      agent counts. Fetched once per simulation, cached by TanStack.
+ *
+ *   2. `latestStep.community_metrics` — the live per-step metrics that
+ *      arrive via WebSocket and drive the sentiment bar. Keyed by the
+ *      same UUID the communities list returns, so we join on
+ *      `community_id`. When a step hasn't arrived yet the sentiment
+ *      bar is neutral but the list still renders real names.
+ *
+ * Before this fix the panel read `latestStep.community_metrics` alone
+ * and tried to synthesize a display name by uppercasing the first
+ * character of the key — which is a UUID. Every community ended up
+ * labelled "6 Community" / "0 Community" / "1 Community" and colored
+ * identically from a hardcoded `alpha/beta/gamma/delta/bridge` map
+ * that no real simulation matches.
  */
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { useSimulationStore } from "../../store/simulationStore";
+import { useCommunities } from "../../api/queries";
 import { SkeletonList } from "../shared/LoadingSpinner";
 import { SIM_STATUS } from "@/config/constants";
 import HelpTooltip from "../shared/HelpTooltip";
@@ -23,61 +44,34 @@ interface CommunityItem {
   isPlaceholder?: boolean;
 }
 
-const COMMUNITY_COLOR_MAP: Record<string, string> = {
-  alpha: "var(--community-alpha)",
-  beta: "var(--community-beta)",
-  gamma: "var(--community-gamma)",
-  delta: "var(--community-delta)",
-  bridge: "var(--community-bridge)",
-};
-
-// PLACEHOLDER_COMMUNITIES — shown ONLY when no real community_metrics
-// have arrived yet. Lets the user see the palette + the panel structure
-// before stepping the simulation. As soon as `latestStep.community_metrics`
-// becomes available, real values replace these. Each row carries
-// `isPlaceholder: true` so the UI can dim them.
-const PLACEHOLDER_COMMUNITIES: CommunityItem[] = [
-  {
-    id: "alpha",
-    name: "Alpha",
-    color: "var(--community-alpha)",
-    agents: 0,
-    sentiment: { positive: 0, neutral: 0, negative: 0 },
-    isPlaceholder: true,
-  },
-  {
-    id: "beta",
-    name: "Beta",
-    color: "var(--community-beta)",
-    agents: 0,
-    sentiment: { positive: 0, neutral: 0, negative: 0 },
-    isPlaceholder: true,
-  },
-  {
-    id: "gamma",
-    name: "Gamma",
-    color: "var(--community-gamma)",
-    agents: 0,
-    sentiment: { positive: 0, neutral: 0, negative: 0 },
-    isPlaceholder: true,
-  },
-  {
-    id: "delta",
-    name: "Delta",
-    color: "var(--community-delta)",
-    agents: 0,
-    sentiment: { positive: 0, neutral: 0, negative: 0 },
-    isPlaceholder: true,
-  },
-  {
-    id: "bridge",
-    name: "Bridge",
-    color: "var(--community-bridge)",
-    agents: 0,
-    sentiment: { positive: 0, neutral: 0, negative: 0 },
-    isPlaceholder: true,
-  },
+/**
+ * Stable palette-slot assignment for communities. Mirrors
+ * `fallbackColorFor` in GraphPanel.tsx so the left sidebar and the 3D
+ * graph pick the same color for the same community. Hashes the id so
+ * the assignment is stable across refetches.
+ */
+const FALLBACK_COMMUNITY_PALETTE: readonly string[] = [
+  "#3b82f6", // blue
+  "#22c55e", // green
+  "#f97316", // orange
+  "#a855f7", // purple
+  "#ef4444", // red
+  "#06b6d4", // cyan
+  "#ec4899", // pink
+  "#84cc16", // lime
+  "#eab308", // yellow
+  "#14b8a6", // teal
 ];
+
+function colorForCommunity(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = (h * 31 + id.charCodeAt(i)) | 0;
+  }
+  return FALLBACK_COMMUNITY_PALETTE[
+    Math.abs(h) % FALLBACK_COMMUNITY_PALETTE.length
+  ];
+}
 
 export default function CommunityPanel() {
   const navigate = useNavigate();
@@ -85,37 +79,60 @@ export default function CommunityPanel() {
   const highlightedCommunity = useSimulationStore(
     (s) => s.highlightedCommunity,
   );
-  // Subscribe to boolean derived from simulation to avoid re-render on sim object change
-  const hasSimulation = useSimulationStore((s) => s.simulation !== null);
+  const simulationId =
+    useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
   const status = useSimulationStore((s) => s.status);
   const latestStep = useSimulationStore((s) => s.latestStep);
-  const hasSteps = useSimulationStore((s) => s.steps.length > 0);
-  const isLoading = hasSimulation && status === SIM_STATUS.RUNNING && !hasSteps;
 
-  // Build communities from live data, or fall back to PLACEHOLDER_COMMUNITIES
-  // when no step has arrived yet. Placeholders show the palette + structure
-  // so the panel never feels empty; they're visually dimmed and replaced as
-  // soon as real metrics arrive.
+  // TanStack Query — canonical community list from the backend. Contains
+  // the real human names, UUIDs, and baseline sizes. Cached per sim id.
+  const communitiesQuery = useCommunities(simulationId);
+
   const communities = useMemo<CommunityItem[]>(() => {
-    if (!latestStep?.community_metrics) return PLACEHOLDER_COMMUNITIES;
+    const list = communitiesQuery.data?.communities ?? [];
+    if (list.length === 0) return [];
 
-    return Object.entries(latestStep.community_metrics).map(([id, metrics]) => {
-      const belief = metrics.mean_belief ?? 0;
+    // Per-step metrics are keyed by community UUID. Build a lookup once.
+    const metricsByUuid: Record<string, { mean_belief?: number; adoption_count?: number; adoption_rate?: number }> = {};
+    const raw = latestStep?.community_metrics ?? {};
+    for (const [key, value] of Object.entries(raw)) {
+      // Backend sends the UUID in both the map key and the inner
+      // ``community_id`` field. We prefer the inner field when present
+      // because it's the canonical ID the communities endpoint returns.
+      const uuid = value?.community_id ?? key;
+      metricsByUuid[uuid] = value;
+    }
+
+    return list.map((c) => {
+      const metrics = metricsByUuid[c.community_id];
+      const belief = metrics?.mean_belief ?? c.mean_belief ?? 0;
       const positive = Math.round(Math.max(0, belief) * 100);
       const negative = Math.round(Math.max(0, -belief) * 100);
       const neutral = Math.max(0, 100 - positive - negative);
-      // adoption_count may not exist in API response; derive from adoption_rate
-      const agentCount = metrics.adoption_count
-        ?? Math.round((metrics.adoption_rate ?? 0) * 1000);
+      // Prefer per-step adoption_count when the step has landed, fall
+      // back to the snapshot size from /communities so the row never
+      // shows a bogus zero while waiting for the first step.
+      const agents =
+        metrics?.adoption_count ??
+        (metrics?.adoption_rate !== undefined
+          ? Math.round(metrics.adoption_rate * c.size)
+          : c.size);
       return {
-        id: metrics.community_id ?? id,
-        name: `${id.charAt(0).toUpperCase()}${id.slice(1)} Community`,
-        color: COMMUNITY_COLOR_MAP[id.toLowerCase()] ?? "var(--community-alpha)",
-        agents: agentCount,
+        id: c.community_id,
+        name: c.name || c.community_id.slice(0, 8),
+        color: colorForCommunity(c.community_id),
+        agents,
         sentiment: { positive, neutral, negative },
+        isPlaceholder: metrics === undefined,
       };
     });
-  }, [latestStep]);
+  }, [communitiesQuery.data, latestStep]);
+
+  const isLoading =
+    simulationId !== null &&
+    status === SIM_STATUS.RUNNING &&
+    communitiesQuery.isLoading &&
+    communities.length === 0;
 
   const filtered = communities.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()),

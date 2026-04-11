@@ -183,7 +183,7 @@ export default function ScenarioOpinionsPage() {
       polarization: latestStep.sentiment_variance,
       total_conversations: totalConversations,
       active_cascades: Math.round(latestStep.adoption_rate * 1000),
-      day: latestStep.step,
+      step: latestStep.step,
       total_agents: Object.values(latestStep.community_metrics ?? {}).reduce(
         (acc, m) => acc + (m.adoption_count > 0 ? Math.round(m.adoption_count / Math.max(0.001, m.adoption_rate)) : 0),
         0,
@@ -198,7 +198,7 @@ export default function ScenarioOpinionsPage() {
     polarization: 0,
     total_conversations: 0,
     active_cascades: 0,
-    day: 0,
+    step: 0,
     total_agents: 0,
     community_count: 0,
   };
@@ -241,7 +241,7 @@ export default function ScenarioOpinionsPage() {
             Scenario Opinion Landscape
           </h1>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Day {s.day} &middot; {s.total_agents.toLocaleString()} agents &middot;{" "}
+            Step {s.step} &middot; {s.total_agents.toLocaleString()} agents &middot;{" "}
             {s.community_count} communities
           </p>
         </div>

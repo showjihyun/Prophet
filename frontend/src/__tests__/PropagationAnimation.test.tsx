@@ -170,16 +170,19 @@ describe('GAP-7 — ACTION_COLORS does not include "ignore"', () => {
 });
 
 describe('GAP-7 — TIER_LIMITS', () => {
-  it('closeup tier limit is 50', () => {
-    expect(TIER_LIMITS.closeup).toBe(50);
+  // Bumped from 50/30/5 → 100/60/30 after live UX testing:
+  // the original overview cap of 5 looked dead on real sims
+  // (typical step produces 2-10 pairs and capping at 5 hid them).
+  it('closeup tier limit is 100', () => {
+    expect(TIER_LIMITS.closeup).toBe(100);
   });
 
-  it('midrange tier limit is 30', () => {
-    expect(TIER_LIMITS.midrange).toBe(30);
+  it('midrange tier limit is 60', () => {
+    expect(TIER_LIMITS.midrange).toBe(60);
   });
 
-  it('overview tier limit is 5', () => {
-    expect(TIER_LIMITS.overview).toBe(5);
+  it('overview tier limit is 30', () => {
+    expect(TIER_LIMITS.overview).toBe(30);
   });
 
   it('limits decrease as zoom level decreases (closeup > midrange > overview)', () => {
@@ -189,12 +192,12 @@ describe('GAP-7 — TIER_LIMITS', () => {
 
   it('getAnimationTier + TIER_LIMITS correctly limit pairs at each zoom level', () => {
     const zoomToExpectedLimit: [number, number][] = [
-      [1.0, 50],  // closeup
-      [0.7, 50],  // closeup boundary
-      [0.5, 30],  // midrange
-      [0.3, 30],  // midrange boundary
-      [0.2, 5],   // overview
-      [0.0, 5],   // overview floor
+      [1.0, 100],  // closeup
+      [0.7, 100],  // closeup boundary
+      [0.5, 60],   // midrange
+      [0.3, 60],   // midrange boundary
+      [0.2, 30],   // overview
+      [0.0, 30],   // overview floor
     ];
     for (const [zoom, expected] of zoomToExpectedLimit) {
       const tier = getAnimationTier(zoom);

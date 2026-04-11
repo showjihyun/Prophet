@@ -70,6 +70,53 @@ vi.mock('@/api/client', () => ({
       step: vi.fn().mockResolvedValue({ step: 1, adoption_rate: 0.1, mean_sentiment: 0.5, community_metrics: {}, emergent_events: [], agent_states: [] }),
       stop: vi.fn().mockResolvedValue({ status: 'created' }),
     },
+    // CommunityPanel reads its canonical list from
+    // ``GET /simulations/{id}/communities/`` via useCommunities. The hook
+    // returns {communities: CommunityInfo[]} on success. Seed four real-
+    // looking rows so the panel has data to render in the UI-01 layout
+    // assertions below.
+    communities: {
+      list: vi.fn().mockResolvedValue({
+        communities: [
+          {
+            community_id: '11111111-1111-1111-1111-111111111111',
+            name: 'early_adopters',
+            size: 250,
+            adoption_rate: 0.4,
+            mean_belief: 0.5,
+            sentiment_variance: 0.1,
+            dominant_action: 'share',
+          },
+          {
+            community_id: '22222222-2222-2222-2222-222222222222',
+            name: 'mainstream',
+            size: 300,
+            adoption_rate: 0.3,
+            mean_belief: 0.3,
+            sentiment_variance: 0.08,
+            dominant_action: 'ignore',
+          },
+          {
+            community_id: '33333333-3333-3333-3333-333333333333',
+            name: 'skeptics',
+            size: 200,
+            adoption_rate: 0.2,
+            mean_belief: -0.1,
+            sentiment_variance: 0.15,
+            dominant_action: 'ignore',
+          },
+          {
+            community_id: '44444444-4444-4444-4444-444444444444',
+            name: 'influencers',
+            size: 100,
+            adoption_rate: 0.25,
+            mean_belief: 0.1,
+            sentiment_variance: 0.06,
+            dominant_action: 'comment',
+          },
+        ],
+      }),
+    },
     projects: {
       list: vi.fn().mockResolvedValue([]),
       get: vi.fn().mockResolvedValue({ scenarios: [] }),
@@ -169,35 +216,14 @@ describe('SimulationMain (UI-01)', () => {
       expect(panel.textContent).toMatch(/Communities/);
     });
 
-    it('renders multiple community rows', () => {
-      // CommunityPanel is real-data-only — seed latestStep with a
-      // community_metrics object so it has rows to render. Without this
-      // the panel correctly shows an empty state (no mock fallback).
-      useSimulationStore.setState({
-        status: 'paused',
-         
-        latestStep: {
-          step: 1,
-          adoption_rate: 0.4,
-          mean_sentiment: 0.2,
-          sentiment_variance: 0.1,
-          total_adoption: 400,
-          diffusion_rate: 0.05,
-          action_distribution: { share: 200 },
-          emergent_events: [],
-          llm_calls_this_step: 5,
-          step_duration_ms: 100,
-          community_metrics: {
-            alpha: { mean_belief: 0.5, adoption_rate: 0.4, size: 250, community_id: 'A' },
-            beta: { mean_belief: 0.3, adoption_rate: 0.3, size: 150, community_id: 'B' },
-            gamma: { mean_belief: -0.1, adoption_rate: 0.2, size: 100, community_id: 'C' },
-            delta: { mean_belief: 0.1, adoption_rate: 0.25, size: 120, community_id: 'D' },
-             
-          } as any,
-           
-        } as any,
-      });
+    it('renders multiple community rows', async () => {
+      // CommunityPanel now reads its canonical list from `useCommunities`
+      // (TanStack Query against `apiClient.communities.list`). The async
+      // settle means we have to await one of the community names the mock
+      // resolves with before asserting row count — a sync querySelectorAll
+      // would fire before the query resolves and see zero rows.
       renderPage();
+      await screen.findByText('early_adopters');
       const panel = screen.getByTestId('community-panel');
       const rows = panel.querySelectorAll('div.cursor-pointer');
       expect(rows.length).toBeGreaterThanOrEqual(3);
@@ -287,7 +313,7 @@ describe('SimulationMain (UI-01)', () => {
       expect(screen.getByTestId('timeline-controls')).toBeInTheDocument();
     });
 
-    it('renders diffusion wave bar chart', () => {
+    it('renders diffusion wave sparkline', () => {
       renderPage();
       expect(screen.getByTestId('diffusion-wave-chart')).toBeInTheDocument();
     });

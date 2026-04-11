@@ -74,6 +74,14 @@ export interface SettingsLlm {
   anthropic_api_key_set: boolean;
   openai_model: string;
   openai_api_key_set: boolean;
+  // Gemini — real adapter at backend/app/llm/gemini_client.py
+  gemini_model: string;
+  gemini_embed_model: string;
+  gemini_api_key_set: boolean;
+  // vLLM — self-hosted high-throughput inference server, alternative to Ollama
+  vllm_base_url: string;
+  vllm_model: string;
+  vllm_max_concurrent: number;
 }
 
 export interface SettingsSimulation {
@@ -98,6 +106,12 @@ export interface SettingsUpdateRequest {
     anthropic_model: string;
     openai_api_key: string;
     openai_model: string;
+    gemini_api_key: string;
+    gemini_model: string;
+    gemini_embed_model: string;
+    vllm_base_url: string;
+    vllm_model: string;
+    vllm_max_concurrent: number;
   }>;
   simulation?: Partial<SettingsSimulation>;
 }

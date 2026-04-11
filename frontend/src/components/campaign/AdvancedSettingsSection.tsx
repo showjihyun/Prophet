@@ -34,7 +34,7 @@ export default function AdvancedSettingsSection({
       <div className="px-4 pb-4 flex flex-col gap-4 border-t border-[var(--border)] pt-4">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="adv-max-steps" className="text-sm font-medium text-[var(--muted-foreground)]">
-            Max Steps (simulation days)
+            Max Steps
           </label>
           <input
             id="adv-max-steps"

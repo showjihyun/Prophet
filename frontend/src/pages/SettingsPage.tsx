@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { apiClient } from "../api/client";
 import type { SettingsResponse } from "../api/client";
+import HelpTooltip from "../components/shared/HelpTooltip";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -38,15 +39,27 @@ export default function SettingsPage() {
   // LLM
   const [defaultProvider, setDefaultProvider] = useState("ollama");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
-  const [ollamaDefaultModel, setOllamaDefaultModel] = useState("llama3.2:1b");
-  const [slmModel, setSlmModel] = useState("llama3.2:1b");
-  const [ollamaEmbedModel, setOllamaEmbedModel] = useState("llama3.2:1b");
+  const [ollamaDefaultModel, setOllamaDefaultModel] = useState("llama3.1:8b");
+  const [slmModel, setSlmModel] = useState("llama3.1:8b");
+  const [ollamaEmbedModel, setOllamaEmbedModel] = useState("llama3.1:8b");
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
   const [anthropicKeySet, setAnthropicKeySet] = useState(false);
   const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-6");
   const [openaiApiKey, setOpenaiApiKey] = useState("");
   const [openaiKeySet, setOpenaiKeySet] = useState(false);
   const [openaiModel, setOpenaiModel] = useState("gpt-4o");
+  // Gemini — real adapter at backend/app/llm/gemini_client.py
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [geminiKeySet, setGeminiKeySet] = useState(false);
+  const [geminiModel, setGeminiModel] = useState("gemini-2.0-flash");
+  const [geminiEmbedModel, setGeminiEmbedModel] = useState(
+    "models/text-embedding-004",
+  );
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  // vLLM — self-hosted inference server, alternative to Ollama
+  const [vllmBaseUrl, setVllmBaseUrl] = useState("");
+  const [vllmModel, setVllmModel] = useState("meta-llama/Llama-3.1-8B-Instruct");
+  const [vllmMaxConcurrent, setVllmMaxConcurrent] = useState(64);
 
   // Simulation
   const [slmLlmRatio, setSlmLlmRatio] = useState(0.5);
@@ -55,12 +68,6 @@ export default function SettingsPage() {
 
   // Ollama models list
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
-
-  // Platform & RecSys
-  const [platforms, setPlatforms] = useState<{ name: string; display_name: string }[]>([]);
-  const [recsysAlgos, setRecsysAlgos] = useState<{ name: string }[]>([]);
-  const [platform, setPlatform] = useState("default");
-  const [recsys, setRecsys] = useState("weighted");
 
   // API key visibility toggles
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
@@ -83,6 +90,14 @@ export default function SettingsPage() {
       setAnthropicKeySet(data.llm.anthropic_api_key_set);
       setOpenaiModel(data.llm.openai_model);
       setOpenaiKeySet(data.llm.openai_api_key_set);
+      // Gemini
+      setGeminiModel(data.llm.gemini_model);
+      setGeminiEmbedModel(data.llm.gemini_embed_model);
+      setGeminiKeySet(data.llm.gemini_api_key_set);
+      // vLLM
+      setVllmBaseUrl(data.llm.vllm_base_url);
+      setVllmModel(data.llm.vllm_model);
+      setVllmMaxConcurrent(data.llm.vllm_max_concurrent);
       setSlmLlmRatio(data.simulation.slm_llm_ratio);
       setTier3Ratio(data.simulation.llm_tier3_ratio);
       setCacheTtl(data.simulation.llm_cache_ttl);
@@ -105,8 +120,6 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchOllamaModels();
-    apiClient.settings.listPlatforms().then(d => setPlatforms((d.platforms || []) as { name: string; display_name: string }[])).catch(() => {});
-    apiClient.settings.listRecsys().then(d => setRecsysAlgos((d.algorithms || []) as { name: string }[])).catch(() => {});
   }, [fetchSettings, fetchOllamaModels]);
 
   /* ---------- actions ---------- */
@@ -123,8 +136,16 @@ export default function SettingsPage() {
           ollama_embed_model: ollamaEmbedModel,
           anthropic_model: anthropicModel,
           openai_model: openaiModel,
+          gemini_model: geminiModel,
+          gemini_embed_model: geminiEmbedModel,
+          vllm_base_url: vllmBaseUrl,
+          vllm_model: vllmModel,
+          vllm_max_concurrent: vllmMaxConcurrent,
+          // Secrets are write-only — only send when the user typed a new
+          // value. An empty string would wipe the stored key.
           ...(anthropicApiKey ? { anthropic_api_key: anthropicApiKey } : {}),
           ...(openaiApiKey ? { openai_api_key: openaiApiKey } : {}),
+          ...(geminiApiKey ? { gemini_api_key: geminiApiKey } : {}),
         },
         simulation: {
           slm_llm_ratio: slmLlmRatio,
@@ -203,8 +224,9 @@ export default function SettingsPage() {
 
           {/* Default Provider */}
           <div className="mb-5">
-            <label htmlFor="default-provider-select" className="block text-sm font-medium text-[var(--muted-foreground)] mb-1.5">
+            <label htmlFor="default-provider-select" className="flex items-center gap-1.5 text-sm font-medium text-[var(--muted-foreground)] mb-1.5">
               Default Provider
+              <HelpTooltip term="settingsDefaultProvider" />
             </label>
             <select
               id="default-provider-select"
@@ -214,8 +236,10 @@ export default function SettingsPage() {
               className="w-64 h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
             >
               <option value="ollama">Ollama (On-Premise)</option>
+              <option value="vllm">vLLM (Self-Hosted)</option>
               <option value="claude">Claude API</option>
               <option value="openai">OpenAI API</option>
+              <option value="gemini">Gemini API</option>
             </select>
           </div>
 
@@ -227,7 +251,10 @@ export default function SettingsPage() {
           </h3>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label htmlFor="ollama-base-url" className="block text-sm text-[var(--muted-foreground)] mb-1">Base URL</label>
+              <label htmlFor="ollama-base-url" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Base URL
+                <HelpTooltip term="settingsProviderBaseUrl" />
+              </label>
               <input
                 id="ollama-base-url"
                 data-testid="ollama-base-url"
@@ -239,15 +266,24 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label htmlFor="ollama-default-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Default Model</label>
+              <label htmlFor="ollama-default-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Default Model
+                <HelpTooltip term="settingsProviderModel" />
+              </label>
               {modelSelect("ollama-default-model", ollamaDefaultModel, setOllamaDefaultModel, ollamaModels)}
             </div>
             <div>
-              <label htmlFor="ollama-slm-model" className="block text-sm text-[var(--muted-foreground)] mb-1">SLM Model (Tier 1)</label>
+              <label htmlFor="ollama-slm-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                SLM Model (Tier 1)
+                <HelpTooltip term="settingsSlmModel" />
+              </label>
               {modelSelect("ollama-slm-model", slmModel, setSlmModel, ollamaModels)}
             </div>
             <div>
-              <label htmlFor="ollama-embed-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Embed Model</label>
+              <label htmlFor="ollama-embed-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Embed Model
+                <HelpTooltip term="settingsEmbedModel" />
+              </label>
               {modelSelect("ollama-embed-model", ollamaEmbedModel, setOllamaEmbedModel, ollamaModels)}
             </div>
           </div>
@@ -295,7 +331,10 @@ export default function SettingsPage() {
           </h3>
           <div className="grid grid-cols-2 gap-4 mb-5">
             <div>
-              <label htmlFor="anthropic-api-key" className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
+              <label htmlFor="anthropic-api-key" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                API Key
+                <HelpTooltip term="settingsProviderApiKey" />
+              </label>
               <div className="relative">
                 <input
                   id="anthropic-api-key"
@@ -321,18 +360,22 @@ export default function SettingsPage() {
               </p>
             </div>
             <div>
-              <label htmlFor="anthropic-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
-              <select
+              <label htmlFor="anthropic-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Model
+                <HelpTooltip term="settingsProviderModel" />
+              </label>
+              <input
                 id="anthropic-model"
                 data-testid="anthropic-model"
+                type="text"
                 value={anthropicModel}
                 onChange={(e) => setAnthropicModel(e.target.value)}
+                placeholder="claude-sonnet-4-6"
                 className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-              >
-                <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
-                <option value="claude-opus-4-6">claude-opus-4-6</option>
-                <option value="claude-haiku-4-5">claude-haiku-4-5</option>
-              </select>
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                Any Anthropic model id (e.g. claude-sonnet-4-6, claude-opus-4-6). Free-text so new models don&apos;t require a UI release.
+              </p>
             </div>
           </div>
 
@@ -344,7 +387,10 @@ export default function SettingsPage() {
           </h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="openai-api-key" className="block text-sm text-[var(--muted-foreground)] mb-1">API Key</label>
+              <label htmlFor="openai-api-key" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                API Key
+                <HelpTooltip term="settingsProviderApiKey" />
+              </label>
               <div className="relative">
                 <input
                   id="openai-api-key"
@@ -370,18 +416,157 @@ export default function SettingsPage() {
               </p>
             </div>
             <div>
-              <label htmlFor="openai-model" className="block text-sm text-[var(--muted-foreground)] mb-1">Model</label>
-              <select
+              <label htmlFor="openai-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Model
+                <HelpTooltip term="settingsProviderModel" />
+              </label>
+              <input
                 id="openai-model"
                 data-testid="openai-model"
+                type="text"
                 value={openaiModel}
                 onChange={(e) => setOpenaiModel(e.target.value)}
+                placeholder="gpt-4o"
                 className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-              >
-                <option value="gpt-4o">gpt-4o</option>
-                <option value="gpt-4o-mini">gpt-4o-mini</option>
-                <option value="gpt-4-turbo">gpt-4-turbo</option>
-              </select>
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                Any OpenAI model id (e.g. gpt-4o, gpt-4o-mini, gpt-5, o3). Free-text so new models don&apos;t require a UI release.
+              </p>
+            </div>
+          </div>
+
+          <hr className="my-5 border-[var(--border)]" />
+
+          {/* --- Gemini API --- */}
+          <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
+            Gemini API (External)
+          </h3>
+          <div className="grid grid-cols-2 gap-4 mb-5">
+            <div>
+              <label htmlFor="gemini-api-key" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                API Key
+                <HelpTooltip term="settingsProviderApiKey" />
+              </label>
+              <div className="relative">
+                <input
+                  id="gemini-api-key"
+                  data-testid="gemini-api-key"
+                  type={showGeminiKey ? "text" : "password"}
+                  autoComplete="off"
+                  value={geminiApiKey}
+                  onChange={(e) => setGeminiApiKey(e.target.value)}
+                  placeholder={geminiKeySet ? "AIza*******" : "Not set"}
+                  className="w-full h-9 rounded-md border border-[var(--border)] px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowGeminiKey((v) => !v)}
+                  aria-label={showGeminiKey ? "Hide API key" : "Show API key"}
+                  className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                >
+                  {showGeminiKey ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                API key is sent only when saving. Stored keys are not retrievable.
+              </p>
+            </div>
+            <div>
+              <label htmlFor="gemini-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Model
+                <HelpTooltip term="settingsProviderModel" />
+              </label>
+              <input
+                id="gemini-model"
+                data-testid="gemini-model"
+                type="text"
+                value={geminiModel}
+                onChange={(e) => setGeminiModel(e.target.value)}
+                placeholder="gemini-2.0-flash"
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                e.g. gemini-2.0-flash, gemini-2.0-pro, gemini-1.5-flash.
+              </p>
+            </div>
+            <div>
+              <label htmlFor="gemini-embed-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Embed Model
+                <HelpTooltip term="settingsEmbedModel" />
+              </label>
+              <input
+                id="gemini-embed-model"
+                data-testid="gemini-embed-model"
+                type="text"
+                value={geminiEmbedModel}
+                onChange={(e) => setGeminiEmbedModel(e.target.value)}
+                placeholder="models/text-embedding-004"
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* ---- Self-Hosted Inference: vLLM ---- */}
+        <section className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 mb-6">
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
+            Self-Hosted: vLLM
+          </h2>
+          <p className="text-[12px] text-[var(--muted-foreground)] mb-4">
+            Alternative to Ollama for higher-throughput workloads on GPU
+            hardware. Leave Base URL empty if you&apos;re not running a vLLM server.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="vllm-base-url" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Base URL
+                <HelpTooltip term="settingsProviderBaseUrl" />
+              </label>
+              <input
+                id="vllm-base-url"
+                data-testid="vllm-base-url"
+                type="url"
+                autoComplete="url"
+                value={vllmBaseUrl}
+                onChange={(e) => setVllmBaseUrl(e.target.value)}
+                placeholder="http://localhost:8000 (empty = disabled)"
+                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+            </div>
+            <div>
+              <label htmlFor="vllm-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Model
+                <HelpTooltip term="settingsProviderModel" />
+              </label>
+              <input
+                id="vllm-model"
+                data-testid="vllm-model"
+                type="text"
+                value={vllmModel}
+                onChange={(e) => setVllmModel(e.target.value)}
+                placeholder="meta-llama/Llama-3.1-8B-Instruct"
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+            </div>
+            <div>
+              <label htmlFor="vllm-max-concurrent" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Max Concurrent Requests
+                <HelpTooltip term="settingsVllmMaxConcurrent" />
+              </label>
+              <input
+                id="vllm-max-concurrent"
+                data-testid="vllm-max-concurrent"
+                type="number"
+                min={1}
+                max={512}
+                step={1}
+                value={vllmMaxConcurrent}
+                onChange={(e) => setVllmMaxConcurrent(Number(e.target.value))}
+                className="w-32 h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                1-512. Higher = more parallelism, more GPU memory pressure.
+              </p>
             </div>
           </div>
         </section>
@@ -395,8 +580,9 @@ export default function SettingsPage() {
           <div className="space-y-4">
             {/* SLM/LLM Ratio */}
             <div>
-              <label htmlFor="slm-llm-ratio" className="block text-sm text-[var(--muted-foreground)] mb-1">
+              <label htmlFor="slm-llm-ratio" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
                 SLM/LLM Ratio: <span className="font-mono">{slmLlmRatio.toFixed(2)}</span>
+                <HelpTooltip term="slmLlmRatio" />
               </label>
               <input
                 id="slm-llm-ratio"
@@ -413,7 +599,10 @@ export default function SettingsPage() {
 
             {/* Tier 3 Ratio */}
             <div>
-              <label htmlFor="tier3-ratio" className="block text-sm text-[var(--muted-foreground)] mb-1">LLM Tier 3 Ratio</label>
+              <label htmlFor="tier3-ratio" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                LLM Tier 3 Ratio
+                <HelpTooltip term="settingsTier3Ratio" />
+              </label>
               <input
                 id="tier3-ratio"
                 data-testid="tier3-ratio"
@@ -429,8 +618,9 @@ export default function SettingsPage() {
 
             {/* Cache TTL */}
             <div>
-              <label htmlFor="cache-ttl" className="block text-sm text-[var(--muted-foreground)] mb-1">
+              <label htmlFor="cache-ttl" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
                 LLM Cache TTL (seconds)
+                <HelpTooltip term="settingsCacheTtl" />
               </label>
               <input
                 id="cache-ttl"
@@ -446,46 +636,9 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* ---- Platform Configuration ---- */}
-        <section className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 mb-6">
-          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
-            Platform Simulation
-          </h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--muted-foreground)] mb-1">
-                Platform
-              </label>
-              <select
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-              >
-                {platforms.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.display_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--muted-foreground)] mb-1">
-                RecSys Algorithm
-              </label>
-              <select
-                value={recsys}
-                onChange={(e) => setRecsys(e.target.value)}
-                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-              >
-                {recsysAlgos.map((r) => (
-                  <option key={r.name} value={r.name}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </section>
+        {/* Platform / RecSys selection lives on the Campaign Setup page where
+         * each simulation picks its own — there is no global default, so a
+         * Settings-level dropdown would be a no-op. Removed on 2026-04-11. */}
 
         {/* ---- Save ---- */}
         <div className="flex items-center gap-3">

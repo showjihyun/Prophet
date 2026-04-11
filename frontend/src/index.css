@@ -56,10 +56,12 @@
   --community-panel-width: 260px;
   --metrics-panel-width: 280px;
   /* Zone 3 heights: bottom-area holds the timeline + conversation feed.
-     240 - 120 = 120px for the feed, which is just enough for compact
-     message cards (header + 1-line message + time) with no vertical scroll. */
+     Timeline shrunk from 120px → 72px when the Diffusion Wave moved
+     from div bars to a compact sparkline — the ConversationPanel
+     below auto-expands into the reclaimed 48px via
+     `calc(var(--bottom-area-height) - var(--timeline-height))`. */
   --bottom-area-height: 240px;
-  --timeline-height: 120px;
+  --timeline-height: 72px;
   --panel-padding: 16px;
   --card-gap: 12px;
 
