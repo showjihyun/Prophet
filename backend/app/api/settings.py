@@ -53,6 +53,15 @@ async def get_settings() -> dict[str, Any]:
             "anthropic_api_key_set": bool(settings.anthropic_api_key),
             "openai_model": settings.openai_default_model,
             "openai_api_key_set": bool(settings.openai_api_key),
+            # Gemini — real adapter at app/llm/gemini_client.py, now surfaced.
+            "gemini_model": settings.gemini_default_model,
+            "gemini_embed_model": settings.gemini_embed_model,
+            "gemini_api_key_set": bool(settings.gemini_api_key),
+            # vLLM — self-hosted alternative to Ollama for beefier rigs.
+            # ``vllm_base_url`` empty = not configured.
+            "vllm_base_url": settings.vllm_base_url,
+            "vllm_model": settings.vllm_default_model,
+            "vllm_max_concurrent": settings.vllm_max_concurrent,
         },
         "simulation": {
             "slm_llm_ratio": settings.slm_llm_ratio,
@@ -108,6 +117,33 @@ async def update_settings(body: dict[str, Any]) -> dict[str, str]:
         settings.openai_api_key = llm["openai_api_key"]
     if "openai_model" in llm:
         settings.openai_default_model = llm["openai_model"]
+    # Gemini
+    if "gemini_api_key" in llm:
+        settings.gemini_api_key = llm["gemini_api_key"]
+    if "gemini_model" in llm:
+        settings.gemini_default_model = llm["gemini_model"]
+    if "gemini_embed_model" in llm:
+        settings.gemini_embed_model = llm["gemini_embed_model"]
+    # vLLM
+    if "vllm_base_url" in llm:
+        settings.vllm_base_url = llm["vllm_base_url"]
+    if "vllm_model" in llm:
+        settings.vllm_default_model = llm["vllm_model"]
+    if "vllm_max_concurrent" in llm:
+        # Clamp at the schema level so a bad value doesn't crash the pool.
+        try:
+            val = int(llm["vllm_max_concurrent"])
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=422,
+                detail="vllm_max_concurrent must be an integer",
+            )
+        if val < 1 or val > 512:
+            raise HTTPException(
+                status_code=422,
+                detail="vllm_max_concurrent must be in [1, 512]",
+            )
+        settings.vllm_max_concurrent = val
 
     sim = body.get("simulation", {})
     if "slm_llm_ratio" in sim:

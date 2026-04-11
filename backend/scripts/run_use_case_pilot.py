@@ -45,24 +45,30 @@ import httpx
 # what was simulated.
 
 _COMMUNITY_5K_DEFAULT = [
-    # 15% skeptics, 60% mainstream, 20% early adopters, 5% influencers
-    # + 30 experts (fixed small group for the opinion layer)
-    {"id": "A", "name": "early_adopters", "size": 200, "agent_type": "early_adopter"},
-    {"id": "B", "name": "mainstream", "size": 600, "agent_type": "consumer"},
-    {"id": "C", "name": "skeptics", "size": 150, "agent_type": "skeptic"},
-    {"id": "D", "name": "experts", "size": 30, "agent_type": "expert"},
-    {"id": "E", "name": "influencers", "size": 50, "agent_type": "influencer"},
-]
+    # README's "5,000 agents" mix: 20% early adopters, 60% mainstream,
+    # 15% skeptics, 5% influencers, plus a small fixed expert panel.
+    # Round 8-7: scaled up from the initial 1030-agent pilot — small
+    # populations were crossing cascade critical mass even with hostile
+    # framing, masking the campaign bonus. 5K lets the stall actually
+    # emerge.
+    {"id": "A", "name": "early_adopters", "size": 1000, "agent_type": "early_adopter"},
+    {"id": "B", "name": "mainstream", "size": 3000, "agent_type": "consumer"},
+    {"id": "C", "name": "skeptics", "size": 750, "agent_type": "skeptic"},
+    {"id": "D", "name": "experts", "size": 50, "agent_type": "expert"},
+    {"id": "E", "name": "influencers", "size": 200, "agent_type": "influencer"},
+]  # total: 5,000 agents
 
 _COMMUNITY_RTO = [
     # Fortune 500 synthetic employees — skewed toward engineers (the
     # pushback cohort) so the sentiment-collapse signal is readable.
-    {"id": "A", "name": "engineering", "size": 400, "agent_type": "skeptic"},
-    {"id": "B", "name": "product", "size": 200, "agent_type": "consumer"},
-    {"id": "C", "name": "sales", "size": 200, "agent_type": "early_adopter"},
-    {"id": "D", "name": "leadership", "size": 50, "agent_type": "influencer"},
-    {"id": "E", "name": "hr", "size": 30, "agent_type": "expert"},
-]
+    # Round 8-7: scaled up from 880 to 4,500 agents to match the 5K
+    # population target. Keep the engineering-heavy weighting intact.
+    {"id": "A", "name": "engineering", "size": 2000, "agent_type": "skeptic"},
+    {"id": "B", "name": "product", "size": 1000, "agent_type": "consumer"},
+    {"id": "C", "name": "sales", "size": 1000, "agent_type": "early_adopter"},
+    {"id": "D", "name": "leadership", "size": 300, "agent_type": "influencer"},
+    {"id": "E", "name": "hr", "size": 200, "agent_type": "expert"},
+]  # total: 4,500 agents
 
 
 _CASES: dict[str, dict[str, Any]] = {
