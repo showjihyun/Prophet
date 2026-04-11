@@ -7,6 +7,65 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- Shared diffusion calibration module (`propagation_calibration.py`) — both the
+  agent tick path and the newer `PropagationModel` now call one `propagation_probability()`
+  function, so Round-X calibration tweaks only need to land in one file
+- `community_name` field on `AgentDetailResponse` — the inspector and any future
+  consumer can show a human-readable community name instead of a raw UUID
+- Frontend propagation utilities (`buildAgentIdToNodeId`, `buildActivePropLinks`)
+  exported from `propagationAnimationUtils.ts` so tests can exercise the exact
+  translation the component uses
+
+### Changed
+- LICENSE switched from Apache-2.0 to MIT with a project tagline header —
+  commercial use, forking, embedding, and downstream redistribution all stay
+  simple
+- 3D graph now renders a dynamic community palette derived from the live graph —
+  simulations with custom community ids (e.g. "mainstream", "skeptics") get real
+  colors instead of falling through to the gray default; the legend also shows
+  the actual community names with live counts
+- AgentInspector "Community" row displays the resolved human name (e.g. "skeptics")
+  instead of a raw UUID, with a short UUID-prefix fallback when no name is available
+- 3D graph node labels now use the graph node id (`Agent #42`) instead of the
+  first-8-chars of the agent UUID, which were identical for every deterministic-seed
+  agent and made hover tooltips useless
+- Graph overlays rearranged: the 3D Controls hint moved to the bottom-right,
+  the community legend sits above vertical center (+200px), and the full
+  Legend overlay stacks above the controls hint via a shared `bottomOffsetPx`
+  prop
+- Startup lifespan split into two short-lived transactions with `SET LOCAL
+  lock_timeout = '10s'`; `metadata.create_all` is also skipped when an
+  `alembic_version` table is present, so production boot never holds DDL locks
+  on user tables
+
+### Fixed
+- **Graph propagation animation** — particles now actually draw during a running
+  simulation. The frontend effect was building active-link keys from agent
+  UUIDs while `linkDirectionalParticles` was looking them up by graph node ids,
+  so the match rate was zero and no particles ever appeared. The UUID → node_id
+  translation is now centralized in `propagationAnimationUtils.ts` and covered
+  by regression tests
+- **Low-centrality agents now propagate** — the InfluenceLayer path used by the
+  agent tick was missing the Round 7-d floor (`max(0.1, influence_score)`) and
+  the sigmoid emotion smoothing that `PropagationModel` already had. Typical
+  Prophet agents (influence ≈ 0.04–0.1 on small graphs, balanced emotion factor)
+  were producing ~0.2% propagation probability per target and the
+  `propagation_pairs` list was empty every step. Two new regression tests
+  (`test_round_7d_low_influence_agents_still_propagate`,
+  `test_round_7d_negative_emotion_factor_still_propagates`) guard against this
+  ever regressing silently again
+- Transient 500s on `GET /api/v1/projects/` caused by a deadlock between a
+  concurrent request and the startup lifespan transaction — split lifespan
+  phases, lock timeouts, and the Alembic-aware DDL skip close the deadlock
+  window
+- `get_agent` community-name lookup is now O(1) via a cached
+  `community_uuid → cc.name` map instead of walking the whole graph on every
+  inspector click
+- `PropagationAnimation.test.tsx` regression tests now call the real
+  `buildActivePropLinks` utility instead of a duplicated helper, so a
+  regression in `GraphPanel` fails loudly in CI instead of passing silently
+
 ## [0.1.1.0] - 2026-04-10
 
 ### Added

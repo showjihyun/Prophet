@@ -63,7 +63,7 @@ git remote -v
 
 ```bash
 docker compose up -d
-docker compose exec ollama ollama pull llama3.1:8b   # first time only
+docker compose exec ollama ollama pull gemma4:latest   # first time only (~9.6 GB)
 open http://localhost:5173
 ```
 
@@ -121,7 +121,7 @@ A few non-negotiables. The full list is in `CLAUDE.md`.
 
 ### Tests
 - **Test before code** when changing behavior. The test should fail first, then pass after your fix.
-- **Don't break existing tests** — all 1,234+ must stay green.
+- **Don't break existing tests** — all 1,658+ must stay green.
 - **Test the contract**, not the implementation.
 
 ### Database

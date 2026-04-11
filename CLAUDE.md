@@ -357,9 +357,10 @@ Prophet/
 | **H** | 09_HARNESS F18-F28 fully implemented (+43 tests) | ✅ Done |
 | **G** | SPEC consistency (method rename + Sidebar + AgentInspector + AnalyticsPage) | ✅ Done |
 
-> **Total tests: 1,482+ GREEN** (Backend 961 + Frontend 521)
-> - Backend: `uv run pytest tests/` → 961 passed, 2 skipped
-> - Frontend: `npx vitest run` → 521+ passed
+> **Total tests: 1,658+ GREEN** (Backend 1,002 + Frontend 656)
+> - Backend: `uv run pytest tests/` → 1,002 passed, 2 skipped
+> - Frontend: `npx vitest run` → 656 passed (40 files)
+> - Contract discipline: 29 backend meta tests + 8 frontend structural invariants
 > - ESLint: 0 errors, 0 warnings
 > - TypeScript (tsc -b): see "Health Stack" notes below
 > - Docker: 5 services (4 healthy, ollama occasionally unhealthy)
