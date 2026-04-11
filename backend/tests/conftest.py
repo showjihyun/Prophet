@@ -9,6 +9,43 @@ from harness.runners.network_harness import NetworkHarness
 from harness.runners.diffusion_harness import DiffusionHarness
 
 
+@pytest.fixture(scope="session", autouse=True)
+async def _bootstrap_schema():
+    """Create extensions + all tables once per pytest session.
+
+    API tests use ``httpx.AsyncClient(transport=ASGITransport(app))``
+    which runs requests against the ASGI app without firing FastAPI's
+    startup/shutdown lifecycle. That means ``app.main.lifespan`` never
+    runs during tests — so ``CREATE EXTENSION vector`` and
+    ``metadata.create_all`` never execute, and every query that hits
+    the DB trips over ``relation "simulations" does not exist``.
+
+    Locally this went unnoticed because dev databases were schema'd
+    by a prior live run or by ``alembic upgrade head``. On a fresh
+    CI Postgres container, nothing has created the schema yet, so
+    this fixture does the bootstrap that the lifespan would have.
+
+    Session-scoped so the cost is paid once. Pure-unit tests that
+    never touch a DB still pay the ``CREATE EXTENSION`` round-trip
+    but the cost is negligible and it keeps the fixture unconditional.
+
+    Swallows exceptions so tests that run without a DB (pure harness
+    unit tests, CI-less laptop runs) aren't blocked.
+    """
+    import sqlalchemy
+    try:
+        from app.database import engine, Base
+        import app.models  # noqa: F401 — register every model on Base.metadata
+        async with engine.begin() as conn:
+            await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""))
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception:
+        # Pure-unit tests may not have a reachable DB — skip silently.
+        pass
+    yield
+
+
 @pytest.fixture
 def mock_llm():
     """Mock LLM adapter (Tier 3)."""
