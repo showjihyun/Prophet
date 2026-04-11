@@ -1,17 +1,20 @@
 /**
  * SimulationListPage — Entry screen for the Simulation menu.
  *
- * @spec docs/spec/07_FRONTEND_SPEC.md#simulation-list
+ * @spec docs/spec/18_FRONTEND_PERFORMANCE_SPEC.md#10
  *
- * Shows a list of all simulations. Clicking a row navigates to
- * `/simulation/:simulationId` which mounts the full SimulationPage detail
- * view. This decouples "pick a simulation" from "run a simulation" so the
- * sidebar's Simulation menu has a neutral landing page instead of an
- * empty graph with no context.
+ * Shows a list of all simulations with a project filter dropdown in the
+ * header. Clicking a row navigates to `/simulation/:simulationId` which
+ * mounts the full SimulationPage detail view.
+ *
+ * Per §10 the "New Simulation" button's route depends on the filter:
+ * - "All projects" selected → /setup (project chosen in form)
+ * - Specific project selected → /setup/:projectId (pre-selected)
  */
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Play, Plus, Clock, Loader2 } from "lucide-react";
-import { useSimulations } from "../api/queries";
+import { useProjects, useSimulations } from "../api/queries";
 import type { SimulationRun } from "../types/simulation";
 import { SIM_STATUS, type SimulationStatus } from "@/config/constants";
 
@@ -34,10 +37,19 @@ function formatTimestamp(iso?: string | null): string {
   }
 }
 
+// Minimal shape the filter needs. Pulled locally rather than leaning on an
+// imported `Project` type because `useProjects` returns whatever the REST
+// endpoint shape is, and we only touch two fields here.
+interface ProjectLike {
+  project_id: string;
+  name: string;
+}
+
 export default function SimulationListPage() {
   const navigate = useNavigate();
+
+  // ── Queries ──────────────────────────────────────────────────────────
   const simulationsQuery = useSimulations();
-  const items: SimulationRun[] = simulationsQuery.data?.items ?? [];
   const loading = simulationsQuery.isLoading;
   const error = simulationsQuery.error
     ? simulationsQuery.error instanceof Error
@@ -45,13 +57,65 @@ export default function SimulationListPage() {
       : String(simulationsQuery.error)
     : null;
 
+  // Projects query is independent — a failure (or still-loading) state
+  // degrades to "All projects" only. Never blocks the sim list.
+  const projectsQuery = useProjects();
+
+  // Stable references so downstream useMemos don't re-run on every render.
+  // Without these wrappers, `simulationsQuery.data?.items ?? []` creates a
+  // fresh array literal each render, busting memoization downstream.
+  const items = useMemo<SimulationRun[]>(
+    () => simulationsQuery.data?.items ?? [],
+    [simulationsQuery.data],
+  );
+  const projects = useMemo<ProjectLike[]>(
+    () =>
+      Array.isArray(projectsQuery.data)
+        ? (projectsQuery.data as ProjectLike[])
+        : [],
+    [projectsQuery.data],
+  );
+
+  // ── Filter state (SL-02: ephemeral, not persisted) ───────────────────
+  // Empty string represents "All projects" so it plays nicely with
+  // native <select> value semantics.
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+
+  // ── Derived data ─────────────────────────────────────────────────────
+  const projectNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of projects) {
+      if (p?.project_id) m.set(p.project_id, p.name);
+    }
+    return m;
+  }, [projects]);
+
+  const sortedProjects = useMemo(
+    () => [...projects].sort((a, b) => a.name.localeCompare(b.name)),
+    [projects],
+  );
+
+  const filteredItems = useMemo(() => {
+    if (!selectedProjectId) return items;
+    return items.filter((s) => s.project_id === selectedProjectId);
+  }, [items, selectedProjectId]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────
+  const handleNewSimulation = () => {
+    if (selectedProjectId) {
+      navigate(`/setup/${selectedProjectId}`);
+    } else {
+      navigate("/setup");
+    }
+  };
+
   return (
     <div
       data-testid="simulation-list-page"
       className="flex flex-col h-full p-6 gap-4 bg-[var(--background)]"
     >
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">
             Simulations
@@ -60,13 +124,32 @@ export default function SimulationListPage() {
             Pick a simulation to open its live workspace, or create a new one.
           </p>
         </div>
-        <button
-          onClick={() => navigate("/setup")}
-          className="h-10 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 flex items-center gap-2 transition-opacity"
-        >
-          <Plus className="w-4 h-4" />
-          New Simulation
-        </button>
+        <div className="flex items-center gap-3">
+          {/* SL-01: project filter dropdown */}
+          <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+            <span className="whitespace-nowrap">Project</span>
+            <select
+              data-testid="simulation-list-project-filter"
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="h-9 px-2 rounded-md border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] text-sm min-w-[180px]"
+            >
+              <option value="">All projects</option>
+              {sortedProjects.map((p) => (
+                <option key={p.project_id} value={p.project_id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={handleNewSimulation}
+            className="h-10 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 flex items-center gap-2 transition-opacity"
+          >
+            <Plus className="w-4 h-4" />
+            New Simulation
+          </button>
+        </div>
       </div>
 
       {/* Body */}
@@ -90,6 +173,31 @@ export default function SimulationListPage() {
           </div>
         )}
 
+        {/* SL-05: filtered-but-empty state has its own copy + CTA */}
+        {!loading && !error && items.length > 0 && filteredItems.length === 0 && (
+          <div
+            data-testid="simulation-list-empty-filtered"
+            className="h-full flex flex-col items-center justify-center gap-3 text-center"
+          >
+            <Play className="w-12 h-12 text-[var(--muted-foreground)]" />
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">
+              No simulations in this project
+            </h2>
+            <p className="text-sm text-[var(--muted-foreground)] max-w-md">
+              This project doesn't have any simulations yet. Create one to get
+              started.
+            </p>
+            <button
+              onClick={handleNewSimulation}
+              className="mt-2 h-9 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create in this project
+            </button>
+          </div>
+        )}
+
+        {/* Unfiltered empty state */}
         {!loading && !error && items.length === 0 && (
           <div
             data-testid="simulation-list-empty"
@@ -104,7 +212,7 @@ export default function SimulationListPage() {
               full campaign scenario with agents, networks, and step history.
             </p>
             <button
-              onClick={() => navigate("/setup")}
+              onClick={handleNewSimulation}
               className="mt-2 h-9 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
@@ -113,13 +221,18 @@ export default function SimulationListPage() {
           </div>
         )}
 
-        {!loading && !error && items.length > 0 && (
+        {!loading && !error && filteredItems.length > 0 && (
           <ul className="flex flex-col gap-2">
-            {items.map((sim) => {
+            {filteredItems.map((sim) => {
               const statusKey = sim.status as SimulationStatus;
               const statusStyle =
                 STATUS_STYLES[statusKey] ??
                 "bg-slate-500/15 text-slate-400 border-slate-500/30";
+              // SL-04: inline project name below sim name. Orphans fall
+              // back to sim_id only (no middle-dot, no deleted-project leak).
+              const projectName = sim.project_id
+                ? projectNameById.get(sim.project_id)
+                : undefined;
               return (
                 <li key={sim.simulation_id}>
                   <button
@@ -127,13 +240,15 @@ export default function SimulationListPage() {
                     onClick={() => navigate(`/simulation/${sim.simulation_id}`)}
                     className="w-full text-left rounded-lg border border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)] hover:shadow-md transition-all px-4 py-3 flex items-center gap-4"
                   >
-                    {/* Name + id */}
+                    {/* Name + id + project */}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold text-[var(--foreground)] truncate">
                         {sim.name || "(unnamed)"}
                       </div>
                       <div className="text-[11px] font-mono text-[var(--muted-foreground)] truncate">
-                        {sim.simulation_id}
+                        {projectName
+                          ? `${sim.simulation_id} · ${projectName}`
+                          : sim.simulation_id}
                       </div>
                     </div>
 

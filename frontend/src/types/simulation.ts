@@ -36,6 +36,9 @@ export interface AgentEmotion {
 
 export interface SimulationRun {
   simulation_id: string;
+  /** Project that owns this simulation. Optional because legacy rows
+   * persisted before project-scoping was wired up may be null. */
+  project_id?: string | null;
   name: string;
   status: SimulationStatus;
   current_step: number;
