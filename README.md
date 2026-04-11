@@ -161,16 +161,45 @@ Prophet does — no slide deck needed.
 ```bash
 git clone https://github.com/showjihyun/prophet.git
 cd prophet
+```
 
-# CPU environment (no GPU)
+#### GPU (strongly recommended — NVIDIA)
+
+The default config is tuned for GPU inference. If you have an NVIDIA card
+with the WSL2/CUDA runtime, start the stack with the GPU override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+
+# Pull the default model (4.9 GB on disk, ~5.6 GiB VRAM)
+docker compose exec ollama ollama pull llama3.1:8b
+```
+
+On an RTX 4070-class GPU llama3.1:8b runs at **~75 tok/s** (~20-30×
+faster than CPU). Every agent tick and the opinion synthesis endpoint
+finish in sub-second wall time, and your CPU stays free for the rest
+of the engine (NetworkX graph generation, agent decision loops,
+pgvector queries).
+
+#### CPU-only (laptops, no NVIDIA GPU)
+
+```bash
+# Start without the GPU override
 docker compose up -d
 
-# Pull LLM model (first time only, ~1.3 GB on disk, ~2 GB in RAM).
-# Round 8-5: default is llama3.2:1b — small enough to fit on modest
-# laptops (8 GB VRAM WSL2 hosts) while still being a real Meta-Llama
-# completion model. Pairs with the pinned Ollama 0.11.10 image.
+# Override to a small model before pulling — llama3.2:1b is ~1.3 GB
+# on disk and ~2 GiB in RAM, fits on modest laptops.
+export OLLAMA_DEFAULT_MODEL=llama3.2:1b
+export SLM_MODEL=llama3.2:1b
+docker compose up -d --force-recreate backend
 docker compose exec ollama ollama pull llama3.2:1b
 ```
+
+CPU inference is 20-50× slower than GPU — expect every LLM-bearing
+simulation step to pin every core of your host. Usable, but plan
+accordingly.
+
+#### Service endpoints
 
 | Service             | URL                          |
 |---------------------|------------------------------|
@@ -178,8 +207,9 @@ docker compose exec ollama ollama pull llama3.2:1b
 | Backend API         | http://localhost:8000        |
 | API Docs (Swagger)  | http://localhost:8000/docs   |
 
-Open `http://localhost:5173`, go to **Projects**, create a new scenario with a
-campaign message, and click **Run All**. The 3D graph spreads in real time.
+Open `http://localhost:5173`, go to **Projects**, create a new scenario
+with a campaign message, and click **Run All**. The 3D graph spreads
+in real time.
 
 ### Local development
 
@@ -195,12 +225,6 @@ cd frontend
 npm install
 npm run dev
 npx vitest run
-```
-
-### GPU environment
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
 ---

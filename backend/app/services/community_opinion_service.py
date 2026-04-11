@@ -317,7 +317,7 @@ class CommunityOpinionService:
             prompt,
             task_type="community_opinion",
             tier=3,
-            options=LLMOptions(temperature=0.2, timeout_seconds=120.0),
+            options=LLMOptions(temperature=0.2, timeout_seconds=30.0),
         )
 
         parsed = self._parse_response(response.parsed, response.content)
@@ -731,7 +731,7 @@ class CommunityOpinionService:
             prompt,
             task_type="community_opinion",
             tier=3,
-            options=LLMOptions(temperature=0.2, timeout_seconds=120.0),
+            options=LLMOptions(temperature=0.2, timeout_seconds=30.0),
         )
         parsed = self._parse_response(response.parsed, response.content)
 

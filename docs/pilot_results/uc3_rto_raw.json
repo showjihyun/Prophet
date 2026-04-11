@@ -2,7 +2,7 @@
   "case": "uc3_rto_raw",
   "readme_section": "### Stress-test internal communications",
   "readme_claim": "38% sentiment collapse in engineering",
-  "simulation_id": "5031fcef-b9c1-4ec0-b6ed-fc44d0b039f8",
+  "simulation_id": "5841215a-0a90-4106-b662-2c1b474ac51e",
   "payload": {
     "name": "UC3 RTO \u2014 Raw mandate",
     "description": "README use-case 3: Fortune 500 RTO mandate. Engineering-heavy population with raw 5-days-on-site announcement.",
@@ -56,82 +56,80 @@
     "max_steps": 12,
     "default_llm_provider": "ollama",
     "slm_llm_ratio": 0.98,
-    "slm_model": "llama3.2:1b",
+    "slm_model": "llama3.1:8b",
     "budget_usd": 1.0,
     "random_seed": 42
   },
-  "started_at": "2026-04-11T14:52:59.190041+00:00",
-  "finished_at": "2026-04-11T14:56:07.124186+00:00",
+  "started_at": "2026-04-11T15:59:38.545807+00:00",
+  "finished_at": "2026-04-11T16:00:50.937103+00:00",
   "steps_run": 12,
   "final_metrics": {
-    "adoption_rate": 0.9136363636363637,
-    "mean_sentiment": 0.6392911907095812,
-    "sentiment_variance": 0.06286035326769612,
-    "diffusion_rate": 19.0
+    "adoption_rate": 0.7454545454545455,
+    "mean_sentiment": 0.47550387494587304,
+    "sentiment_variance": 0.07291899646049434,
+    "diffusion_rate": 31.0
   },
   "per_community_final": {
-    "2d521812-fc35-6aea-3246-1f53fc0c6e09": {
-      "community_id": "2d521812-fc35-6aea-3246-1f53fc0c6e09",
-      "adoption_count": 199,
-      "adoption_rate": 0.995,
-      "mean_belief": 0.7034655705400933,
+    "0bdf4310-62e4-a73d-d971-49278a155579": {
+      "community_id": "0bdf4310-62e4-a73d-d971-49278a155579",
+      "adoption_count": 194,
+      "adoption_rate": 0.97,
+      "mean_belief": 0.5774751520294031,
       "dominant_action": "adopt",
-      "new_propagation_count": 8
+      "new_propagation_count": 0
     },
-    "e480e4d9-0d5a-bf70-6ff3-f1e12d143232": {
-      "community_id": "e480e4d9-0d5a-bf70-6ff3-f1e12d143232",
-      "adoption_count": 326,
-      "adoption_rate": 0.815,
-      "mean_belief": 0.585105944483161,
-      "dominant_action": "adopt",
-      "new_propagation_count": 15
-    },
-    "2b3b2f2f-2a1f-72e8-5862-012ec94d1fa7": {
-      "community_id": "2b3b2f2f-2a1f-72e8-5862-012ec94d1fa7",
-      "adoption_count": 50,
-      "adoption_rate": 1.0,
-      "mean_belief": 0.7584960273122594,
-      "dominant_action": "adopt",
-      "new_propagation_count": 1
-    },
-    "de5fcd0b-44aa-1acd-da4a-c53fff53e5b1": {
-      "community_id": "de5fcd0b-44aa-1acd-da4a-c53fff53e5b1",
-      "adoption_count": 199,
-      "adoption_rate": 0.995,
-      "mean_belief": 0.6471794670674358,
-      "dominant_action": "adopt",
-      "new_propagation_count": 11
-    },
-    "dd30619c-2a4f-c159-fccf-c3add74be757": {
-      "community_id": "dd30619c-2a4f-c159-fccf-c3add74be757",
+    "425e7c37-673b-86b2-401f-03f36422b2cd": {
+      "community_id": "425e7c37-673b-86b2-401f-03f36422b2cd",
       "adoption_count": 30,
       "adoption_rate": 1.0,
-      "mean_belief": 0.6826687048016106,
+      "mean_belief": 0.5292257108731838,
       "dominant_action": "adopt",
-      "new_propagation_count": 6
+      "new_propagation_count": 0
+    },
+    "a3c655ac-aae2-04a6-1a36-90d88c8ed216": {
+      "community_id": "a3c655ac-aae2-04a6-1a36-90d88c8ed216",
+      "adoption_count": 49,
+      "adoption_rate": 0.98,
+      "mean_belief": 0.6267410810013376,
+      "dominant_action": "adopt",
+      "new_propagation_count": 0
+    },
+    "25359f92-5d33-7635-acd4-8a01f96d59bd": {
+      "community_id": "25359f92-5d33-7635-acd4-8a01f96d59bd",
+      "adoption_count": 194,
+      "adoption_rate": 0.97,
+      "mean_belief": 0.49828193532230586,
+      "dominant_action": "adopt",
+      "new_propagation_count": 0
+    },
+    "3174c1c5-a9bf-3496-bc4a-05c3fb2ef2f3": {
+      "community_id": "3174c1c5-a9bf-3496-bc4a-05c3fb2ef2f3",
+      "adoption_count": 189,
+      "adoption_rate": 0.4725,
+      "mean_belief": 0.3901954177644101,
+      "dominant_action": "adopt",
+      "new_propagation_count": 0
     }
   },
-  "emergent_events_total_by_type": {
-    "viral_cascade": 2
-  },
+  "emergent_events_total_by_type": {},
   "opinion_overall": {
     "overall": {
-      "opinion_id": "15bd4efb-7abd-4130-93e0-7f2d9d49e984",
-      "simulation_id": "5031fcef-b9c1-4ec0-b6ed-fc44d0b039f8",
+      "opinion_id": "e92b0eef-d974-4665-80e1-0fdee62cb1be",
+      "simulation_id": "5841215a-0a90-4106-b662-2c1b474ac51e",
       "community_id": "__overall__",
       "step": 12,
-      "summary": "A rapid cascade of adoption and influence across communities, with some resisting the trend.",
-      "sentiment_trend": "stable",
+      "summary": "The campaign saw widespread adoption across communities, with two groups driving the trend: experts and influencers. However, a significant divide emerged between these adopters and non-adopters.",
+      "sentiment_trend": "rising",
       "themes": [
         {
-          "theme": "divisions",
+          "theme": "rapid cascade in early_adopters stalls against skeptic resistance",
           "weight": 0.8,
-          "evidence_step": 0
+          "evidence_step": 7
         },
         {
-          "theme": "sentiment_trend",
-          "weight": 0.1,
-          "evidence_step": 0
+          "theme": "influencers play key role in shaping adoption trend",
+          "weight": 0.6,
+          "evidence_step": 5
         }
       ],
       "divisions": [
@@ -139,300 +137,218 @@
           "share": 0.42,
           "faction": "early_adopters",
           "concerns": [
-            "resistance to change"
+            "stalled progress against skeptics"
           ]
         },
         {
-          "share": 0.28,
-          "faction": "skeptics",
+          "share": 0.58,
+          "faction": "non-adopters",
           "concerns": [
-            "polarizing effect of dominant actions"
+            "fear of change and loss of control"
           ]
         }
       ],
       "dominant_emotions": [
-        "adoption",
-        "resistance"
+        "enthusiasm",
+        "optimism"
       ],
       "key_quotes": [],
       "source_step_count": 12,
       "source_agent_count": 880,
       "llm_provider": "ollama",
-      "llm_model": "llama3.2:1b",
+      "llm_model": "llama3.1:8b",
       "is_fallback_stub": false
     },
     "communities": [
       {
-        "opinion_id": "27c93221-2d98-4ff1-8aa7-1e33bd303520",
-        "simulation_id": "5031fcef-b9c1-4ec0-b6ed-fc44d0b039f8",
-        "community_id": "2b3b2f2f-2a1f-72e8-5862-012ec94d1fa7",
+        "opinion_id": "7fec6ec5-c1a8-4ebe-83e7-61759e280ba9",
+        "simulation_id": "5841215a-0a90-4106-b662-2c1b474ac51e",
+        "community_id": "0bdf4310-62e4-a73d-d971-49278a155579",
         "step": 12,
-        "summary": "Community trend: increasing adoption and influence.",
-        "sentiment_trend": "stable",
-        "themes": [
-          {
-            "theme": "Adoption rate",
-            "weight": 0.5,
-            "evidence_step": 7
-          },
-          {
-            "theme": "Influence distribution",
-            "weight": 0.3,
-            "evidence_step": 11
-          }
-        ],
-        "divisions": [
-          {
-            "share": 0.8,
-            "faction": "influencers",
-            "concerns": [
-              "influence",
-              "credibility"
-            ]
-          },
-          {
-            "share": 0.2,
-            "faction": "ordinary agents",
-            "concerns": [
-              "influence",
-              "trustworthiness"
-            ]
-          }
-        ],
-        "dominant_emotions": [],
-        "key_quotes": [
-          {
-            "step": 7,
-            "content": "increasing adoption and influence.",
-            "agent_id": "uuid"
-          },
-          {
-            "step": 11,
-            "content": "influence distribution.",
-            "agent_id": "uuid"
-          }
-        ],
-        "source_step_count": 5,
-        "source_agent_count": 50,
-        "llm_provider": "ollama",
-        "llm_model": "llama3.2:1b",
-        "is_fallback_stub": false
-      },
-      {
-        "opinion_id": "ef7d47b6-2859-4242-9ed0-61625bfe9d03",
-        "simulation_id": "5031fcef-b9c1-4ec0-b6ed-fc44d0b039f8",
-        "community_id": "2d521812-fc35-6aea-3246-1f53fc0c6e09",
-        "step": 12,
-        "summary": "The community is predominantly in a rising sentiment trend, with an increasing adoption rate of the dominant action.",
-        "sentiment_trend": "stable",
-        "themes": [
-          {
-            "theme": "Adoption Rate",
-            "weight": 0.5,
-            "evidence_step": 7
-          },
-          {
-            "theme": "Dominant Action",
-            "weight": 0.3,
-            "evidence_step": 0
-          }
-        ],
-        "divisions": [
-          {
-            "share": 0.7,
-            "faction": "Early Adopters",
-            "concerns": [
-              "Adoption Rate",
-              "Dominant Action"
-            ]
-          },
-          {
-            "share": 0.3,
-            "faction": "Late Adopters",
-            "concerns": [
-              "Adoption Rate"
-            ]
-          }
-        ],
-        "dominant_emotions": [
-          "Adoption"
-        ],
-        "key_quotes": [
-          {
-            "step": 11,
-            "content": "The community is in a rising sentiment trend.",
-            "agent_id": "2d521812-fc35-6aea-3246-1f53fc0c6e09"
-          }
-        ],
-        "source_step_count": 5,
-        "source_agent_count": 200,
-        "llm_provider": "ollama",
-        "llm_model": "llama3.2:1b",
-        "is_fallback_stub": false
-      },
-      {
-        "opinion_id": "7ad0c1a5-27a5-40c5-874a-d47dc7bdefde",
-        "simulation_id": "5031fcef-b9c1-4ec0-b6ed-fc44d0b039f8",
-        "community_id": "dd30619c-2a4f-c159-fccf-c3add74be757",
-        "step": 12,
-        "summary": "The community is trending towards a shift in beliefs and actions.",
+        "summary": "The community's adoption of a new idea is increasing, with a dominant sentiment of enthusiasm. Early adopters are driving the trend.",
         "sentiment_trend": "rising",
         "themes": [
           {
-            "theme": "Belief Shift",
-            "weight": 0.5,
-            "evidence_step": 11
+            "theme": "Adoption of new ideas",
+            "weight": 0.9,
+            "evidence_step": 10
           },
           {
-            "theme": "Adoption Rate",
-            "weight": 0.3,
+            "theme": "Early adopter influence",
+            "weight": 0.8,
+            "evidence_step": 7
+          }
+        ],
+        "divisions": [],
+        "dominant_emotions": [
+          "enthusiasm"
+        ],
+        "key_quotes": [],
+        "source_step_count": 5,
+        "source_agent_count": 200,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.1:8b",
+        "is_fallback_stub": false
+      },
+      {
+        "opinion_id": "ef91a364-6b6d-4992-aeeb-027b62504826",
+        "simulation_id": "5841215a-0a90-4106-b662-2c1b474ac51e",
+        "community_id": "25359f92-5d33-7635-acd4-8a01f96d59bd",
+        "step": 12,
+        "summary": "The community's adoption of the new idea is increasing, with a dominant sentiment of enthusiasm and a growing divide between adopters and non-adopters.",
+        "sentiment_trend": "rising",
+        "themes": [
+          {
+            "theme": "Adoption of the new idea",
+            "weight": 0.9,
             "evidence_step": 10
+          },
+          {
+            "theme": "Growing divide between adopters and non-adopters",
+            "weight": 0.8,
+            "evidence_step": 11
           }
         ],
         "divisions": [
           {
-            "share": 0.8,
-            "faction": "Experts",
+            "share": 0.97,
+            "faction": "Adopters",
             "concerns": [
-              "influence of non-experts",
-              "lack of clear guidance"
+              "Influence of early adopters",
+              "Growing gap between adopters and non-adopters"
             ]
           },
           {
-            "share": 0.2,
-            "faction": "Non-Experts",
+            "share": 0.03,
+            "faction": "Non-adopters",
             "concerns": [
-              "lack of understanding",
-              "perceived lack of expertise"
+              "Lack of understanding the new idea",
+              "Fear of being left behind"
             ]
           }
         ],
         "dominant_emotions": [
-          "optimism"
+          "enthusiasm"
         ],
-        "key_quotes": [
-          {
-            "step": 11,
-            "content": "We need to be cautious not to oversimplify the situation.",
-            "agent_id": "uuid"
-          }
-        ],
+        "key_quotes": [],
         "source_step_count": 5,
-        "source_agent_count": 30,
+        "source_agent_count": 200,
         "llm_provider": "ollama",
-        "llm_model": "llama3.2:1b",
+        "llm_model": "llama3.1:8b",
         "is_fallback_stub": false
       },
       {
-        "opinion_id": "dcdcf884-b97a-47f6-9d23-ab15f2d4f034",
-        "simulation_id": "5031fcef-b9c1-4ec0-b6ed-fc44d0b039f8",
-        "community_id": "de5fcd0b-44aa-1acd-da4a-c53fff53e5b1",
+        "opinion_id": "e7c1096d-969a-4fc6-ab12-22eb9e69a2bf",
+        "simulation_id": "5841215a-0a90-4106-b662-2c1b474ac51e",
+        "community_id": "3174c1c5-a9bf-3496-bc4a-05c3fb2ef2f3",
         "step": 12,
-        "summary": "A community of 200 agents in an agent-based social simulation exhibits a rising trend in adoption, with two dominant actions: adopting and sharing.",
-        "sentiment_trend": "stable",
+        "summary": "The community's adoption of a new idea is increasing, with a growing number of agents adopting and sharing the information.",
+        "sentiment_trend": "rising",
         "themes": [
           {
-            "theme": "Adoption",
-            "weight": 0.8,
-            "evidence_step": 11
+            "theme": "Adoption of new idea",
+            "weight": 0.9,
+            "evidence_step": 10
           },
           {
-            "theme": "Dominant action distribution",
-            "weight": 0.4,
+            "theme": "Growing influence of skeptics",
+            "weight": 0.5,
             "evidence_step": 7
           }
         ],
         "divisions": [
           {
-            "share": 0.8,
-            "faction": "Consumer",
+            "share": 0.2,
+            "faction": "Skeptics",
             "concerns": [
               "Adoption rate",
-              "Social influence"
-            ]
-          },
-          {
-            "share": 0.2,
-            "faction": "Producer",
-            "concerns": [
-              "Resource availability",
-              "Market dynamics"
+              "Belief in the idea"
             ]
           }
         ],
         "dominant_emotions": [
-          "Adoption",
-          "Social influence"
+          "curiosity",
+          "enthusiasm"
         ],
         "key_quotes": [
           {
             "step": 7,
-            "content": "The community is experiencing a surge in adoption rates, with two dominant actions: adopting and sharing.",
-            "agent_id": "uuid"
-          }
-        ],
-        "source_step_count": 5,
-        "source_agent_count": 200,
-        "llm_provider": "ollama",
-        "llm_model": "llama3.2:1b",
-        "is_fallback_stub": false
-      },
-      {
-        "opinion_id": "379c91fe-206e-47c1-8252-468008cf4cd8",
-        "simulation_id": "5031fcef-b9c1-4ec0-b6ed-fc44d0b039f8",
-        "community_id": "e480e4d9-0d5a-bf70-6ff3-f1e12d143232",
-        "step": 12,
-        "summary": "The community's sentiment trend is rising, with a slight polarizing effect.",
-        "sentiment_trend": "stable",
-        "themes": [
-          {
-            "theme": "Adoption rate",
-            "weight": 0.5,
-            "evidence_step": 0
+            "content": "I'm still not convinced.",
+            "agent_id": "00000000"
           },
           {
-            "theme": "Dominant action distribution",
-            "weight": 0.3,
-            "evidence_step": 0
-          }
-        ],
-        "divisions": [
-          {
-            "share": 0.7,
-            "faction": "Skeptics",
-            "concerns": [
-              "low adoption rate",
-              "high skepticism"
-            ]
-          },
-          {
-            "share": 0.3,
-            "faction": "Adopters",
-            "concerns": [
-              "high adoption rate",
-              "low belief in dominant action"
-            ]
-          }
-        ],
-        "dominant_emotions": [
-          "optimism"
-        ],
-        "key_quotes": [
-          {
-            "step": 0,
-            "content": "The community's sentiment trend is rising, with a slight polarizing effect.",
-            "agent_id": "uuid"
-          },
-          {
-            "step": 0,
-            "content": "One or two sentences",
-            "agent_id": "uuid"
+            "step": 10,
+            "content": "I've decided to adopt the idea.",
+            "agent_id": "00000000"
           }
         ],
         "source_step_count": 5,
         "source_agent_count": 400,
         "llm_provider": "ollama",
-        "llm_model": "llama3.2:1b",
+        "llm_model": "llama3.1:8b",
+        "is_fallback_stub": false
+      },
+      {
+        "opinion_id": "fa12d6bf-0460-4b97-8996-1ba8a56ccff6",
+        "simulation_id": "5841215a-0a90-4106-b662-2c1b474ac51e",
+        "community_id": "425e7c37-673b-86b2-401f-03f36422b2cd",
+        "step": 12,
+        "summary": "The community's adoption of a new idea is near-universal, with 100% adoption by step 11. Experts are driving the trend.",
+        "sentiment_trend": "rising",
+        "themes": [
+          {
+            "theme": "Adoption of new idea",
+            "weight": 1.0,
+            "evidence_step": 10
+          }
+        ],
+        "divisions": [],
+        "dominant_emotions": [
+          "confidence"
+        ],
+        "key_quotes": [],
+        "source_step_count": 5,
+        "source_agent_count": 30,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.1:8b",
+        "is_fallback_stub": false
+      },
+      {
+        "opinion_id": "c03cc43e-cb58-403b-ad2d-33f98e6f71e1",
+        "simulation_id": "5841215a-0a90-4106-b662-2c1b474ac51e",
+        "community_id": "a3c655ac-aae2-04a6-1a36-90d88c8ed216",
+        "step": 12,
+        "summary": "The community has shown a consistent trend of adopting the new idea, with an increasing adoption rate and belief in its value. Influencers have played a significant role in shaping this trend.",
+        "sentiment_trend": "rising",
+        "themes": [
+          {
+            "theme": "Adoption of the new idea",
+            "weight": 0.9,
+            "evidence_step": 7
+          },
+          {
+            "theme": "Growing confidence in the idea's value",
+            "weight": 0.6,
+            "evidence_step": 10
+          }
+        ],
+        "divisions": [
+          {
+            "share": 1.0,
+            "faction": "Influencers",
+            "concerns": [
+              "Promoting the new idea"
+            ]
+          }
+        ],
+        "dominant_emotions": [
+          "Confidence"
+        ],
+        "key_quotes": [],
+        "source_step_count": 5,
+        "source_agent_count": 50,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.1:8b",
         "is_fallback_stub": false
       }
     ]
@@ -440,74 +356,74 @@
   "step_history_summary": [
     {
       "step": 0,
-      "adoption_rate": 0.09204545454545454,
-      "mean_sentiment": 0.016157368513348293,
+      "adoption_rate": 0.004545454545454545,
+      "mean_sentiment": 0.007302538967893747,
       "n_emergent": 0
     },
     {
       "step": 1,
-      "adoption_rate": 0.2840909090909091,
-      "mean_sentiment": 0.040088815542948596,
-      "n_emergent": 1
+      "adoption_rate": 0.02727272727272727,
+      "mean_sentiment": 0.01918811875417872,
+      "n_emergent": 0
     },
     {
       "step": 2,
-      "adoption_rate": 0.44431818181818183,
-      "mean_sentiment": 0.06879142952013481,
-      "n_emergent": 1
+      "adoption_rate": 0.07840909090909091,
+      "mean_sentiment": 0.033210981597949114,
+      "n_emergent": 0
     },
     {
       "step": 3,
-      "adoption_rate": 0.571590909090909,
-      "mean_sentiment": 0.1029983146257008,
+      "adoption_rate": 0.1590909090909091,
+      "mean_sentiment": 0.05033699413578199,
       "n_emergent": 0
     },
     {
       "step": 4,
-      "adoption_rate": 0.65,
-      "mean_sentiment": 0.14136872467556846,
+      "adoption_rate": 0.26022727272727275,
+      "mean_sentiment": 0.07064195586726559,
       "n_emergent": 0
     },
     {
       "step": 5,
-      "adoption_rate": 0.7090909090909091,
-      "mean_sentiment": 0.18346395534695614,
+      "adoption_rate": 0.3693181818181818,
+      "mean_sentiment": 0.09530328241482489,
       "n_emergent": 0
     },
     {
       "step": 6,
-      "adoption_rate": 0.7613636363636364,
-      "mean_sentiment": 0.2282065342185904,
+      "adoption_rate": 0.45795454545454545,
+      "mean_sentiment": 0.12328481924942274,
       "n_emergent": 0
     },
     {
       "step": 7,
-      "adoption_rate": 0.8079545454545455,
-      "mean_sentiment": 0.2750497281063951,
+      "adoption_rate": 0.5375,
+      "mean_sentiment": 0.15515693225913862,
       "n_emergent": 0
     },
     {
       "step": 8,
-      "adoption_rate": 0.8420454545454545,
-      "mean_sentiment": 0.3233586052883802,
+      "adoption_rate": 0.6022727272727273,
+      "mean_sentiment": 0.19007032244915692,
       "n_emergent": 0
     },
     {
       "step": 9,
-      "adoption_rate": 0.8670454545454546,
-      "mean_sentiment": 0.4741295321095926,
+      "adoption_rate": 0.6602272727272728,
+      "mean_sentiment": 0.32606331635689356,
       "n_emergent": 0
     },
     {
       "step": 10,
-      "adoption_rate": 0.8920454545454546,
-      "mean_sentiment": 0.5691601309528284,
+      "adoption_rate": 0.7102272727272727,
+      "mean_sentiment": 0.4099937230526403,
       "n_emergent": 0
     },
     {
       "step": 11,
-      "adoption_rate": 0.9136363636363637,
-      "mean_sentiment": 0.6392911907095812,
+      "adoption_rate": 0.7454545454545455,
+      "mean_sentiment": 0.47550387494587304,
       "n_emergent": 0
     }
   ]

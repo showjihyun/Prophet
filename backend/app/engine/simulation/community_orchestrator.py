@@ -224,7 +224,14 @@ class CommunityOrchestrator:
         # Tier 3 agents are run via async_tick() which uses embedding-based memory
         # and real LLM cognition (GraphRAG path). Tier 1/2 use the fast sync tick().
         campaign_obj = campaign_events[0] if campaign_events else None
+        # Round 8-6: thread all three campaign framing dimensions through to
+        # the tick. Previously only ``controversy`` was forwarded; ``novelty``
+        # and ``utility`` were silently ignored, which made the entire
+        # campaign-framing slider dead input. See docs/USE_CASE_PILOTS.md
+        # for the pilot that caught this.
         campaign_controversy = getattr(campaign_obj, "controversy", 0.0)
+        campaign_novelty = getattr(campaign_obj, "novelty", 0.5)
+        campaign_utility = getattr(campaign_obj, "utility", 0.5)
 
         async def _run_agent_tick(agent: AgentState, tier: int) -> AgentTickResult:
             """Dispatch to async_tick for Tier 3 (embeddings + LLM) or sync tick for Tier 1/2."""
@@ -239,6 +246,8 @@ class CommunityOrchestrator:
                         graph_context=graph_context,
                         campaign=campaign_obj,
                         campaign_controversy=campaign_controversy,
+                        campaign_novelty=campaign_novelty,
+                        campaign_utility=campaign_utility,
                     )
                 except Exception:
                     # Graceful fallback to sync tick on any async failure
@@ -252,6 +261,8 @@ class CommunityOrchestrator:
                 seed=seed,
                 graph_context=graph_context,
                 campaign_controversy=campaign_controversy,
+                campaign_novelty=campaign_novelty,
+                campaign_utility=campaign_utility,
             )
 
         def _process_result(result: AgentTickResult) -> None:

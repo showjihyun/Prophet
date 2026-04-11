@@ -114,7 +114,7 @@ export const POLARIZATION_ROLLING_WINDOW = 10;
 // ── Default LLM Settings ──────────────────────────────────────────────────
 
 export const DEFAULT_LLM_PROVIDER = "ollama";
-export const DEFAULT_OLLAMA_MODEL = "llama3.2:1b";
+export const DEFAULT_OLLAMA_MODEL = "llama3.1:8b";
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 export const DEFAULT_OPENAI_MODEL = "gpt-4o";
 export const DEFAULT_LLM_CACHE_TTL_SECONDS = 3_600;
