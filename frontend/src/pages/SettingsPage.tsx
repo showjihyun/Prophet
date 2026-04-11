@@ -38,9 +38,9 @@ export default function SettingsPage() {
   // LLM
   const [defaultProvider, setDefaultProvider] = useState("ollama");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
-  const [ollamaDefaultModel, setOllamaDefaultModel] = useState("gemma4:latest");
-  const [slmModel, setSlmModel] = useState("gemma4:latest");
-  const [ollamaEmbedModel, setOllamaEmbedModel] = useState("gemma4:latest");
+  const [ollamaDefaultModel, setOllamaDefaultModel] = useState("llama3.2:1b");
+  const [slmModel, setSlmModel] = useState("llama3.2:1b");
+  const [ollamaEmbedModel, setOllamaEmbedModel] = useState("llama3.2:1b");
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
   const [anthropicKeySet, setAnthropicKeySet] = useState(false);
   const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-6");

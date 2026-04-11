@@ -165,10 +165,11 @@ cd prophet
 # CPU environment (no GPU)
 docker compose up -d
 
-# Pull LLM model (first time only, ~9.6 GB).
-# Round 7: default upgraded from llama3.1:8b → gemma4:latest
-# (8B params, 128K context, multimodal). Requires Ollama >= 0.20.0.
-docker compose exec ollama ollama pull gemma4:latest
+# Pull LLM model (first time only, ~1.3 GB on disk, ~2 GB in RAM).
+# Round 8-5: default is llama3.2:1b — small enough to fit on modest
+# laptops (8 GB VRAM WSL2 hosts) while still being a real Meta-Llama
+# completion model. Pairs with the pinned Ollama 0.11.10 image.
+docker compose exec ollama ollama pull llama3.2:1b
 ```
 
 | Service             | URL                          |
@@ -323,7 +324,7 @@ visualization) that MiroFish doesn't focus on.
 - **Cytoscape.js** — powers the EgoGraph (per-agent neighborhood view) with
   2D force-directed layout.
 - **Ollama** — local SLM inference is what makes the 3-tier cost model possible.
-  Without `gemma4:latest` on a laptop, every Prophet simulation would still cost
+  Without `llama3.2:1b` on a laptop, every Prophet simulation would still cost
   thousands of dollars.
 - **The Hugging Face / open-weight LLM community** — for proving that small
   models can be good enough for agent reasoning.

@@ -63,7 +63,7 @@ git remote -v
 
 ```bash
 docker compose up -d
-docker compose exec ollama ollama pull gemma4:latest   # first time only (~9.6 GB)
+docker compose exec ollama ollama pull llama3.2:1b     # first time only (~1.3 GB)
 open http://localhost:5173
 ```
 
