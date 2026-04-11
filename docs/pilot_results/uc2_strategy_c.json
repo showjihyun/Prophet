@@ -1,0 +1,510 @@
+{
+  "case": "uc2_strategy_c",
+  "readme_section": "### Pre-screen public health messages",
+  "readme_claim": "Strategy C triggers viral cascade via influencer nodes",
+  "simulation_id": "1c5b4c75-eb9f-491d-a65d-18611230be6d",
+  "payload": {
+    "name": "UC2 Strategy C \u2014 Empowerment framing",
+    "description": "README use-case 2: public health vaccine messaging. Strategy C = empowerment/influencer-led framing.",
+    "campaign": {
+      "name": "Vaccine Strategy C",
+      "budget": 500000,
+      "channels": [
+        "sns",
+        "influencer"
+      ],
+      "message": "Protect the people you love \u2014 join millions of neighbours taking the shot this month.",
+      "target_communities": [
+        "all"
+      ],
+      "novelty": 0.75,
+      "utility": 0.85,
+      "controversy": 0.15
+    },
+    "communities": [
+      {
+        "id": "A",
+        "name": "early_adopters",
+        "size": 200,
+        "agent_type": "early_adopter"
+      },
+      {
+        "id": "B",
+        "name": "mainstream",
+        "size": 600,
+        "agent_type": "consumer"
+      },
+      {
+        "id": "C",
+        "name": "skeptics",
+        "size": 150,
+        "agent_type": "skeptic"
+      },
+      {
+        "id": "D",
+        "name": "experts",
+        "size": 30,
+        "agent_type": "expert"
+      },
+      {
+        "id": "E",
+        "name": "influencers",
+        "size": 50,
+        "agent_type": "influencer"
+      }
+    ],
+    "max_steps": 12,
+    "default_llm_provider": "ollama",
+    "slm_llm_ratio": 0.98,
+    "slm_model": "llama3.2:1b",
+    "budget_usd": 1.0,
+    "random_seed": 42
+  },
+  "started_at": "2026-04-11T14:48:47.375853+00:00",
+  "finished_at": "2026-04-11T14:52:54.103067+00:00",
+  "steps_run": 12,
+  "final_metrics": {
+    "adoption_rate": 0.974757281553398,
+    "mean_sentiment": 0.6565160072060534,
+    "sentiment_variance": 0.06072153632834887,
+    "diffusion_rate": 6.0
+  },
+  "per_community_final": {
+    "02858c92-28c3-bca4-ed5b-1efcd5b5041f": {
+      "community_id": "02858c92-28c3-bca4-ed5b-1efcd5b5041f",
+      "adoption_count": 50,
+      "adoption_rate": 1.0,
+      "mean_belief": 0.6879213063825115,
+      "dominant_action": "adopt",
+      "new_propagation_count": 5
+    },
+    "1f562bac-95e0-6fa7-acd2-8075a295cc4b": {
+      "community_id": "1f562bac-95e0-6fa7-acd2-8075a295cc4b",
+      "adoption_count": 30,
+      "adoption_rate": 1.0,
+      "mean_belief": 0.6185659199062267,
+      "dominant_action": "adopt",
+      "new_propagation_count": 2
+    },
+    "b0b441c6-2c39-db60-d377-599fa0a2441f": {
+      "community_id": "b0b441c6-2c39-db60-d377-599fa0a2441f",
+      "adoption_count": 598,
+      "adoption_rate": 0.9966666666666667,
+      "mean_belief": 0.6762196952273973,
+      "dominant_action": "adopt",
+      "new_propagation_count": 59
+    },
+    "78170bc6-f52c-97d1-5bf0-f48f2de9d309": {
+      "community_id": "78170bc6-f52c-97d1-5bf0-f48f2de9d309",
+      "adoption_count": 129,
+      "adoption_rate": 0.86,
+      "mean_belief": 0.639220252686412,
+      "dominant_action": "adopt",
+      "new_propagation_count": 20
+    },
+    "33ce4f43-6422-6a8e-6832-adc9f7411015": {
+      "community_id": "33ce4f43-6422-6a8e-6832-adc9f7411015",
+      "adoption_count": 197,
+      "adoption_rate": 0.985,
+      "mean_belief": 0.6082179473326119,
+      "dominant_action": "adopt",
+      "new_propagation_count": 13
+    }
+  },
+  "emergent_events_total_by_type": {
+    "viral_cascade": 2,
+    "slow_adoption": 1
+  },
+  "opinion_overall": {
+    "overall": {
+      "opinion_id": "161e3d54-121f-4e3c-afa8-cfde2e3d0aaf",
+      "simulation_id": "1c5b4c75-eb9f-491d-a65d-18611230be6d",
+      "community_id": "__overall__",
+      "step": 12,
+      "summary": "The UC2 strategy's empowerment framing resonated with early adopters across communities, but polarizing sentiments emerged as skepticism gave way to adoption.",
+      "sentiment_trend": "stable",
+      "themes": [],
+      "divisions": [
+        {
+          "share": 0.42,
+          "faction": "early_adopters",
+          "concerns": [
+            "skeptical resistance",
+            "difficulties in implementation"
+          ]
+        },
+        {
+          "share": 0.58,
+          "faction": "polarized_opponents",
+          "concerns": [
+            "adoption fatigue",
+            "inadequate support"
+          ]
+        }
+      ],
+      "dominant_emotions": [
+        "adoption",
+        "resistance"
+      ],
+      "key_quotes": [],
+      "source_step_count": 12,
+      "source_agent_count": 1030,
+      "llm_provider": "ollama",
+      "llm_model": "llama3.2:1b",
+      "is_fallback_stub": false
+    },
+    "communities": [
+      {
+        "opinion_id": "a36abe15-09c3-46d8-8c88-56bfcc17a26f",
+        "simulation_id": "1c5b4c75-eb9f-491d-a65d-18611230be6d",
+        "community_id": "02858c92-28c3-bca4-ed5b-1efcd5b5041f",
+        "step": 12,
+        "summary": "The community is predominantly in favor of adopting new ideas and technologies.",
+        "sentiment_trend": "rising",
+        "themes": [
+          {
+            "theme": "Adoption",
+            "weight": 0.9,
+            "evidence_step": 7
+          },
+          {
+            "theme": "Dominant action distribution last step",
+            "weight": 0.8,
+            "evidence_step": 11
+          }
+        ],
+        "divisions": [
+          {
+            "share": 1.0,
+            "faction": "Influencers",
+            "concerns": [
+              "Perceived benefits vs. risks",
+              "Lack of clear direction"
+            ]
+          },
+          {
+            "share": 0.5,
+            "faction": "Regular citizens",
+            "concerns": [
+              "Job security",
+              "Financial burden"
+            ]
+          }
+        ],
+        "dominant_emotions": [
+          "Optimism"
+        ],
+        "key_quotes": [
+          {
+            "step": 7,
+            "content": "We need to consider the potential risks and benefits of new technologies.",
+            "agent_id": "uuid"
+          },
+          {
+            "step": 10,
+            "content": "I'm concerned about the impact on our jobs and economy.",
+            "agent_id": "uuid"
+          }
+        ],
+        "source_step_count": 5,
+        "source_agent_count": 50,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.2:1b",
+        "is_fallback_stub": false
+      },
+      {
+        "opinion_id": "a760d268-98b6-4fd0-b0ad-889b90adb6d4",
+        "simulation_id": "1c5b4c75-eb9f-491d-a65d-18611230be6d",
+        "community_id": "1f562bac-95e0-6fa7-acd2-8075a295cc4b",
+        "step": 12,
+        "summary": "The community is predominantly in favor of adopting new ideas.",
+        "sentiment_trend": "rising",
+        "themes": [
+          {
+            "theme": "Adoption",
+            "weight": 0.5,
+            "evidence_step": 11
+          },
+          {
+            "theme": "Expert Opinion",
+            "weight": 0.3,
+            "evidence_step": 10
+          }
+        ],
+        "divisions": [
+          {
+            "share": 0.2,
+            "faction": "Conservatives",
+            "concerns": [
+              "Resistance to change",
+              "Loss of traditional values"
+            ]
+          },
+          {
+            "share": 0.8,
+            "faction": "Progressives",
+            "concerns": [
+              "Inequality and social injustice",
+              "Environmental degradation"
+            ]
+          }
+        ],
+        "dominant_emotions": [
+          "Optimism"
+        ],
+        "key_quotes": [
+          {
+            "step": 11,
+            "content": "I think we should give it a try.",
+            "agent_id": "uuid"
+          }
+        ],
+        "source_step_count": 5,
+        "source_agent_count": 30,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.2:1b",
+        "is_fallback_stub": false
+      },
+      {
+        "opinion_id": "771b4320-0cf7-4cc4-976d-6d8cb6a6c390",
+        "simulation_id": "1c5b4c75-eb9f-491d-a65d-18611230be6d",
+        "community_id": "33ce4f43-6422-6a8e-6832-adc9f7411015",
+        "step": 12,
+        "summary": "The community's trend is rising, with a slight shift towards polarizing sentiments.",
+        "sentiment_trend": "rising",
+        "themes": [
+          {
+            "theme": "Adoption rate",
+            "weight": 0.5,
+            "evidence_step": 11
+          },
+          {
+            "theme": "Dominant action distribution",
+            "weight": 0.3,
+            "evidence_step": 10
+          }
+        ],
+        "divisions": [
+          {
+            "share": 0.2,
+            "faction": "Influencers",
+            "concerns": [
+              "influence",
+              "credibility"
+            ]
+          },
+          {
+            "share": 0.1,
+            "faction": "Early adopters",
+            "concerns": [
+              "early adoption",
+              "expectations"
+            ]
+          }
+        ],
+        "dominant_emotions": [
+          "excitement",
+          "polarization"
+        ],
+        "key_quotes": [
+          {
+            "step": 0,
+            "content": "...",
+            "agent_id": "uuid"
+          },
+          {
+            "step": 0,
+            "content": "...",
+            "agent_id": "uuid"
+          }
+        ],
+        "source_step_count": 5,
+        "source_agent_count": 200,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.2:1b",
+        "is_fallback_stub": false
+      },
+      {
+        "opinion_id": "42b35187-5417-4959-9bf9-dacb9782565a",
+        "simulation_id": "1c5b4c75-eb9f-491d-a65d-18611230be6d",
+        "community_id": "78170bc6-f52c-97d1-5bf0-f48f2de9d309",
+        "step": 12,
+        "summary": "Dominant sentiment shifts from skepticism to adoption in the community over time.",
+        "sentiment_trend": "stable",
+        "themes": [
+          {
+            "theme": "Adoption trend",
+            "weight": 0.5,
+            "evidence_step": 10
+          },
+          {
+            "theme": "Representative agent influence",
+            "weight": 0.3,
+            "evidence_step": 11
+          }
+        ],
+        "divisions": [
+          {
+            "share": 0.5,
+            "faction": "Skeptics",
+            "concerns": [
+              "Adoption rate",
+              "Trust in information"
+            ]
+          },
+          {
+            "share": 0.5,
+            "faction": "Adopters",
+            "concerns": [
+              "Information quality",
+              "Community trust"
+            ]
+          }
+        ],
+        "dominant_emotions": [],
+        "key_quotes": [
+          {
+            "step": 11,
+            "content": "I'm starting to feel more comfortable sharing my thoughts.",
+            "agent_id": "uuid"
+          }
+        ],
+        "source_step_count": 5,
+        "source_agent_count": 150,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.2:1b",
+        "is_fallback_stub": false
+      },
+      {
+        "opinion_id": "a60b2831-3000-493b-b13a-54bdc357749b",
+        "simulation_id": "1c5b4c75-eb9f-491d-a65d-18611230be6d",
+        "community_id": "b0b441c6-2c39-db60-d377-599fa0a2441f",
+        "step": 12,
+        "summary": "The community is predominantly adopting the latest updates, with a slight increase in reposts and likes.",
+        "sentiment_trend": "stable",
+        "themes": [
+          {
+            "theme": "Adoption rate",
+            "weight": 0.8,
+            "evidence_step": 11
+          },
+          {
+            "theme": "Dominant action distribution",
+            "weight": 0.7,
+            "evidence_step": 10
+          }
+        ],
+        "divisions": [
+          {
+            "share": 0.9,
+            "faction": "Adopters",
+            "concerns": [
+              "Lack of updates",
+              "Uncertainty about future changes"
+            ]
+          },
+          {
+            "share": 0.1,
+            "faction": "Reposters",
+            "concerns": [
+              "Overwhelming number of posts",
+              "Difficulty in finding relevant information"
+            ]
+          }
+        ],
+        "dominant_emotions": [],
+        "key_quotes": [
+          {
+            "step": 11,
+            "content": "We're seeing a significant increase in adoption rates, but some users are expressing concerns about the quality of updates.",
+            "agent_id": "uuid"
+          },
+          {
+            "step": 10,
+            "content": "The dominant action distribution is clear: most users are adopting new content and reposting it.",
+            "agent_id": "uuid"
+          }
+        ],
+        "source_step_count": 5,
+        "source_agent_count": 600,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.2:1b",
+        "is_fallback_stub": false
+      }
+    ]
+  },
+  "step_history_summary": [
+    {
+      "step": 0,
+      "adoption_rate": 0.11165048543689321,
+      "mean_sentiment": 0.017546843926275837,
+      "n_emergent": 0
+    },
+    {
+      "step": 1,
+      "adoption_rate": 0.3572815533980582,
+      "mean_sentiment": 0.04179195951137605,
+      "n_emergent": 1
+    },
+    {
+      "step": 2,
+      "adoption_rate": 0.554368932038835,
+      "mean_sentiment": 0.07130311122181364,
+      "n_emergent": 1
+    },
+    {
+      "step": 3,
+      "adoption_rate": 0.7038834951456311,
+      "mean_sentiment": 0.10683089108037958,
+      "n_emergent": 0
+    },
+    {
+      "step": 4,
+      "adoption_rate": 0.8009708737864077,
+      "mean_sentiment": 0.14735821713236946,
+      "n_emergent": 0
+    },
+    {
+      "step": 5,
+      "adoption_rate": 0.8601941747572815,
+      "mean_sentiment": 0.1917404372702245,
+      "n_emergent": 0
+    },
+    {
+      "step": 6,
+      "adoption_rate": 0.903883495145631,
+      "mean_sentiment": 0.23876677742642838,
+      "n_emergent": 0
+    },
+    {
+      "step": 7,
+      "adoption_rate": 0.9339805825242719,
+      "mean_sentiment": 0.28800501496768716,
+      "n_emergent": 0
+    },
+    {
+      "step": 8,
+      "adoption_rate": 0.9485436893203884,
+      "mean_sentiment": 0.3382536725922577,
+      "n_emergent": 0
+    },
+    {
+      "step": 9,
+      "adoption_rate": 0.9592233009708738,
+      "mean_sentiment": 0.4900961560580749,
+      "n_emergent": 0
+    },
+    {
+      "step": 10,
+      "adoption_rate": 0.9689320388349515,
+      "mean_sentiment": 0.586889524256414,
+      "n_emergent": 0
+    },
+    {
+      "step": 11,
+      "adoption_rate": 0.974757281553398,
+      "mean_sentiment": 0.6565160072060534,
+      "n_emergent": 1
+    }
+  ]
+}
