@@ -16,6 +16,34 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # Postgres service container. Must be the pgvector-flavored image
+    # because `app.main.lifespan` runs `CREATE EXTENSION IF NOT EXISTS
+    # vector` on startup, which is triggered by every API test that
+    # spins up `TestClient`. A vanilla `postgres:16` would fail with
+    # "could not open extension control file 'vector.control'".
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: prophet
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: prophet
+        ports:
+          - 5432:5432
+        # Health-gate the service so pytest doesn't race a half-initialised
+        # Postgres. `pg_isready` exits 0 only once the server is ready to
+        # accept connections.
+        options: >-
+          --health-cmd "pg_isready -U prophet -d prophet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Route the app at the service container. Port 5432 is what the
+      # service exposes on the runner host; the local dev compose uses
+      # 5433 on the host to avoid clashing with a developer's system
+      # Postgres, but CI has no such conflict.
+      DATABASE_URL: postgresql+asyncpg://prophet:secret@localhost:5432/prophet
     steps:
       - name: Checkout
         uses: actions/checkout@v4
