@@ -47,7 +47,7 @@ export const GLOSSARY = {
   },
   diffusionWaveTimeline: {
     label: "Diffusion Wave Timeline",
-    text: "A bar chart showing the diffusion rate of each simulation step over time. Each bar's height represents how many new agents adopted the campaign in that step. Color cycles through community colors. Taller bars mean faster spreading; a declining wave indicates saturation or resistance.",
+    text: "A sparkline of the cascade's diffusion rate over the last 100 simulation steps. Higher areas mean more new adoptions that step; a rising curve is viral spread, a falling curve means saturation or resistance. Amber pins mark emergent events (viral cascade, echo chamber, polarization, collapse) so you can correlate shape with what the detector fired.",
   },
   propagation: {
     label: "Propagation",
@@ -172,6 +172,48 @@ export const GLOSSARY = {
   keyEvents: {
     label: "Key Events",
     text: "Notable behavioral patterns detected during the run, in chronological order. Each event includes its step number and a short description of what happened.",
+  },
+
+  // ───────── Settings — LLM providers ─────────
+  settingsDefaultProvider: {
+    label: "Default Provider",
+    text: "Which LLM backend Prophet uses for Tier 3 (elite) calls. Ollama and vLLM run locally on your hardware (free after setup). Claude, OpenAI, and Gemini are cloud APIs (charged per call). The 3-tier inference model only hits this provider for the ~10% of agents that really need it.",
+  },
+  settingsProviderBaseUrl: {
+    label: "Base URL",
+    text: "HTTP endpoint where the self-hosted inference server is running. Must be reachable from the Prophet backend container — when using Docker Compose, this is typically the service name (e.g. `http://ollama:11434`) rather than `localhost`.",
+  },
+  settingsProviderModel: {
+    label: "Model",
+    text: "The specific model identifier to use for chat-style completions. Free-text so you can use any model the provider supports — Prophet passes it through without validation. When in doubt, use the provider's flagship (e.g. `gpt-4o`, `claude-sonnet-4-6`, `gemini-2.0-flash`).",
+  },
+  settingsProviderApiKey: {
+    label: "API Key",
+    text: "Secret credential for the cloud provider. Sent to the backend only when you press Save, and the backend never returns it on subsequent reads — the placeholder tells you whether a key is currently stored without revealing its value.",
+  },
+  settingsEmbedModel: {
+    label: "Embed Model",
+    text: "Model used to generate vector embeddings for agent memory similarity search. Different from the chat model — it must be an embedding-specific model (e.g. `text-embedding-3-small` for OpenAI, `models/text-embedding-004` for Gemini). Leave at the default unless you know you want a different embedding space.",
+  },
+  settingsSlmModel: {
+    label: "SLM Model (Tier 1)",
+    text: "The Small Language Model used for the ~80% of agents that run on Tier 1 — fast, local, free per call. This is typically the same model as the Ollama Default Model, but can be set separately if you want a lighter model for the mass population (e.g. a 1B model for SLM, a bigger model for Tier 3 fallbacks).",
+  },
+
+  // ───────── Settings — Simulation defaults ─────────
+  settingsTier3Ratio: {
+    label: "LLM Tier 3 Ratio",
+    text: "Hard cap on the fraction of agents that get routed to Tier 3 (the elite LLM) per step. Range 0.0–1.0, default 0.10. Higher = more nuanced behavior but more API cost; lower = cheaper but flatter cognition. The tier selector picks influencers and critical agents first, so even 0.10 captures the high-leverage decisions.",
+  },
+  settingsCacheTtl: {
+    label: "LLM Cache TTL",
+    text: "How long (in seconds) the backend keeps an LLM response cached before re-calling. Default 3600 (1 hour). Prophet caches by prompt fingerprint, so two agents asking the exact same question share one call. Raise it for long batch runs to save money; lower it if you're tuning prompts and need fresh output.",
+  },
+
+  // ───────── Settings — vLLM ─────────
+  settingsVllmMaxConcurrent: {
+    label: "Max Concurrent Requests",
+    text: "How many agent inference requests vLLM will process in parallel. Higher = faster simulation but more GPU memory pressure. Default 64. If you see OOM errors on your GPU, lower this first before touching the model size.",
   },
 } as const satisfies Record<string, { label: string; text: string }>;
 
