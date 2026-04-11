@@ -262,8 +262,10 @@ describe('CampaignSetupPage (UI-16)', () => {
   describe('Submit Flow (A-6)', () => {
     it('sends campaign attributes in API call', async () => {
       renderPage();
-      // Wait for projects to load
-      await waitFor(() => expect(mockListProjects).toHaveBeenCalled());
+      // Wait for projects to load AND render in the dropdown — the previous
+      // version only waited for mockListProjects to be called, which fires
+      // before React commits the new data into the select options.
+      await screen.findByRole('option', { name: /Test Project/i });
 
       // Select project
       const select = screen.getAllByRole('combobox')[0];
@@ -318,7 +320,8 @@ describe('CampaignSetupPage (UI-16)', () => {
 
     it('navigates to /simulation after successful submit', async () => {
       renderPage();
-      await waitFor(() => expect(mockListProjects).toHaveBeenCalled());
+      // Wait for projects to actually render in the dropdown
+      await screen.findByRole('option', { name: /Test Project/i });
 
       const select = screen.getAllByRole('combobox')[0];
       fireEvent.change(select, { target: { value: 'proj-1' } });
@@ -327,7 +330,10 @@ describe('CampaignSetupPage (UI-16)', () => {
       });
       fireEvent.click(screen.getByText('Create Simulation'));
 
-      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/simulation'));
+      // Page navigates to /simulation/<sim_id> after successful create
+      await waitFor(() =>
+        expect(mockNavigate).toHaveBeenCalledWith(expect.stringMatching(/^\/simulation\//)),
+      );
     });
   });
 

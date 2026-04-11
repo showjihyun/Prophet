@@ -3,10 +3,10 @@
  * @spec docs/spec/ui/UI_06_PROJECTS_LIST.md
  */
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { Plus, Layers, Clock, X } from "lucide-react";
-import { apiClient } from "../api/client";
 import type { ProjectSummary } from "../api/client";
+import { useProjects, useCreateProject } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 
 /* ------------------------------------------------------------------ */
@@ -34,20 +34,19 @@ function StatusBadge({ status }: { status: string }) {
 export default function ProjectsListPage() {
   const navigate = useNavigate();
   const setCurrentProject = useSimulationStore((s) => s.setCurrentProject);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newName, setNewName] = useState("");
-  const [creating, setCreating] = useState(false);
   const addToast = useSimulationStore((s) => s.addToast);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    apiClient.projects.list()
-      .then((res) => setProjects(Array.isArray(res) ? res : []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  // TanStack Query handles loading state, caching across navigations,
+  // and request dedup. Returning to this page after visiting a sub-route
+  // is now instant — no flash of loading state.
+  const projectsQuery = useProjects();
+  const projects: ProjectSummary[] = Array.isArray(projectsQuery.data) ? projectsQuery.data : [];
+  const loading = projectsQuery.isLoading;
+
+  const createProject = useCreateProject();
 
   const handleNewProject = () => {
     setNewName("");
@@ -57,18 +56,15 @@ export default function ProjectsListPage() {
 
   const handleCreateConfirm = async () => {
     if (!newName.trim()) return;
-    setCreating(true);
     try {
-      const project = await apiClient.projects.create({ name: newName.trim() });
-      setProjects((prev) => [...prev, project]);
+      const project = await createProject.mutateAsync({ name: newName.trim() });
       setShowNewDialog(false);
       addToast({ type: "info", message: `Project "${project.name}" created.` });
     } catch (err) {
       addToast({ type: "error", message: `Failed to create project: ${err instanceof Error ? err.message : "Unknown error"}` });
-    } finally {
-      setCreating(false);
     }
   };
+  const creating = createProject.isPending;
 
   const handleOpen = (project: ProjectSummary) => {
     setCurrentProject(project.project_id);

@@ -1,226 +1,65 @@
 /**
  * API client for Prophet backend.
  * @spec docs/spec/06_API_SPEC.md
+ * @spec docs/spec/20_CLEAN_ARCHITECTURE_SPEC.md#4.1
+ *
+ * Thin HTTP layer — all type definitions live in types/api.ts.
  */
 
 import type { SimulationRun, StepResult } from '../types/simulation';
+import type { MemoryRecord } from '../types/api';
 import { API_VERSION_PREFIX, DEFAULT_API_BASE_URL, LS_KEY_TOKEN } from "@/config/constants";
 
-export interface CommunityConfigInput {
-  id: string;
-  name: string;
-  size: number;
-  agent_type: string;
-  personality_profile: {
-    openness: number;
-    skepticism: number;
-    trend_following: number;
-    brand_loyalty: number;
-    social_influence: number;
-  };
-}
+// Re-export API types so existing consumers don't break
+export type {
+  CommunityConfigInput,
+  CreateSimulationConfig,
+  SettingsLlm,
+  SettingsSimulation,
+  SettingsResponse,
+  SettingsUpdateRequest,
+  AgentSummary,
+  AgentDetail,
+  MemoryRecord,
+  ProjectSummary,
+  ScenarioInfo,
+  ProjectDetail,
+  CommunityInfo,
+  CommunityOpinion,
+  CommunityOpinionTheme,
+  CommunityOpinionDivision,
+  CommunityOpinionKeyQuote,
+  OverallOpinion,
+  ThreadSummary,
+  ThreadMessage,
+  ThreadDetail,
+  CommunityTemplate,
+  CommunityTemplateInput,
+  RunAllReport,
+  CytoscapeGraph,
+  NetworkMetrics,
+} from '../types/api';
 
-export interface CreateSimulationConfig {
-  name: string;
-  description?: string;
-  project_id?: string;
-  campaign: {
-    name: string;
-    budget?: number;
-    channels: string[];
-    message: string;
-    target_communities: string[];
-    controversy?: number;
-    novelty?: number;
-    utility?: number;
-  };
-  communities?: CommunityConfigInput[];
-  max_steps?: number;
-  default_llm_provider?: string;
-  random_seed?: number;
-  slm_llm_ratio?: number;
-  slm_model?: string;
-  budget_usd?: number;
-}
-
-/** Settings response from GET /api/v1/settings. @spec docs/spec/06_API_SPEC.md#7-settings-endpoints */
-export interface SettingsLlm {
-  default_provider: string;
-  ollama_base_url: string;
-  ollama_default_model: string;
-  slm_model: string;
-  ollama_embed_model: string;
-  anthropic_model: string;
-  anthropic_api_key_set: boolean;
-  openai_model: string;
-  openai_api_key_set: boolean;
-}
-
-export interface SettingsSimulation {
-  slm_llm_ratio: number;
-  llm_tier3_ratio: number;
-  llm_cache_ttl: number;
-}
-
-export interface SettingsResponse {
-  llm: SettingsLlm;
-  simulation: SettingsSimulation;
-}
-
-export interface SettingsUpdateRequest {
-  llm?: Partial<{
-    default_provider: string;
-    ollama_base_url: string;
-    ollama_default_model: string;
-    slm_model: string;
-    ollama_embed_model: string;
-    anthropic_api_key: string;
-    anthropic_model: string;
-    openai_api_key: string;
-    openai_model: string;
-  }>;
-  simulation?: Partial<SettingsSimulation>;
-}
-
-/** Agent summary from list endpoint. @spec docs/spec/06_API_SPEC.md#get-agents */
-export interface AgentSummary {
-  agent_id: string;
-  community_id: string;
-  agent_type: string;
-  action: string;
-  adopted: boolean;
-  influence_score: number;
-  belief: number;
-}
-
-/** Full agent detail. @spec docs/spec/06_API_SPEC.md#get-agents-agent_id */
-export interface AgentDetail extends AgentSummary {
-  personality: Record<string, number>;
-  emotion: Record<string, number>;
-  memories: MemoryRecord[];
-}
-
-/** Agent memory record. */
-export interface MemoryRecord {
-  memory_type: string;
-  content: string;
-  timestamp: number;
-  importance: number;
-  source_agent_id?: string;
-}
-
-/** Project summary from list endpoint. @spec docs/spec/06_API_SPEC.md#project-endpoints */
-export interface ProjectSummary {
-  project_id: string;
-  name: string;
-  description: string;
-  status: string;
-  scenario_count: number;
-  created_at: string | null;
-}
-
-/** Scenario info. @spec docs/spec/06_API_SPEC.md#project-endpoints */
-export interface ScenarioInfo {
-  scenario_id: string;
-  name: string;
-  description: string;
-  status: string;
-  simulation_id: string | null;
-  config: Record<string, unknown>;
-  created_at: string | null;
-}
-
-/** Full project detail including scenarios. @spec docs/spec/06_API_SPEC.md#project-endpoints */
-export interface ProjectDetail extends ProjectSummary {
-  scenarios: ScenarioInfo[];
-}
-
-/** Community info. @spec docs/spec/06_API_SPEC.md#get-communities */
-export interface CommunityInfo {
-  community_id: string;
-  name: string;
-  size: number;
-  adoption_rate: number;
-  mean_belief: number;
-  sentiment_variance: number;
-  dominant_action: string;
-}
-
-/** Thread summary. @spec docs/spec/06_API_SPEC.md#5-community-endpoints */
-export interface ThreadSummary {
-  thread_id: string;
-  topic: string;
-  participant_count: number;
-  message_count: number;
-  avg_sentiment: number;
-}
-
-/** Thread message. @spec docs/spec/06_API_SPEC.md#5-community-endpoints */
-export interface ThreadMessage {
-  message_id: string;
-  agent_id: string;
-  community_id: string;
-  stance: 'Progressive' | 'Conservative' | 'Neutral';
-  content: string;
-  reactions: { agree: number; disagree: number; nuanced: number };
-  is_reply: boolean;
-  reply_to_id: string | null;
-}
-
-/** Thread detail with messages. @spec docs/spec/06_API_SPEC.md#5-community-endpoints */
-export interface ThreadDetail extends ThreadSummary {
-  messages: ThreadMessage[];
-}
-
-/** Community template. @spec docs/spec/06_API_SPEC.md#community-template-endpoints */
-export interface CommunityTemplate {
-  template_id: string;
-  name: string;
-  agent_type: string;
-  default_size: number;
-  description: string;
-  personality_profile: Record<string, number>;
-}
-
-/** Input for creating/updating a community template. */
-export interface CommunityTemplateInput {
-  name: string;
-  agent_type: string;
-  default_size: number;
-  description?: string;
-  personality_profile?: Record<string, number>;
-}
-
-/** Report returned by POST /simulations/{id}/run-all. @spec docs/spec/06_API_SPEC.md#post-simulationssimulation_idrun-all */
-export interface RunAllReport {
-  simulation_id: string;
-  status: string;
-  total_steps: number;
-  final_adoption_rate: number;
-  final_mean_sentiment: number;
-  community_summary: Array<Record<string, unknown>>;
-  emergent_events_count: number;
-  duration_ms: number;
-}
-
-/** Cytoscape graph format. @spec docs/spec/06_API_SPEC.md#get-network */
-export interface CytoscapeGraph {
-  nodes: Array<{ data: Record<string, unknown> }>;
-  edges: Array<{ data: Record<string, unknown> }>;
-  /** Populated when ?summary=true is requested — empty nodes/edges + counts. */
-  total_nodes?: number;
-  total_edges?: number;
-}
-
-/** Network metrics. @spec docs/spec/06_API_SPEC.md#get-network-metrics */
-export interface NetworkMetrics {
-  clustering_coefficient: number;
-  avg_path_length: number;
-  modularity: number;
-  density: number;
-  total_nodes: number;
-  total_edges: number;
-}
+import type {
+  CreateSimulationConfig,
+  SettingsResponse,
+  SettingsUpdateRequest,
+  AgentSummary,
+  AgentDetail,
+  ProjectSummary,
+  ProjectDetail,
+  ScenarioInfo,
+  CommunityInfo,
+  CommunityOpinion,
+  OverallOpinion,
+  ThreadSummary,
+  ThreadDetail,
+  CommunityTemplate,
+  CommunityTemplateInput,
+  RunAllReport,
+  CytoscapeGraph,
+  NetworkMetrics,
+} from '../types/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}${API_VERSION_PREFIX}`
@@ -259,12 +98,6 @@ export const apiClient = {
       request<{ replay_id: string; from_step: number }>(`/simulations/${id}/replay/${step}`, { method: "POST" }),
     compare: (id: string, otherId: string) =>
       request<Record<string, unknown>>(`/simulations/${id}/compare/${otherId}`),
-    monteCarlo: (id: string, opts: { n_runs: number; llm_enabled?: boolean }) =>
-      request<{ job_id: string }>(`/simulations/${id}/monte-carlo`, { method: "POST", body: JSON.stringify(opts) }),
-    getMonteCarloJob: (id: string, jobId: string) =>
-      request<Record<string, unknown>>(`/simulations/${id}/monte-carlo/${jobId}`),
-    getLatestMonteCarlo: (id: string) =>
-      request<Record<string, unknown> | null>(`/simulations/${id}/monte-carlo`),
     engineControl: (id: string, body: { slm_llm_ratio: number; slm_model?: string; budget_usd?: number }) =>
       request<Record<string, unknown>>(`/simulations/${id}/engine-control`, { method: "POST", body: JSON.stringify(body) }),
     runAll: (id: string) =>
@@ -308,6 +141,27 @@ export const apiClient = {
       request<{ threads: ThreadSummary[] }>(`/simulations/${simId}/communities/${communityId}/threads`),
     get: (simId: string, communityId: string, threadId: string) =>
       request<ThreadDetail>(`/simulations/${simId}/communities/${communityId}/threads/${threadId}`),
+  },
+  communityOpinion: {
+    /**
+     * Synthesize (or return cached) EliteLLM narrative for a community.
+     * @spec docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+     */
+    synthesize: (simId: string, communityId: string) =>
+      request<CommunityOpinion>(
+        `/simulations/${simId}/communities/${communityId}/opinion-summary`,
+        { method: "POST" },
+      ),
+    /**
+     * Synthesize (or return cached) cross-community EliteLLM narrative.
+     * Returns the aggregate plus per-community snapshots that fed it.
+     * @spec docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+     */
+    synthesizeOverall: (simId: string) =>
+      request<OverallOpinion>(
+        `/simulations/${simId}/communities/__overall__/opinion-summary`,
+        { method: "POST" },
+      ),
   },
   communityTemplates: {
     list: () => request<{ templates: CommunityTemplate[] }>("/communities/templates/"),

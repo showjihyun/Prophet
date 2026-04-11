@@ -6,7 +6,7 @@
  * @spec docs/spec/ui/UI_05_GLOBAL_METRICS.md
  */
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { useSimulationStore } from '@/store/simulationStore';
@@ -39,6 +39,12 @@ vi.mock('@/api/client', () => ({
       getSteps: vi.fn().mockResolvedValue([]),
       export: vi.fn(),
     },
+    llm: {
+      getStats: vi.fn().mockResolvedValue({
+        total_calls: 100,
+        tier_breakdown: { '1': 60, '2': 30, '3': 10 },
+      }),
+    },
   },
 }));
 
@@ -66,6 +72,7 @@ const MOCK_SIMULATION = {
   simulation_id: 'sim-metrics-001',
   project_id: 'proj-001',
   scenario_id: 'scen-001',
+  name: 'Global Metrics Test',
   status: 'completed' as const,
   current_step: 1,
   max_steps: 365,

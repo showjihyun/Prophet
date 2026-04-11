@@ -21,9 +21,9 @@ vi.mock('@/api/client', () => ({
         llm: {
           default_provider: 'ollama',
           ollama_base_url: 'http://localhost:11434',
-          ollama_default_model: 'llama3.1:8b',
-          slm_model: 'llama3.1:8b',
-          ollama_embed_model: 'llama3.1:8b',
+          ollama_default_model: 'llama3.2:1b',
+          slm_model: 'llama3.2:1b',
+          ollama_embed_model: 'llama3.2:1b',
           anthropic_model: 'claude-sonnet-4-6',
           anthropic_api_key_set: false,
           openai_model: 'gpt-4o',

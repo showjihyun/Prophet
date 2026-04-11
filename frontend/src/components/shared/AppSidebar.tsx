@@ -74,7 +74,9 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
       return currentPath === "/projects" || currentPath.startsWith("/projects/");
     }
     if (href === "/simulation") {
-      return currentPath === "/simulation";
+      // Highlight the Simulation menu for both the list page and any
+      // /simulation/:id detail page.
+      return currentPath === "/simulation" || currentPath.startsWith("/simulation/");
     }
     return currentPath === href;
   }

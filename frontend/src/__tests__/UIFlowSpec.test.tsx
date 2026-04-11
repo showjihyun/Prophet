@@ -6,9 +6,9 @@
  * Tests verify user journey flows across pages and components.
  * Covers FLOW-01 through FLOW-29 at the integration level.
  */
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -20,13 +20,6 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@/hooks/useSimulationSocket', () => ({
   useSimulationSocket: () => ({ lastMessage: null }),
-}));
-
-vi.mock('@/hooks/useSimulationData', () => ({
-  useSimulationData: () => ({
-    llmStats: null,
-    refreshLlmStats: vi.fn(),
-  }),
 }));
 
 const mockApiClient = {
@@ -247,20 +240,6 @@ describe('FLOW-15: WebSocket Configuration', () => {
   });
 });
 
-// ── FLOW-20: Monte Carlo Configuration ─────────────────────────────────────
-
-describe('FLOW-20: Monte Carlo Configuration', () => {
-  /** @spec UI_FLOW_SPEC.md#flow-20 */
-
-  it('should have valid run range constants', async () => {
-    const constants = await import('@/config/constants');
-    expect(constants.MONTE_CARLO_MIN_RUNS).toBe(10);
-    expect(constants.MONTE_CARLO_MAX_RUNS).toBe(500);
-    expect(constants.DEFAULT_MONTE_CARLO_RUNS).toBe(100);
-    expect(constants.MONTE_CARLO_POLL_INTERVAL_MS).toBe(2000);
-  });
-});
-
 // ── FLOW-22: Community Palette Consistency ──────────────────────────────────
 
 describe('FLOW-22: Community Palette', () => {
@@ -321,7 +300,7 @@ describe('FLOW-29: Settings Defaults', () => {
   it('should have correct default LLM settings', async () => {
     const constants = await import('@/config/constants');
     expect(constants.DEFAULT_LLM_PROVIDER).toBe('ollama');
-    expect(constants.DEFAULT_OLLAMA_MODEL).toBe('llama3.1:8b');
+    expect(constants.DEFAULT_OLLAMA_MODEL).toBe('llama3.2:1b');
     expect(constants.DEFAULT_ANTHROPIC_MODEL).toBe('claude-sonnet-4-6');
     expect(constants.DEFAULT_OPENAI_MODEL).toBe('gpt-4o');
     expect(constants.DEFAULT_LLM_CACHE_TTL_SECONDS).toBe(3600);

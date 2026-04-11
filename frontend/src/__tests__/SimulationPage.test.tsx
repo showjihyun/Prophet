@@ -55,6 +55,7 @@ const MOCK_SIMULATION = {
   simulation_id: 'sim-test-001',
   project_id: 'proj-001',
   scenario_id: 'scen-001',
+  name: 'Simulation Page Test',
   status: 'running' as const,
   current_step: 5,
   max_steps: 365,
@@ -86,13 +87,14 @@ describe('SimulationPage', () => {
     expect(screen.getByTestId('control-panel')).toBeInTheDocument();
   });
 
-  it('renders graph panel', () => {
+  it('renders graph panel', async () => {
+    // GraphPanel is lazy-loaded; await Suspense resolution
     render(
       <MemoryRouter>
         <SimulationPage />
       </MemoryRouter>,
     );
-    expect(screen.getByTestId('graph-panel')).toBeInTheDocument();
+    expect(await screen.findByTestId('graph-panel')).toBeInTheDocument();
   });
 
   it('renders timeline panel', () => {

@@ -7,16 +7,13 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.api import deps as _deps_mod
-from app.api import simulations as _sim_mod
 
 
 @pytest.fixture(autouse=True)
 def _reset_store():
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
     yield
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
 
 
 def _valid_create_body() -> dict:
@@ -106,10 +103,11 @@ class TestPatchAgent:
 class TestAgentMemory:
     """SPEC: 06_API_SPEC.md#get-simulationssimulation_idagentsagent_idmemory"""
 
-    async def test_memory_200(self, client: AsyncClient, sim_id: str):
+    async def test_memory_404_for_unknown_agent(self, client: AsyncClient, sim_id: str):
+        # A nonexistent agent id must return 404 — the old behaviour of
+        # returning `200 {memories: []}` was a silent failure that hid
+        # real bugs behind an empty list.
         resp = await client.get(
             f"/api/v1/simulations/{sim_id}/agents/fake-id/memory"
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "memories" in data
+        assert resp.status_code == 404

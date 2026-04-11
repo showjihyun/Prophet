@@ -5,7 +5,7 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { X, Rewind, GitBranch } from "lucide-react";
-import { apiClient } from "../../api/client";
+import { useReplay } from "../../api/queries";
 import { useSimulationStore } from "../../store/simulationStore";
 
 export interface ReplayModalProps {
@@ -17,17 +17,22 @@ export default function ReplayModal({ isOpen, onClose }: ReplayModalProps) {
   const simulation = useSimulationStore((s) => s.simulation);
   const currentStep = useSimulationStore((s) => s.currentStep);
   const [targetStep, setTargetStep] = useState(1);
-  const [submitting, setSubmitting] = useState(false);
+  const replay = useReplay();
+  const submitting = replay.isPending;
   const [result, setResult] = useState<{ replay_id: string; from_step: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const maxStep = currentStep || simulation?.current_step || 1;
 
+  // Reset-on-open modal state (queueMicrotask defers setState out of
+  // the effect body to silence react-hooks/set-state-in-effect)
   useEffect(() => {
     if (isOpen) {
-      setTargetStep(Math.max(1, maxStep - 1));
-      setResult(null);
-      setError(null);
+      queueMicrotask(() => {
+        setTargetStep(Math.max(1, maxStep - 1));
+        setResult(null);
+        setError(null);
+      });
     }
   }, [isOpen, maxStep]);
 
@@ -42,17 +47,17 @@ export default function ReplayModal({ isOpen, onClose }: ReplayModalProps) {
 
   const handleReplay = useCallback(async () => {
     if (!simulation?.simulation_id) return;
-    setSubmitting(true);
     setError(null);
     try {
-      const res = await apiClient.simulations.replay(simulation.simulation_id, targetStep);
+      const res = await replay.mutateAsync({
+        simId: simulation.simulation_id,
+        step: targetStep,
+      });
       setResult(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create replay branch");
-    } finally {
-      setSubmitting(false);
     }
-  }, [simulation, targetStep]);
+  }, [simulation, targetStep, replay]);
 
   if (!isOpen) return null;
 

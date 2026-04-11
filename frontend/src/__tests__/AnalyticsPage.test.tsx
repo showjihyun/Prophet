@@ -283,16 +283,6 @@ describe('AnalyticsPage (07_FRONTEND_SPEC)', () => {
       );
     });
 
-    it('renders Monte Carlo Results section', async () => {
-      useSimulationStore.setState({
-        simulation: MOCK_SIMULATION as any,
-        steps: MOCK_STEPS as any,
-      });
-      renderPage();
-      await waitFor(() =>
-        expect(screen.getByText('Monte Carlo Results')).toBeInTheDocument(),
-      );
-    });
   });
 
   /** @spec 07_FRONTEND_SPEC.md#analytics-emergent-events */

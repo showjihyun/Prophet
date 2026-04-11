@@ -36,10 +36,16 @@ class CognitionResult:
     tier_used: int
 
 
-def _map_score_to_action(score: float) -> AgentAction:
-    """Score-to-Action Mapping from SPEC.
+def _map_score_to_action(score: float, noise: float = 0.0) -> AgentAction:
+    """Score-to-Action Mapping with optional stochastic jitter.
 
     SPEC: docs/spec/01_AGENT_SPEC.md#layer-4-cognitionlayer
+    SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md — cognition A-
+
+    Args:
+        noise: Random jitter added to score before threshold lookup.
+               For Tier 1, pass ±0.05 seeded noise for heterogeneity.
+               Default 0.0 preserves backward compatibility.
 
       [-2.0, -1.0)  -> MUTE
       [-1.0, -0.5)  -> IGNORE
@@ -50,19 +56,20 @@ def _map_score_to_action(score: float) -> AgentAction:
       [ 0.6,  0.8)  -> SHARE
       [ 0.8,  2.0]  -> ADOPT
     """
-    if score < -1.0:
+    s = score + noise
+    if s < -1.0:
         return AgentAction.MUTE
-    elif score < -0.5:
+    elif s < -0.5:
         return AgentAction.IGNORE
-    elif score < 0.0:
+    elif s < 0.0:
         return AgentAction.VIEW
-    elif score < 0.3:
+    elif s < 0.3:
         return AgentAction.LIKE
-    elif score < 0.5:
+    elif s < 0.5:
         return AgentAction.SAVE
-    elif score < 0.6:
+    elif s < 0.6:
         return AgentAction.COMMENT
-    elif score < 0.8:
+    elif s < 0.8:
         return AgentAction.SHARE
     else:
         return AgentAction.ADOPT
@@ -145,7 +152,12 @@ class CognitionLayer:
         confidence = abs(evaluation) / 2.0
         confidence = max(0.0, min(1.0, confidence))
 
-        recommended_action = _map_score_to_action(evaluation)
+        # Tier 1/2: add deterministic per-agent noise for heterogeneity
+        # Seeded from agent_id hash so same agent always gets same jitter
+        import random as _rng_mod
+        _noise_rng = _rng_mod.Random(hash(agent.agent_id) ^ agent.step)
+        noise = _noise_rng.uniform(-0.05, 0.05)
+        recommended_action = _map_score_to_action(evaluation, noise=noise)
 
         return CognitionResult(
             evaluation_score=evaluation,

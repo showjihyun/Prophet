@@ -3,10 +3,9 @@
  * @spec docs/spec/06_API_SPEC.md#get-simulationssimulation_idcompareother_simulation_id
  * @spec docs/spec/07_FRONTEND_SPEC.md#scenario-comparison
  */
-import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Trophy, TrendingUp, Users, MessageSquare, BarChart3 } from "lucide-react";
-import { apiClient } from "../api/client";
+import { useSimulationCompare } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 
 interface ComparisonData {
@@ -25,45 +24,28 @@ interface ComparisonData {
   };
 }
 
-/** Internal fetch state to avoid synchronous setState in effects. */
-type FetchState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "success"; data: ComparisonData };
-
 export default function ComparisonPage() {
   const { otherId } = useParams<{ otherId: string }>();
   const navigate = useNavigate();
   const simulation = useSimulationStore((s) => s.simulation);
-  const [fetchState, setFetchState] = useState<FetchState>({ status: "loading" });
-
   const simulationId = simulation?.simulation_id ?? null;
 
   // Derive error when required params are missing (pure derivation, no effect needed).
-  // When simulationId is absent at render time we can show the error immediately
-  // without any effect-based setState.
   const missingError = !simulationId
     ? "No active simulation. Go back and select one."
     : null;
 
-  useEffect(() => {
-    if (!simulationId || !otherId) return;
-    // State is already "loading" from initialization; only update on resolution.
-    apiClient.simulations
-      .compare(simulationId, otherId)
-      .then((res) => setFetchState({ status: "success", data: res as ComparisonData }))
-      .catch((err) =>
-        setFetchState({
-          status: "error",
-          message: err instanceof Error ? err.message : "Failed to load comparison",
-        })
-      );
-  }, [simulationId, otherId]);
-
-  const loading = !missingError && fetchState.status === "loading";
-  const error = missingError ?? (fetchState.status === "error" ? fetchState.message : null);
-  const data = fetchState.status === "success" ? fetchState.data : null;
+  // TanStack Query — cached comparison result, instant on revisit.
+  const compareQuery = useSimulationCompare(simulationId, otherId ?? null);
+  const loading = !missingError && compareQuery.isLoading;
+  const error =
+    missingError ??
+    (compareQuery.error
+      ? compareQuery.error instanceof Error
+        ? compareQuery.error.message
+        : "Failed to load comparison"
+      : null);
+  const data = (compareQuery.data as ComparisonData | undefined) ?? null;
 
   const simIdA = simulation?.simulation_id ?? "—";
   const simIdB = otherId ?? "—";

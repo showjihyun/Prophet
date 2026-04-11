@@ -1,11 +1,33 @@
 """Layer 5: Decision — converts cognition results into probabilistic action selection.
+
 SPEC: docs/spec/01_AGENT_SPEC.md#layer-5-decisionlayer
+SPEC: docs/spec/26_DIFFUSION_CALIBRATION_SPEC.md (Round 7-c)
+
+Round 7-c calibration: previously this layer used a hard
+``personality.skepticism > 0.7`` threshold to apply skeptic penalties,
+which meant agents at 0.69 vs 0.71 had wildly different behavior. Combined
+with agent jitter (±0.15) at instantiation, this caused community-level
+differentiation to wash out — all communities converged to the same
+adoption trajectory regardless of their declared personality_profile.
+
+The new model:
+  1. Graduated skepticism penalty (no hard threshold) — penalty grows
+     linearly with the trait value, so a community averaging 0.85
+     consistently gets a stronger headwind than one averaging 0.45.
+  2. ``agent_type`` multipliers — SKEPTIC and EARLY_ADOPTER now have
+     direct, type-level biases on positive actions, on top of the
+     personality-driven graduated penalty.
 """
 import math
 import random as stdlib_random
 from uuid import UUID
 
-from app.engine.agent.schema import AgentAction, AgentPersonality, ACTION_WEIGHT
+from app.engine.agent.schema import (
+    AgentAction,
+    AgentPersonality,
+    AgentType,
+    ACTION_WEIGHT,
+)
 from app.engine.agent.cognition import CognitionResult
 from app.engine.agent.perception import NeighborAction
 
@@ -18,6 +40,21 @@ _POSITIVE_ACTIONS = {
     AgentAction.LIKE, AgentAction.SAVE, AgentAction.COMMENT,
     AgentAction.SHARE, AgentAction.REPOST, AgentAction.ADOPT,
     AgentAction.FOLLOW, AgentAction.SEARCH,
+}
+
+# Round 7-c: per-agent-type multipliers on positive actions.
+#
+# These act in addition to the graduated personality penalties below.
+# A SKEPTIC with low personality.skepticism still gets the type penalty;
+# an EARLY_ADOPTER with low personality.openness still gets the type boost.
+# This is what gives community-level diffusion the dramatic differentiation
+# that was missing pre-Round 7.
+_AGENT_TYPE_POSITIVE_MULTIPLIER: dict[AgentType, float] = {
+    AgentType.SKEPTIC:        0.55,   # ~45% headwind on positive actions
+    AgentType.CONSUMER:       1.00,   # baseline
+    AgentType.EARLY_ADOPTER:  1.45,   # ~45% tailwind
+    AgentType.INFLUENCER:     1.30,   # ~30% tailwind
+    AgentType.EXPERT:         0.90,   # slightly cautious
 }
 
 
@@ -40,10 +77,17 @@ class DecisionLayer:
         social_pressure: float,
         personality: AgentPersonality,
         agent_seed: int,
+        agent_type: AgentType | None = None,
     ) -> AgentAction:
         """Selects an action via softmax sampling.
 
         SPEC: docs/spec/01_AGENT_SPEC.md#layer-5-decisionlayer
+        SPEC: docs/spec/26_DIFFUSION_CALIBRATION_SPEC.md (Round 7-c)
+
+        :param agent_type: optional — when provided, applies type-level
+            multipliers (skeptic headwind, early-adopter tailwind, etc.)
+            on top of personality-driven graduated penalties. Old callers
+            that pass only personality keep working with neutral baseline.
 
         Determinism: Deterministic for same seed + inputs.
         Side Effects: None.
@@ -81,20 +125,44 @@ class DecisionLayer:
             action_scores[AgentAction.IGNORE] += abs(social_pressure) * 0.3
             action_scores[AgentAction.MUTE] += abs(social_pressure) * 0.2
 
-        # Step 3: Apply personality modifiers
+        # Step 3: Apply personality modifiers.
+        #
+        # Round 7-c: replaced hard ``> 0.7`` thresholds with graduated
+        # responses so personality drift across communities (configured
+        # via personality_profile) actually flows through to behavior.
         if personality.openness > 0.7:
             action_scores[AgentAction.SEARCH] *= 1.5
         if personality.trend_following > 0.7:
             action_scores[AgentAction.SHARE] *= 1.5
             action_scores[AgentAction.REPOST] *= 1.5
-        if personality.skepticism > 0.7:
-            action_scores[AgentAction.MUTE] *= 1.5
-            action_scores[AgentAction.IGNORE] *= 1.5
-            # High skepticism also penalizes positive actions
+
+        # Graduated skepticism penalty: scales linearly from 0 (when
+        # skepticism=0.5, baseline) to a strong headwind (when
+        # skepticism=1.0). Below 0.5 there is no penalty.
+        skep_excess = max(0.0, personality.skepticism - 0.5)
+        if skep_excess > 0:
+            mute_boost = 1.0 + skep_excess * 1.4    # up to 1.7x
+            ignore_boost = 1.0 + skep_excess * 1.6  # up to 1.8x
+            action_scores[AgentAction.MUTE] *= mute_boost
+            action_scores[AgentAction.IGNORE] *= ignore_boost
+            # Strong, graduated penalty on positive actions.
+            penalty = personality.skepticism * 1.4  # up to 1.4 absolute hit
             for action in _POSITIVE_ACTIONS:
-                action_scores[action] -= personality.skepticism * 0.5
+                action_scores[action] -= penalty
+
         if personality.brand_loyalty > 0.7:
             action_scores[AgentAction.ADOPT] *= 1.3
+
+        # Step 3b — Round 7-c: per-agent-type multiplier on positive actions.
+        # This is what produces community-level differentiation: a SKEPTIC
+        # community has a structural headwind on adoption that no amount
+        # of social pressure can fully overcome, while an EARLY_ADOPTER
+        # community gets a tailwind that pushes them through.
+        if agent_type is not None:
+            type_mult = _AGENT_TYPE_POSITIVE_MULTIPLIER.get(agent_type, 1.0)
+            if type_mult != 1.0:
+                for action in _POSITIVE_ACTIONS:
+                    action_scores[action] *= type_mult
 
         # Step 4: Softmax over all action scores
         # Use temperature to control distribution sharpness

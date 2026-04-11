@@ -1,1048 +1,552 @@
 /**
- * GraphPanel — AI Social World Graph Engine (Zone 2 Center).
+ * GraphPanel — 3D AI Social World Graph Engine (Zone 2 Center).
+ *
+ * @spec docs/spec/07_FRONTEND_SPEC.md#graph-panel-3d-rendering
  * @spec docs/spec/ui/UI_01_SIMULATION_MAIN.md#zone-2-center-ai-social-world-graph-engine
- * @spec docs/spec/ui/DESIGN.md#5-graph-engine-visual-spec
  *
- * Cytoscape.js canvas renderer with force-directed layout,
- * community-colored nodes, and interactive selection.
+ * WebGL / three.js renderer via react-force-graph-3d. Replaces the prior
+ * 2D Cytoscape canvas entirely.
  *
- * Performance optimizations (GAP-5, 10K agent target):
- *  - textureOnViewport, hideEdgesOnViewport, motionBlur, pixelRatio:1
- *  - LOD zoom-based label/edge visibility
- *  - cy.batch() for step-result updates
- *  - Edge opacity reduction + non-bridge hiding at node count > 2000
- *  - Real FPS counter via requestAnimationFrame
+ * Controls:
+ *   - Left-drag: orbit (rotate around center)
+ *   - Scroll:    zoom in / out
+ *   - Right-drag: pan
+ *
+ * Color contract: both nodes AND edges use the community palette from
+ * `@/config/constants#COMMUNITIES` (the same palette the left-side
+ * Communities legend uses). Intra-community edges take the source node's
+ * community color; cross-community/bridge edges fall back to a neutral
+ * muted gray so they read as connective tissue, not belonging to either
+ * community.
+ *
+ * Performance contract (1k-5k agents):
+ *   - Built-in instanced sphere renderer — NO `nodeThreeObject` callback,
+ *     which would create one three.js Mesh per node and stall zoom/pan.
+ *     The library batches nodes into a single InstancedMesh draw call.
+ *   - `nodeResolution` scales down for large graphs (fewer triangles per
+ *     sphere). 2k+ nodes drops to 4 segments.
+ *   - `linkDirectionalParticles` disabled entirely when the graph has
+ *     more than ~200 edges — particle animation is the biggest per-frame
+ *     cost and is pure visual fluff.
+ *   - Per-step adoption highlight mutates a ref + calls `refresh()`; the
+ *     force simulation does not restart on every simulation step.
+ *   - `cooldownTicks` + `d3AlphaDecay` force physics to settle quickly
+ *     and stop — once stopped, zoom/pan is pure GPU work.
+ *   - `rendererConfig.antialias` is off for large graphs (largest single
+ *     win on integrated GPUs).
  */
-import { useEffect, useRef, useCallback, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import cytoscape, { type Core, type EventObject } from "cytoscape";
-import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
-import { apiClient, type CytoscapeGraph } from "../../api/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
+import { type CytoscapeGraph } from "../../api/client";
+import { useNetwork } from "../../api/queries";
 import { useSimulationStore } from "../../store/simulationStore";
 import { COMMUNITIES } from "@/config/constants";
+import type { PropagationPair } from "@/types/simulation";
+import {
+  getAnimationTier,
+  TIER_LIMITS,
+  buildAgentIdToNodeId,
+  buildActivePropLinks,
+  type AnimationTier,
+} from "./propagationAnimationUtils";
+import GraphLegend from "./GraphLegend";
+import ZoomTierBadge from "./ZoomTierBadge";
 
-// ---------------------------------------------------------------------------
-// Cascade shader animation CSS (injected once at module load).
-// GAP-6: pulse/ripple/glow effects for viral cascade events.
-// Cytoscape canvas does not support CSS on canvas nodes, so node/edge
-// animation uses Cytoscape's animate() API; CSS keyframes only affect DOM
-// overlay elements (the cascade badge glow ring).
-// ---------------------------------------------------------------------------
-const CASCADE_STYLE_ID = "mcasp-cascade-style";
-if (typeof document !== "undefined" && !document.getElementById(CASCADE_STYLE_ID)) {
-  const _cascadeStyleEl = document.createElement("style");
-  _cascadeStyleEl.id = CASCADE_STYLE_ID;
-  _cascadeStyleEl.textContent = `
-    @keyframes cascade-badge-glow {
-      0%,100% { box-shadow: 0 0 0 0 rgba(250,204,21,0); }
-      50%      { box-shadow: 0 0 20px 8px rgba(250,204,21,0.55); }
-    }
-    .cascade-badge-active { animation: cascade-badge-glow 1.6s ease-in-out infinite; }
-  `;
-  document.head.appendChild(_cascadeStyleEl);
+// --------------------------------------------------------------------------- //
+// Types                                                                       //
+// --------------------------------------------------------------------------- //
+
+interface GraphNode {
+  id: string;
+  label: string;
+  /** Short community key as returned by the backend (e.g. "M", "S", "A"). */
+  community: string;
+  /** Human-readable community name from config (e.g. "mainstream"). */
+  community_name?: string;
+  agent_id?: string;
+  agent_type?: string;
+  influence_score?: number;
+  adopted?: boolean;
 }
 
-/** How long (ms) cascade highlights stay active after a new cascade event. */
-const CASCADE_TTL_MS = 8000;
-
-// ---------------------------------------------------------------------------
-// GAP-7: Propagation animation constants
-// ---------------------------------------------------------------------------
-const ACTION_COLORS: Record<string, string> = {
-  share: "#22c55e",
-  comment: "#3b82f6",
-  like: "#eab308",
-  adopt: "#a855f7",
-};
-
-type AnimationTier = "closeup" | "midrange" | "overview";
-
-function getAnimationTier(zoom: number): AnimationTier {
-  if (zoom >= 0.7) return "closeup";
-  if (zoom >= 0.3) return "midrange";
-  return "overview";
+interface GraphLink {
+  source: string | GraphNode;
+  target: string | GraphNode;
+  weight?: number;
+  edge_type?: string;
+  is_bridge?: boolean;
+  // Cached at load time so link color is O(1) without chasing the force-graph
+  // source/target reference which mutates between string -> node object.
+  _srcCommunity?: string;
 }
 
-/** Max animations per step by tier. */
-const TIER_LIMITS: Record<AnimationTier, number> = {
-  closeup: 50,
-  midrange: 30,
-  overview: 5,
-};
+interface GraphData {
+  nodes: GraphNode[];
+  links: GraphLink[];
+}
 
-const COMMUNITY_COLOR: Record<string, string> = Object.fromEntries(
+// --------------------------------------------------------------------------- //
+// Community color palette                                                     //
+// --------------------------------------------------------------------------- //
+//
+// The palette is built dynamically from the communities that actually appear
+// in the loaded graph, because the backend simulation uses whatever ids the
+// user configured (e.g. "M", "E", "S", "I" for mainstream/early_adopters/
+// skeptics/influencers). The hardcoded A/B/C/D/E list in `@/config/constants`
+// only covered a single default profile and made every real simulation fall
+// through to the gray fallback color.
+//
+// The fallback color palette is used when a community has no entry in the
+// static `COMMUNITIES` table. We rotate through it in insertion order so the
+// assignment is stable across re-renders of the same graph.
+
+const FALLBACK_COMMUNITY_PALETTE: readonly string[] = [
+  "#3b82f6", // blue
+  "#22c55e", // green
+  "#f97316", // orange
+  "#a855f7", // purple
+  "#ef4444", // red
+  "#06b6d4", // cyan
+  "#ec4899", // pink
+  "#84cc16", // lime
+  "#eab308", // yellow
+  "#14b8a6", // teal
+];
+
+const STATIC_COMMUNITY_COLOR: Record<string, string> = Object.fromEntries(
   COMMUNITIES.map((c) => [c.id, c.color]),
 );
 
-const LEGEND_ITEMS = COMMUNITIES.map((c) => ({
-  name: c.name,
-  color: c.color,
-  count: c.size.toString(),
-}));
-
-// ---------------------------------------------------------------------------
-// Mock data generator (~200 nodes, ~400 edges)
-// ---------------------------------------------------------------------------
-interface MockNode {
-  data: {
-    id: string;
-    label: string;
-    community: string;
-    agent_type: string;
-    influence_score: number;
-    adopted: boolean;
-  };
-}
-
-interface MockEdge {
-  data: {
-    id: string;
-    source: string;
-    target: string;
-    weight: number;
-    is_bridge: boolean;
-    edge_type: string;
-  };
-}
-
-function generateMockGraphData(): { nodes: MockNode[]; edges: MockEdge[] } {
-  const nodes: MockNode[] = [];
-  const edges: MockEdge[] = [];
-  const rng = mulberry32(42); // deterministic seed for stable layout
-
-  // --- Nodes ---
-  let nodeIndex = 0;
-  const communityNodeIds: Record<string, string[]> = {};
-
-  for (const community of COMMUNITIES) {
-    communityNodeIds[community.id] = [];
-    for (let i = 0; i < community.size; i++) {
-      const id = `n${nodeIndex++}`;
-      const isInfluencer = rng() < 0.1;
-      const isBridge = community.id === "E";
-      nodes.push({
-        data: {
-          id,
-          label: `Agent ${id}`,
-          community: community.id,
-          agent_type: isBridge ? "bridge" : isInfluencer ? "influencer" : "normal",
-          influence_score: isBridge ? 0.8 : isInfluencer ? rng() * 0.4 + 0.6 : rng() * 0.3,
-          adopted: rng() < 0.15,
-        },
-      });
-      communityNodeIds[community.id].push(id);
-    }
+/**
+ * Stable palette-slot assignment for communities that have no entry in the
+ * static `COMMUNITIES` table. Hashes the community id (not the insertion
+ * order) so the same community always picks the same fallback color across
+ * graph re-fetches — otherwise pagination, reseeding, or backend node-order
+ * changes would flip "mainstream" from blue to orange on refresh.
+ */
+function fallbackColorFor(communityId: string): string {
+  let h = 0;
+  for (let i = 0; i < communityId.length; i++) {
+    h = (h * 31 + communityId.charCodeAt(i)) | 0;
   }
+  return FALLBACK_COMMUNITY_PALETTE[
+    Math.abs(h) % FALLBACK_COMMUNITY_PALETTE.length
+  ];
+}
 
-  // --- Intra-community edges ---
-  let edgeIndex = 0;
-  for (const community of COMMUNITIES) {
-    const ids = communityNodeIds[community.id];
-    const targetEdges = Math.floor(ids.length * 2.5);
-    for (let i = 0; i < targetEdges; i++) {
-      const src = ids[Math.floor(rng() * ids.length)];
-      const tgt = ids[Math.floor(rng() * ids.length)];
-      if (src !== tgt) {
-        edges.push({
-          data: {
-            id: `e${edgeIndex++}`,
-            source: src,
-            target: tgt,
-            weight: rng(),
-            is_bridge: false,
-            edge_type: "intra",
-          },
-        });
-      }
-    }
+const DEFAULT_NODE_COLOR = "#64748b";
+
+/**
+ * Vertical offset applied to the left-side overlays (community legend and
+ * the full graph legend) so they don't crowd the middle of the viewport.
+ * One constant keeps the two stacked overlays moving together — if you
+ * change this, both `top-[calc(50%-…)]` and `bottom-[calc(…)]` styles
+ * stay aligned.
+ */
+const LEFT_LEGEND_OFFSET_PX = 200;
+const ADOPTED_GLOW_COLOR = "#22c55e";
+const HIGHLIGHT_DIM_COLOR = "#1e293b";
+
+// Neutral bridge/inter-community edge color. Muted so it reads as connective
+// tissue and does not compete with the community hues.
+const BRIDGE_EDGE_COLOR = "rgba(148,163,184,0.35)";
+const INTER_EDGE_COLOR = "rgba(148,163,184,0.15)";
+
+/**
+ * Convert a hex color (`#rrggbb`) to `rgba(r,g,b,alpha)`.
+ * Used so intra-community edges reuse the community color at reduced alpha.
+ */
+function hexToRgba(hex: string, alpha: number): string {
+  if (!hex.startsWith("#") || hex.length !== 7) {
+    return `rgba(100,116,139,${alpha})`;
   }
-
-  // --- Inter-community edges (sparse) ---
-  const allCommunityKeys = Object.keys(communityNodeIds);
-  for (let i = 0; i < 30; i++) {
-    const c1 = allCommunityKeys[Math.floor(rng() * allCommunityKeys.length)];
-    let c2 = allCommunityKeys[Math.floor(rng() * allCommunityKeys.length)];
-    if (c1 === c2) c2 = allCommunityKeys[(allCommunityKeys.indexOf(c1) + 1) % allCommunityKeys.length];
-    const ids1 = communityNodeIds[c1];
-    const ids2 = communityNodeIds[c2];
-    const src = ids1[Math.floor(rng() * ids1.length)];
-    const tgt = ids2[Math.floor(rng() * ids2.length)];
-    edges.push({
-      data: {
-        id: `e${edgeIndex++}`,
-        source: src,
-        target: tgt,
-        weight: rng() * 0.5,
-        is_bridge: c1 === "E" || c2 === "E",
-        edge_type: c1 === "E" || c2 === "E" ? "bridge" : "inter",
-      },
-    });
-  }
-
-  return { nodes, edges };
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** Deterministic PRNG (Mulberry32) for reproducible mock data. */
-function mulberry32(seed: number): () => number {
-  let s = seed | 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+// --------------------------------------------------------------------------- //
+// Data transform: API Cytoscape format -> force-graph format                  //
+// --------------------------------------------------------------------------- //
+
+function cytoscapeToForceGraph(api: CytoscapeGraph): GraphData {
+  const nodes: GraphNode[] = api.nodes.map((n) => {
+    const d = n.data as Record<string, unknown>;
+    return {
+      id: String(d.id ?? ""),
+      label: String(d.label ?? ""),
+      community: String(d.community ?? ""),
+      community_name: d.community_name as string | undefined,
+      agent_id: d.agent_id as string | undefined,
+      agent_type: d.agent_type as string | undefined,
+      influence_score: d.influence_score as number | undefined,
+      adopted: Boolean(d.adopted),
+    };
+  });
+
+  // Build id -> community lookup so we can stamp each link with its source
+  // community once up-front. force-graph mutates `link.source` from a string
+  // id into the actual node object later; caching the community avoids
+  // branching on that every frame inside the color callback.
+  const communityById: Record<string, string> = {};
+  for (const n of nodes) communityById[n.id] = n.community;
+
+  const links: GraphLink[] = api.edges.map((e) => {
+    const d = e.data as Record<string, unknown>;
+    const srcId = String(d.source ?? "");
+    return {
+      source: srcId,
+      target: String(d.target ?? ""),
+      weight: d.weight as number | undefined,
+      edge_type: d.edge_type as string | undefined,
+      is_bridge: Boolean(d.is_bridge),
+      _srcCommunity: communityById[srcId],
+    };
+  });
+  return { nodes, links };
 }
 
-// ---------------------------------------------------------------------------
-// Cytoscape style sheet (per DESIGN.md §5)
-// ---------------------------------------------------------------------------
-function nodeColor(ele: cytoscape.NodeSingular): string {
-  const community = ele.data("community") as string;
-  return COMMUNITY_COLOR[community] ?? "#888888";
-}
+// --------------------------------------------------------------------------- //
+// Component                                                                   //
+// --------------------------------------------------------------------------- //
 
-const CY_STYLE: cytoscape.Stylesheet[] = [
-  // -- Default node --
-  {
-    selector: "node",
-    style: {
-      width: 5,
-      height: 5,
-      "background-color": nodeColor as unknown as string,
-      label: "",
-      "border-width": 0,
-      "overlay-opacity": 0,
-    },
-  },
-  // -- Influencer (glow via underlay) --
-  {
-    selector: 'node[agent_type = "influencer"]',
-    style: {
-      width: 10,
-      height: 10,
-      "underlay-color": nodeColor as unknown as string,
-      "underlay-padding": 4,
-      "underlay-opacity": 0.3,
-      "underlay-shape": "ellipse",
-    },
-  },
-  // -- Bridge node (red glow via underlay) --
-  {
-    selector: 'node[agent_type = "bridge"]',
-    style: {
-      width: 7,
-      height: 7,
-      "background-color": "#ef4444",
-      "underlay-color": "#ef4444",
-      "underlay-padding": 4,
-      "underlay-opacity": 0.25,
-      "underlay-shape": "ellipse",
-    },
-  },
-  // -- Selected node (green ring via border + underlay) --
-  {
-    selector: "node:selected",
-    style: {
-      width: 20,
-      height: 20,
-      "border-width": 3,
-      "border-color": "#ffffff",
-      "underlay-color": "#22c55e",
-      "underlay-padding": 8,
-      "underlay-opacity": 0.4,
-      "underlay-shape": "ellipse",
-      label: "data(label)",
-      "font-size": 8,
-      color: "#ffffff",
-      "text-valign": "top",
-      "text-margin-y": -6,
-    },
-  },
-  // -- Adopted node (faint pulse indicator) --
-  {
-    selector: "node[adopted]",
-    style: {
-      "border-width": 1,
-      "border-color": "#22c55e",
-    },
-  },
-  // -- Live adopted node (updated per simulation step) --
-  {
-    selector: ".adopted-live",
-    style: {
-      "border-width": 2,
-      "border-color": "#22c55e",
-      width: 8,
-      height: 8,
-    },
-  },
-  // -- Cascade: nodes involved in viral cascade (pulsing golden border) --
-  {
-    selector: ".cascade-node",
-    style: {
-      "border-width": 2,
-      "border-color": "#facc15",
-      "underlay-color": "#facc15",
-      "underlay-padding": 3,
-      "underlay-opacity": 0.2,
-      "underlay-shape": "ellipse",
-    },
-  },
-  // -- Cascade: origin node (larger + bright golden glow) --
-  {
-    selector: ".cascade-origin",
-    style: {
-      width: 14,
-      height: 14,
-      "border-width": 3,
-      "border-color": "#facc15",
-      "underlay-color": "#facc15",
-      "underlay-padding": 6,
-      "underlay-opacity": 0.45,
-      "underlay-shape": "ellipse",
-    },
-  },
-  // -- Cascade: edges with active propagation --
-  {
-    selector: ".cascade-edge",
-    style: {
-      width: 1.5,
-      "line-color": "#facc15",
-      opacity: 0.6,
-    },
-  },
-  // -- Default edge (intra-community) --
-  {
-    selector: "edge",
-    style: {
-      width: 0.5,
-      "line-color": "#3b82f6",
-      opacity: 0.15,
-      "curve-style": "haystack",
-    },
-  },
-  // -- Inter-community edge --
-  {
-    selector: 'edge[edge_type = "inter"]',
-    style: {
-      width: 1,
-      "line-color": "#ffffff",
-      opacity: 0.06,
-    },
-  },
-  // -- Bridge edge --
-  {
-    selector: 'edge[edge_type = "bridge"]',
-    style: {
-      width: 1,
-      "line-color": "#ef4444",
-      opacity: 0.12,
-    },
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 export default function GraphPanel() {
-  const navigate = useNavigate();
-  const navigateRef = useRef(navigate);
-  useEffect(() => { navigateRef.current = navigate; });
-  const cyRef = useRef<Core | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [hoverInfo, setHoverInfo] = useState<{
-    label: string;
-    community: string;
-    type: string;
-    influenceScore: number;
-    connections: number;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [nodeCount, setNodeCount] = useState(0);
-  const [edgeCount, setEdgeCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [legendItems, setLegendItems] = useState(LEGEND_ITEMS);
-  const [fps, setFps] = useState(60);
-  const fpsFramesRef = useRef<number[]>([]);
-  const fpsRafRef = useRef<number | null>(null);
-  const lastFpsUpdateRef = useRef(0);
-  const lastAdoptCountRef = useRef(-1);
-  // FE-PERF-06: cached sorted node ids by influence score (rebuilt only on node count change)
-  const sortedNodeIdsRef = useRef<string[] | null>(null);
-  // Track how many cascade events we've already animated to detect new ones
-  const lastCascadeCountRef = useRef(0);
-  const cascadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const [dims, setDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
+  const [zoomTier, setZoomTier] = useState<AnimationTier>("overview");
 
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
-  const emergentEvents = useSimulationStore((s) => s.emergentEvents);
-  // FE-PERF-01: subscribe only to latestStep, not the whole steps array
   const latestStep = useSimulationStore((s) => s.latestStep);
   const highlightedCommunity = useSimulationStore((s) => s.highlightedCommunity);
   const setHighlightedCommunity = useSimulationStore((s) => s.setHighlightedCommunity);
+  const selectAgent = useSimulationStore((s) => s.selectAgent);
   const propagationAnimEnabled = useSimulationStore((s) => s.propagationAnimationsEnabled);
-  const lastPropStepRef = useRef(-1);
-  const propagationTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // --- Initialize Cytoscape ---
+  // Per-node mutable highlight flags kept off React state to avoid re-renders.
+  const adoptedSetRef = useRef<Set<string>>(new Set());
+
+  // GAP-7: Active propagation link set (source→target keys that should show particles)
+  const activePropLinksRef = useRef<Map<string, string>>(new Map());
+  const propTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ---- Load graph data on simulation change ------------------------------- //
+  // TanStack Query — cached network graph, instant on revisit
+  const networkQuery = useNetwork(simulationId);
+  // Derive both `graphData` and `isLoading` directly from the query so we
+  // never call setState inside an effect (react-hooks/set-state-in-effect).
+  const isLoading = networkQuery.isLoading;
+  const graphData = useMemo<GraphData>(() => {
+    if (networkQuery.data) {
+      return cytoscapeToForceGraph(networkQuery.data as CytoscapeGraph);
+    }
+    return { nodes: [], links: [] };
+  }, [networkQuery.data]);
+
+  // ---- Track container size so the WebGL canvas matches the panel -------- //
   useEffect(() => {
     if (!containerRef.current) return;
-    let cancelled = false;
-
-    async function loadGraph() {
-      let graphData: CytoscapeGraph;
-      setIsLoading(true);
-      try {
-        if (simulationId) {
-          graphData = await apiClient.network.get(simulationId);
-        } else {
-          graphData = generateMockGraphData();
-        }
-      } catch (err) {
-        console.warn("Network fetch failed, using mock data:", err);
-        graphData = generateMockGraphData();
-      }
-      if (cancelled || !containerRef.current) {
-        setIsLoading(false);
-        return;
-      }
-
-      // Compute legend from real data
-      const commCounts: Record<string, number> = {};
-      for (const n of graphData.nodes) {
-        const cid = (n.data.community as string) ?? "?";
-        commCounts[cid] = (commCounts[cid] ?? 0) + 1;
-      }
-      setLegendItems(
-        COMMUNITIES.map((c) => ({
-          name: c.name,
-          color: c.color,
-          count: String(commCounts[c.id] ?? 0),
-        })),
-      );
-
-      initCytoscape(graphData);
-      setIsLoading(false);
-    }
-
-    function initCytoscape(graphData: CytoscapeGraph) {
-      if (!containerRef.current) return;
-
-    const n = graphData.nodes.length;
-    const isLarge = n > 500;
-
-    const cy = cytoscape({
-      container: containerRef.current,
-      elements: {
-        nodes: graphData.nodes,
-        edges: graphData.edges,
-      },
-      style: CY_STYLE,
-      layout: {
-        name: "cose",
-        idealEdgeLength: isLarge ? 80 : 50,
-        nodeOverlap: 20,
-        refresh: 20,
-        fit: true,
-        padding: 40,
-        randomize: true,
-        componentSpacing: 100,
-        nodeRepulsion: isLarge ? 12000 : 6000,
-        edgeElasticity: 100,
-        nestingFactor: 1.2,
-        gravity: isLarge ? 0.8 : 0.3,
-        numIter: isLarge ? 300 : 800,
-        animate: false,
-      } as cytoscape.CoseLayoutOptions,
-
-      // Performance options (GAP-5: 10K agent target)
-      textureOnViewport: true,
-      hideEdgesOnViewport: true,
-      motionBlur: true,
-      pixelRatio: 1,
-
-      // Viewport culling limits
-      minZoom: 0.05,
-      maxZoom: 3.0,
-      // wheelSensitivity removed — Cytoscape default (1.0) used
-    });
-
-    const totalNodes = cy.nodes().length;
-    const totalEdges = cy.edges().length;
-    setNodeCount(totalNodes);
-    setEdgeCount(totalEdges);
-
-    // --- Edge bundling for large graphs (>2000 nodes) ---
-    if (totalNodes > 2000) {
-      cy.batch(() => {
-        cy.edges().style("opacity", 0.05);
-        cy.edges('[edge_type != "bridge"]').style("display", "none");
-      });
-    }
-
-    // --- LOD: zoom-dependent label & edge visibility ---
-    // FE-PERF-05: debounce zoom handler so per-node iteration doesn't run on every wheel tick
-    let lodTimeout: ReturnType<typeof setTimeout> | null = null;
-    function applyLOD() {
-      const z = cy.zoom();
-      cy.batch(() => {
-        if (z < 0.3) {
-          // Far out: no labels, straight-line edges
-          cy.nodes().style("label", "");
-          cy.edges().style("curve-style", "haystack");
-        } else if (z < 0.7) {
-          // Mid: labels only for high-influence nodes
-          cy.nodes().forEach((node) => {
-            const score = node.data("influence_score") as number;
-            node.style("label", score > 0.8 ? "data(label)" : "");
-          });
-          cy.edges().style("curve-style", "haystack");
-        } else {
-          // Close: all labels, full detail
-          cy.nodes().style("label", "data(label)");
-          cy.edges().style("curve-style", "bezier");
-        }
-      });
-    }
-    function debouncedLOD() {
-      if (lodTimeout !== null) clearTimeout(lodTimeout);
-      lodTimeout = setTimeout(applyLOD, 100);
-    }
-    cy.on("zoom", debouncedLOD);
-    // Apply initial LOD state
-    applyLOD();
-
-    // --- Edge coloring by source community ---
-    cy.edges().forEach((edge) => {
-      const edgeType = edge.data("edge_type") as string;
-      if (edgeType === "intra") {
-        const srcNode = edge.source();
-        const community = srcNode.data("community") as string;
-        const color = COMMUNITY_COLOR[community] ?? "#3b82f6";
-        edge.style("line-color", color);
-      }
-    });
-
-    // --- Click: select node ---
-    cy.on("tap", "node", (evt: EventObject) => {
-      const node = evt.target;
-      setSelectedAgent(node.data("id") as string);
-      navigateRef.current(`/agents/${node.data("id")}`);
-    });
-
-    // --- Click background: deselect ---
-    cy.on("tap", (evt: EventObject) => {
-      if (evt.target === cy) {
-        setSelectedAgent(null);
-      }
-    });
-
-    // --- Hover: tooltip ---
-    cy.on("mouseover", "node", (evt: EventObject) => {
-      const node = evt.target;
-      const pos = node.renderedPosition();
-      setHoverInfo({
-        label: node.data("label") as string,
-        community:
-          COMMUNITIES.find((c) => c.id === node.data("community"))?.name ??
-          "Unknown",
-        type: node.data("agent_type") as string,
-        influenceScore: node.data("influence_score") as number,
-        connections: node.connectedEdges().length,
-        x: pos.x,
-        y: pos.y,
-      });
-      containerRef.current!.style.cursor = "pointer";
-    });
-
-    cy.on("mouseout", "node", () => {
-      setHoverInfo(null);
-      containerRef.current!.style.cursor = "default";
-    });
-
-    cyRef.current = cy;
-    }
-
-    loadGraph();
-
-    return () => {
-      cancelled = true;
-      if (cyRef.current) {
-        cyRef.current.destroy();
-        cyRef.current = null;
-      }
+    const el = containerRef.current;
+    const update = () => {
+      setDims({ w: el.clientWidth, h: el.clientHeight });
     };
-  }, [simulationId]);
-
-  // --- FPS counter via requestAnimationFrame ---
-  useEffect(() => {
-    let running = true;
-
-    function tick(now: number) {
-      if (!running) return;
-      const frames = fpsFramesRef.current;
-      frames.push(now);
-      // Keep only the last 60 timestamps (one second window at 60fps)
-      while (frames.length > 0 && now - frames[0] > 1000) {
-        frames.shift();
-      }
-      // Throttle state update to once per second to avoid 60 re-renders/s
-      if (now - lastFpsUpdateRef.current > 1000) {
-        setFps(frames.length);
-        lastFpsUpdateRef.current = now;
-      }
-      fpsRafRef.current = requestAnimationFrame(tick);
-    }
-
-    fpsRafRef.current = requestAnimationFrame(tick);
-    return () => {
-      running = false;
-      if (fpsRafRef.current !== null) {
-        cancelAnimationFrame(fpsRafRef.current);
-        fpsRafRef.current = null;
-      }
-    };
+    update();
+    // ResizeObserver is guaranteed in all supported browsers (lib.dom).
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
-  // --- Update node adoption state on each new simulation step ---
-  // Uses cy.batch() to coalesce all DOM/style mutations into one repaint (GAP-5)
-  // FE-PERF-06: reuse pre-sorted node id list to avoid O(n log n) sort per step
+  // ---- Per-step adoption highlight (no graph rebuild) --------------------- //
   useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy || !latestStep) return;
-    const adoptionRate = latestStep.adoption_rate || 0;
-
-    const nodes = cy.nodes();
-    const total = nodes.length;
+    if (!latestStep || graphData.nodes.length === 0) return;
+    const adoptionRate = latestStep.adoption_rate ?? 0;
+    const total = graphData.nodes.length;
     const adoptCount = Math.floor(total * adoptionRate);
 
-    // Skip expensive batch when adoption count has not changed
-    if (adoptCount === lastAdoptCountRef.current) return;
-    lastAdoptCountRef.current = adoptCount;
+    const sorted = [...graphData.nodes].sort(
+      (a, b) => (b.influence_score ?? 0) - (a.influence_score ?? 0),
+    );
+    const newSet = new Set<string>();
+    for (let i = 0; i < adoptCount; i++) newSet.add(sorted[i].id);
+    adoptedSetRef.current = newSet;
+    fgRef.current?.refresh();
+  }, [latestStep, graphData.nodes]);
 
-    // Pre-sort once and cache the sorted node id list (refresh only if node count changes)
-    if (
-      sortedNodeIdsRef.current === null
-      || sortedNodeIdsRef.current.length !== total
-    ) {
-      const sorted = nodes.toArray().sort(
-        (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
-      );
-      sortedNodeIdsRef.current = sorted.map((n) => n.id());
-    }
-    const adoptedSet = new Set(sortedNodeIdsRef.current.slice(0, adoptCount));
+  // Agent UUID → graph node_id lookup. See the explanation on
+  // `buildAgentIdToNodeId` in `propagationAnimationUtils.ts` — this bridge
+  // is load-bearing because the backend emits propagation pairs with agent
+  // UUIDs while force-graph indexes links by numeric node_ids. Rebuilt only
+  // when the graph itself changes.
+  const agentIdToNodeId = useMemo(
+    () => buildAgentIdToNodeId(graphData.nodes),
+    [graphData.nodes],
+  );
 
-    // Single batched mutation — one repaint instead of N individual updates
-    cy.batch(() => {
-      nodes.forEach((node) => {
-        if (adoptedSet.has(node.id())) {
-          node.addClass("adopted-live");
-        } else {
-          node.removeClass("adopted-live");
-        }
-      });
-    });
-  }, [latestStep]);
-
-  // --- Community highlight: dim non-matching nodes when a community is selected ---
+  // ---- GAP-7: Propagation animation effect -------------------------------- //
   useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    if (!highlightedCommunity) {
-      cy.nodes().style("opacity", 1);
-      cy.edges().removeStyle("opacity");
+    if (!propagationAnimEnabled || !latestStep?.propagation_pairs?.length) {
+      activePropLinksRef.current.clear();
       return;
     }
-    cy.nodes().forEach((node) => {
-      const comm = node.data("community") as string;
-      node.style("opacity", comm === highlightedCommunity ? 1 : 0.15);
-    });
-    cy.edges().style("opacity", 0.05);
-  }, [highlightedCommunity]);
 
-  // --- GAP-6: Cascade shader animations via Cytoscape animate() API ---
-  // Triggered when a new cascade event appears in emergentEvents.
-  // - Cascade origin node: larger size + golden glow (cascade-origin class)
-  // - Nodes in cascade: pulsing golden border (cascade-node class)
-  // - Cascade edges: animate opacity 0.3 → 1.0 → 0.3 (cascade-edge class)
-  // All effects auto-clear after CASCADE_TTL_MS.
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy || emergentEvents.length === 0) return;
-
-    // Only fire when the event count has grown (new event arrived)
-    if (emergentEvents.length <= lastCascadeCountRef.current) return;
-    lastCascadeCountRef.current = emergentEvents.length;
-
-    const latestEvent = emergentEvents[emergentEvents.length - 1];
-    const isCascadeEvent =
-      latestEvent.event_type.toLowerCase().includes("cascade") ||
-      latestEvent.event_type.toLowerCase().includes("viral");
-
-    if (!isCascadeEvent) return;
-
-    // Clear any previous cascade highlight timeout
-    if (cascadeTimeoutRef.current !== null) {
-      clearTimeout(cascadeTimeoutRef.current);
-      cascadeTimeoutRef.current = null;
-    }
-
-    // Remove stale cascade classes before applying new ones
-    cy.batch(() => {
-      cy.elements().removeClass("cascade-node cascade-origin cascade-edge");
-    });
-
-    // Pick origin node: highest-influence node in the graph
-    const nodes = cy.nodes();
-    const originNode = nodes.max((node) => (node.data("influence_score") as number) || 0).ele;
-
-    // FE-PERF-29: reuse pre-sorted node ids; rebuild only on node count change
-    if (
-      sortedNodeIdsRef.current === null
-      || sortedNodeIdsRef.current.length !== nodes.length
-    ) {
-      const sorted = nodes.toArray().sort(
-        (a, b) => ((b.data("influence_score") as number) || 0) - ((a.data("influence_score") as number) || 0),
-      );
-      sortedNodeIdsRef.current = sorted.map((n) => n.id());
-    }
-    const cascadeCount = Math.max(1, Math.floor(sortedNodeIdsRef.current.length * 0.15));
-    const cascadeNodes = sortedNodeIdsRef.current
-      .slice(0, cascadeCount)
-      .map((id) => cy.getElementById(id))
-      .filter((n) => n.nonempty());
-
-    // Apply classes (triggers CY_STYLE rules defined above)
-    cy.batch(() => {
-      cascadeNodes.forEach((node) => node.addClass("cascade-node"));
-      originNode.addClass("cascade-origin");
-
-      // Mark edges connected to cascade nodes
-      cascadeNodes.forEach((node) => {
-        node.connectedEdges().addClass("cascade-edge");
-      });
-    });
-
-    // Animate origin node: scale border-width 2 → 5 → 2 repeating (pulse effect)
-    // Cytoscape animate() does not support looping natively; we chain two animations.
-    function pulseBorder(node: cytoscape.NodeSingular, iteration: number) {
-      if (iteration > 4 || !cyRef.current) return; // stop after ~8s
-      node.animate(
-        { style: { "border-width": 5 } },
-        {
-          duration: 700,
-          easing: "ease-in-out",
-          complete: () => {
-            node.animate(
-              { style: { "border-width": 2 } },
-              {
-                duration: 700,
-                easing: "ease-in-out",
-                complete: () => pulseBorder(node, iteration + 1),
-              },
-            );
-          },
-        },
-      );
-    }
-    pulseBorder(originNode as cytoscape.NodeSingular, 0);
-
-    // Animate cascade edges: opacity 0.15 → 0.8 → 0.15 (2s cycle × 4)
-    function pulseEdgeOpacity(edges: cytoscape.EdgeCollection, iteration: number) {
-      if (iteration > 3 || !cyRef.current) return;
-      edges.animate(
-        { style: { opacity: 0.8 } },
-        {
-          duration: 1000,
-          easing: "ease-in-out",
-          complete: () => {
-            edges.animate(
-              { style: { opacity: 0.15 } },
-              {
-                duration: 1000,
-                easing: "ease-in-out",
-                complete: () => pulseEdgeOpacity(edges, iteration + 1),
-              },
-            );
-          },
-        },
-      );
-    }
-    const cascadeEdges = cy.edges(".cascade-edge");
-    if (cascadeEdges.length > 0) {
-      pulseEdgeOpacity(cascadeEdges, 0);
-    }
-
-    // Auto-clear after TTL
-    cascadeTimeoutRef.current = setTimeout(() => {
-      if (!cyRef.current) return;
-      cy.batch(() => {
-        cy.elements().removeClass("cascade-node cascade-origin cascade-edge");
-      });
-      cascadeTimeoutRef.current = null;
-    }, CASCADE_TTL_MS);
-  }, [emergentEvents]);
-
-  // Cleanup cascade timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (cascadeTimeoutRef.current !== null) {
-        clearTimeout(cascadeTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // --- GAP-7: Propagation animations (zoom-based LOD) ---
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy || !latestStep || !propagationAnimEnabled) return;
-
-    // Only animate new steps
-    if (latestStep.step <= lastPropStepRef.current) return;
-    lastPropStepRef.current = latestStep.step;
-
-    const pairs = (latestStep.propagation_pairs ?? []).filter(
-      (p) => p.action !== "ignore" && ACTION_COLORS[p.action],
-    );
-    if (pairs.length === 0) return;
-
-    // Clear previous animation timeouts
-    for (const t of propagationTimeoutsRef.current) clearTimeout(t);
-    propagationTimeoutsRef.current = [];
-
-    const tier = getAnimationTier(cy.zoom());
+    // Determine current zoom tier and limit
+    const fg = fgRef.current;
+    const camera = fg ? (fg as unknown as { camera: () => { position: { length: () => number } } }).camera?.() : null;
+    const zoomDist = camera?.position?.length?.() ?? 500;
+    // Normalize zoom: closer = higher value (inverse distance, capped at 1.0)
+    const normalizedZoom = Math.min(1.0, 300 / Math.max(zoomDist, 1));
+    const tier = getAnimationTier(normalizedZoom);
+    // Defer setState out of the effect body to avoid the
+    // react-hooks/set-state-in-effect rule. The camera is external
+    // three.js state that we're synchronising INTO React — the
+    // microtask boundary keeps the render cascade linear.
+    queueMicrotask(() => setZoomTier(tier));
     const limit = TIER_LIMITS[tier];
 
-    if (tier === "overview") {
-      // --- Overview: Community hotspot glow + inter-community arcs ---
-      const communityActivity: Record<string, { count: number; dominantAction: string }> = {};
-      const crossCommunity: { srcComm: string; tgtComm: string; action: string }[] = [];
+    // Delegate filter + UUID→node_id translation + LOD cap to the shared
+    // utility. GraphPanel and its regression tests both exercise the same
+    // code path, so a behaviour drift here fails loudly in CI.
+    activePropLinksRef.current = buildActivePropLinks(
+      latestStep.propagation_pairs as PropagationPair[],
+      agentIdToNodeId,
+      limit,
+    );
+    fgRef.current?.refresh();
 
-      for (const pair of pairs) {
-        const srcNode = cy.getElementById(pair.source);
-        const tgtNode = cy.getElementById(pair.target);
-        const srcComm = srcNode.nonempty() ? (srcNode.data("community") as string) : null;
-        const tgtComm = tgtNode.nonempty() ? (tgtNode.data("community") as string) : null;
+    // Clear particles after CASCADE_TTL_MS (fade out)
+    if (propTimerRef.current) clearTimeout(propTimerRef.current);
+    propTimerRef.current = setTimeout(() => {
+      activePropLinksRef.current.clear();
+      fgRef.current?.refresh();
+    }, 8_000);
 
-        if (srcComm) {
-          const entry = communityActivity[srcComm] ?? { count: 0, dominantAction: pair.action };
-          entry.count++;
-          communityActivity[srcComm] = entry;
-        }
-        if (srcComm && tgtComm && srcComm !== tgtComm && crossCommunity.length < 3) {
-          crossCommunity.push({ srcComm, tgtComm, action: pair.action });
-        }
+    return () => {
+      if (propTimerRef.current) clearTimeout(propTimerRef.current);
+    };
+  }, [propagationAnimEnabled, latestStep, agentIdToNodeId]);
+
+  // Derive the effective community table from the graph itself — ids, names,
+  // colors, counts — so we always reflect whatever the simulation is actually
+  // using (not the hardcoded A/B/C/D/E profile). Preserves first-seen order so
+  // color assignments stay stable across renders of the same graph.
+  //
+  // This must live BEFORE the render callbacks below because
+  // `nodeColorFn`/`linkColorFn` capture `communityColorMap` in their deps
+  // arrays — referencing it before initialization throws a ReferenceError at
+  // hook-evaluation time.
+  const graphCommunities = useMemo<
+    Array<{ id: string; name: string; color: string; count: number }>
+  >(() => {
+    const order: string[] = [];
+    const meta: Record<string, { name: string; count: number }> = {};
+    for (const n of graphData.nodes) {
+      const id = n.community || "unknown";
+      if (!(id in meta)) {
+        order.push(id);
+        meta[id] = { name: n.community_name ?? id, count: 0 };
       }
-
-      // Community hotspot glow
-      const activeCommunities = Object.entries(communityActivity)
-        .sort((a, b) => b[1].count - a[1].count)
-        .slice(0, limit);
-
-      cy.batch(() => {
-        for (const [commId, { dominantAction }] of activeCommunities) {
-          const color = ACTION_COLORS[dominantAction] ?? "#22c55e";
-          const nodes = cy.nodes(`[community = "${commId}"]`);
-          nodes.style("underlay-color", color);
-          nodes.style("underlay-opacity", 0.35);
-          nodes.style("underlay-padding", 3);
-          nodes.style("underlay-shape", "ellipse");
-        }
-      });
-
-      // Fade back after 1200ms
-      const glowTimeout = setTimeout(() => {
-        if (!cyRef.current) return;
-        cy.batch(() => {
-          for (const [commId] of activeCommunities) {
-            const nodes = cy.nodes(`[community = "${commId}"]`);
-            nodes.removeStyle("underlay-color underlay-opacity underlay-padding underlay-shape");
-          }
-        });
-      }, 1200);
-      propagationTimeoutsRef.current.push(glowTimeout);
-
-      // Inter-community arcs (CSS overlays)
-      if (containerRef.current && crossCommunity.length > 0) {
-        for (const { srcComm, tgtComm, action } of crossCommunity) {
-          const srcNodes = cy.nodes(`[community = "${srcComm}"]`);
-          const tgtNodes = cy.nodes(`[community = "${tgtComm}"]`);
-          if (srcNodes.empty() || tgtNodes.empty()) continue;
-
-          const srcBB = srcNodes.renderedBoundingBox({});
-          const tgtBB = tgtNodes.renderedBoundingBox({});
-          const srcCx = (srcBB.x1 + srcBB.x2) / 2;
-          const srcCy = (srcBB.y1 + srcBB.y2) / 2;
-          const tgtCx = (tgtBB.x1 + tgtBB.x2) / 2;
-          const tgtCy = (tgtBB.y1 + tgtBB.y2) / 2;
-
-          const arc = document.createElement("div");
-          arc.style.position = "absolute";
-          arc.style.left = `${Math.min(srcCx, tgtCx)}px`;
-          arc.style.top = `${Math.min(srcCy, tgtCy)}px`;
-          arc.style.width = `${Math.abs(tgtCx - srcCx)}px`;
-          arc.style.height = `${Math.abs(tgtCy - srcCy)}px`;
-          arc.style.borderBottom = `2px solid ${ACTION_COLORS[action] ?? "#22c55e"}`;
-          arc.style.borderRadius = "50%";
-          arc.style.pointerEvents = "none";
-          arc.style.animation = "propagation-arc-fade 1.5s ease-out forwards";
-          containerRef.current.appendChild(arc);
-
-          const arcTimeout = setTimeout(() => arc.remove(), 1600);
-          propagationTimeoutsRef.current.push(arcTimeout);
-        }
-      }
-    } else {
-      // --- Close-up / Mid-range: per-edge animations ---
-      const sorted = [...pairs].sort((a, b) => b.probability - a.probability).slice(0, limit);
-
-      for (const pair of sorted) {
-        const color = ACTION_COLORS[pair.action] ?? "#22c55e";
-        const srcNode = cy.getElementById(pair.source);
-        const tgtNode = cy.getElementById(pair.target);
-
-        // Edge flash: find edge between source and target
-        if (srcNode.nonempty() && tgtNode.nonempty()) {
-          const edges = srcNode.edgesWith(tgtNode);
-          if (edges.nonempty()) {
-            const edge = edges[0];
-            const origColor = edge.style("line-color");
-            const origOpacity = edge.numericStyle("opacity");
-            edge.animate(
-              { style: { "line-color": color, opacity: 1, width: 2 } },
-              {
-                duration: 400,
-                easing: "ease-out",
-                complete: () => {
-                  edge.animate(
-                    { style: { "line-color": origColor, opacity: origOpacity, width: 0.5 } },
-                    { duration: 400, easing: "ease-in" },
-                  );
-                },
-              },
-            );
-          }
-
-          // Source pulse
-          srcNode.animate(
-            { style: { "border-width": 4, "border-color": color } },
-            {
-              duration: 300,
-              easing: "ease-out",
-              complete: () => {
-                srcNode.animate(
-                  { style: { "border-width": 0 } },
-                  { duration: 300, easing: "ease-in" },
-                );
-              },
-            },
-          );
-
-          // Target ripple (Close-up only)
-          if (tier === "closeup") {
-            tgtNode.animate(
-              { style: { "underlay-opacity": 0.5, "underlay-color": color, "underlay-padding": 8, "underlay-shape": "ellipse" } },
-              {
-                duration: 350,
-                easing: "ease-out",
-                complete: () => {
-                  tgtNode.animate(
-                    { style: { "underlay-opacity": 0, "underlay-padding": 0 } },
-                    { duration: 350, easing: "ease-in" },
-                  );
-                },
-              },
-            );
-          }
-
-          // Floating particle (Close-up, high probability only)
-          if (tier === "closeup" && pair.probability > 0.5 && srcNode.nonempty() && tgtNode.nonempty()) {
-            const particleId = `particle-${latestStep.step}-${pair.source}-${pair.target}`;
-
-            try {
-              const particle = cy.add({
-                group: "nodes",
-                data: { id: particleId, _isParticle: true },
-                position: { x: srcNode.position("x"), y: srcNode.position("y") },
-              });
-
-              particle.style({
-                width: 4,
-                height: 4,
-                "background-color": color,
-                "border-width": 0,
-                label: "",
-                "overlay-opacity": 0,
-                "events": "no",
-              } as Record<string, unknown>);
-
-              particle.animate(
-                { position: { x: tgtNode.position("x"), y: tgtNode.position("y") } },
-                {
-                  duration: 1000,
-                  easing: "ease-in-out",
-                  complete: () => {
-                    try { cy.remove(particle); } catch { /* already removed */ }
-                  },
-                },
-              );
-
-              // Safety cleanup
-              const particleTimeout = setTimeout(() => {
-                try { if (cy.getElementById(particleId).nonempty()) cy.remove(cy.getElementById(particleId)); } catch { /* ok */ }
-              }, 1200);
-              propagationTimeoutsRef.current.push(particleTimeout);
-            } catch { /* particle creation failed, skip */ }
-          }
-        }
+      meta[id].count += 1;
+      // Upgrade the display name as soon as we see one (first node may be
+      // missing it if the backend didn't include community_name).
+      if (n.community_name && meta[id].name === id) {
+        meta[id].name = n.community_name;
       }
     }
-  }, [latestStep, propagationAnimEnabled]);
+    return order.map((id) => ({
+      id,
+      name: meta[id].name,
+      color: STATIC_COMMUNITY_COLOR[id] ?? fallbackColorFor(id),
+      count: meta[id].count,
+    }));
+  }, [graphData.nodes]);
 
-  // Cleanup propagation timeouts on unmount
-  useEffect(() => {
-    return () => {
-      for (const t of propagationTimeoutsRef.current) clearTimeout(t);
-    };
+  // id → color lookup for the render callbacks. Rebuilt only when the
+  // community set changes (not on every frame).
+  const communityColorMap = useMemo<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const c of graphCommunities) m[c.id] = c.color;
+    return m;
+  }, [graphCommunities]);
+
+  // id → display name lookup for hover tooltip and accessibility labels.
+  const communityNameMap = useMemo<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const c of graphCommunities) m[c.id] = c.name;
+    return m;
+  }, [graphCommunities]);
+
+  // ---- Color + size callbacks (built-in InstancedMesh path) --------------- //
+  const nodeColorFn = useCallback(
+    (node: object): string => {
+      const n = node as GraphNode;
+      const dimmed =
+        highlightedCommunity !== null && n.community !== highlightedCommunity;
+      if (dimmed) return HIGHLIGHT_DIM_COLOR;
+      if (adoptedSetRef.current.has(n.id)) return ADOPTED_GLOW_COLOR;
+      return communityColorMap[n.community] ?? DEFAULT_NODE_COLOR;
+    },
+    [highlightedCommunity, communityColorMap],
+  );
+
+  const nodeValFn = useCallback((node: object): number => {
+    const n = node as GraphNode;
+    return 1 + Math.min(6, (n.influence_score ?? 0.2) * 8.0);
   }, []);
 
-  // --- Zoom controls ---
-  const handleZoomIn = useCallback(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.zoom({ level: cy.zoom() * 1.3, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+  /**
+   * Edge colors reuse the community palette so the legend and graph agree.
+   *
+   * - intra-community: use the source node's community color at low alpha
+   * - cross-community: neutral gray (reads as connective tissue)
+   * - bridge:          slightly brighter gray to stand out as "long-range"
+   * - dimmed:          when a community is highlighted, non-matching
+   *                    edges fade out entirely
+   */
+  const linkColorFn = useCallback(
+    (link: object): string => {
+      const l = link as GraphLink;
+      if (l.is_bridge) return BRIDGE_EDGE_COLOR;
+      if (l.edge_type === "inter") return INTER_EDGE_COLOR;
+      const src = l.source;
+      const community =
+        typeof src === "object" && src !== null
+          ? (src as GraphNode).community
+          : l._srcCommunity;
+      if (!community) return INTER_EDGE_COLOR;
+      if (highlightedCommunity !== null && community !== highlightedCommunity) {
+        return "rgba(30,41,59,0.08)";
+      }
+      const hex = communityColorMap[community] ?? DEFAULT_NODE_COLOR;
+      return hexToRgba(hex, 0.35);
+    },
+    [highlightedCommunity, communityColorMap],
+  );
+
+  // ---- Interaction callbacks --------------------------------------------- //
+  const handleNodeClick = useCallback(
+    (node: object) => {
+      const n = node as GraphNode;
+      const id = n.agent_id ?? n.id;
+      // Open AgentInspector side drawer instead of full-page navigation so
+      // the graph context is preserved. User can still navigate to the
+      // standalone AgentDetail page from inside the inspector.
+      selectAgent(id);
+    },
+    [selectAgent],
+  );
+
+  const handleNodeHover = useCallback((node: object | null) => {
+    setHoverNode(node as GraphNode | null);
   }, []);
 
-  const handleZoomOut = useCallback(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.zoom({ level: cy.zoom() / 1.3, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
-  }, []);
+  const handleBackgroundClick = useCallback(() => {
+    if (highlightedCommunity) setHighlightedCommunity(null);
+  }, [highlightedCommunity, setHighlightedCommunity]);
 
-  const handleFit = useCallback(() => {
-    cyRef.current?.fit(undefined, 40);
-  }, []);
+  // ---- Render tuning ------------------------------------------------------ //
+  const nodeCount = graphData.nodes.length;
+  const linkCount = graphData.links.length;
+  const isLarge = nodeCount > 500;
+  const isHuge = nodeCount > 2000;
 
-  // Determine if a cascade is currently active (for badge glow)
-  const cascadeActive = emergentEvents.length > 0 &&
-    (emergentEvents[emergentEvents.length - 1].event_type.toLowerCase().includes("cascade") ||
-     emergentEvents[emergentEvents.length - 1].event_type.toLowerCase().includes("viral"));
+  const rendererConfig = useMemo(
+    () => ({
+      antialias: !isLarge,
+      alpha: true,
+      powerPreference: "high-performance" as const,
+    }),
+    [isLarge],
+  );
+
+  // ---- GAP-7: Propagation particle callbacks ------------------------------ //
+  const linkParticlesFn = useCallback(
+    (link: object): number => {
+      if (!propagationAnimEnabled) return linkCount < 200 ? 1 : 0;
+      const l = link as GraphLink;
+      const srcId = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
+      const tgtId = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
+      const key = `${srcId}__${tgtId}`;
+      if (activePropLinksRef.current.has(key)) return 4;
+      return linkCount < 200 ? 1 : 0;
+    },
+    [propagationAnimEnabled, linkCount],
+  );
+
+  const linkParticleColorFn = useCallback(
+    (link: object): string => {
+      const l = link as GraphLink;
+      const srcId = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
+      const tgtId = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
+      const key = `${srcId}__${tgtId}`;
+      return activePropLinksRef.current.get(key) ?? "rgba(255,255,255,0.6)";
+    },
+    [],
+  );
+
+  const linkParticleWidthFn = useCallback(
+    (link: object): number => {
+      const l = link as GraphLink;
+      const srcId = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
+      const tgtId = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
+      const key = `${srcId}__${tgtId}`;
+      return activePropLinksRef.current.has(key) ? 2.0 : 0.8;
+    },
+    [],
+  );
 
   return (
     <div
       data-testid="graph-panel"
-      aria-label="Social network graph visualization"
+      aria-label="3D social network graph visualization"
       className="relative w-full h-full overflow-hidden"
       style={{
         background:
           "radial-gradient(ellipse at center, #0f172a 0%, #020617 100%)",
       }}
     >
-      {/* Cytoscape canvas container */}
-      <div ref={containerRef} className="absolute inset-0" />
+      <div
+        ref={containerRef}
+        data-testid="graph-cytoscape-container"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+      >
+        {dims.w > 0 && dims.h > 0 && (
+          <ForceGraph3D
+            ref={fgRef}
+            width={dims.w}
+            height={dims.h}
+            graphData={graphData}
+            backgroundColor="rgba(0,0,0,0)"
+            showNavInfo={false}
+            controlType="orbit"
+            nodeLabel={(n: object) => (n as GraphNode).label}
+            nodeColor={nodeColorFn}
+            nodeVal={nodeValFn}
+            nodeResolution={isHuge ? 4 : isLarge ? 6 : 10}
+            nodeOpacity={0.9}
+            linkColor={linkColorFn}
+            linkWidth={0.3}
+            linkOpacity={isLarge ? 0.35 : 0.55}
+            linkDirectionalParticles={linkParticlesFn}
+            linkDirectionalParticleColor={linkParticleColorFn}
+            linkDirectionalParticleWidth={linkParticleWidthFn}
+            linkDirectionalParticleSpeed={0.005}
+            cooldownTicks={isHuge ? 40 : isLarge ? 80 : 150}
+            warmupTicks={isHuge ? 5 : 10}
+            d3AlphaDecay={0.04}
+            d3VelocityDecay={0.35}
+            enableNodeDrag={false}
+            rendererConfig={rendererConfig}
+            onNodeClick={handleNodeClick}
+            onNodeHover={handleNodeHover}
+            onBackgroundClick={handleBackgroundClick}
+          />
+        )}
+      </div>
 
-      {/* Loading overlay — soft fade-in while graph payload is fetched */}
       {isLoading && (
         <div
           data-testid="graph-loading-overlay"
@@ -1050,148 +554,145 @@ export default function GraphPanel() {
         >
           <div className="flex flex-col items-center gap-3">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-            <p className="text-xs text-white/70">Loading network…</p>
+            <p className="text-xs text-white/70">Loading 3D network…</p>
           </div>
         </div>
       )}
 
-      {/* Title Overlay — top-left */}
+      {/* Zoom tier badge — shows current LOD level (Close-up/Mid/Overview) */}
+      <ZoomTierBadge tier={zoomTier} />
+
+      {/* Comprehensive legend — communities + node states + edges.
+          Communities are derived from the live graph so the list always
+          reflects the actual simulation (not the hardcoded default profile).
+          Stacked above the 3D Controls bottom-right overlay. */}
+      <GraphLegend
+        communities={graphCommunities}
+        bottomOffsetPx={LEFT_LEGEND_OFFSET_PX}
+      />
+
       <div className="absolute top-4 left-4 z-10 pointer-events-none">
-        <h2 className="text-lg font-bold text-white">AI Social World</h2>
+        <h2 className="text-lg font-bold text-white">AI Social World — 3D</h2>
         <p className="text-xs text-white/60">
-          MiroFish Engine — {nodeCount} Active Agents · Force-Directed Graph
+          MiroFish Engine · three.js WebGL
         </p>
       </div>
 
-      {/* Zoom Controls — top-right */}
-      <div className="absolute top-4 right-4 z-10 flex flex-col gap-1">
-        <GraphButton
-          testId="zoom-in-btn"
-          icon={<ZoomIn className="w-4 h-4" />}
-          label="Zoom in"
-          onClick={handleZoomIn}
-        />
-        <GraphButton
-          testId="zoom-out-btn"
-          icon={<ZoomOut className="w-4 h-4" />}
-          label="Zoom out"
-          onClick={handleZoomOut}
-        />
-        <GraphButton
-          testId="zoom-maximize-btn"
-          icon={<Maximize2 className="w-4 h-4" />}
-          label="Fit to screen"
-          onClick={handleFit}
-        />
+      {/* Node / Edge count badge — top-right */}
+      <div
+        data-testid="graph-stats-badge"
+        className="absolute top-4 right-4 z-10 pointer-events-none bg-slate-900/80 border border-slate-700/70 rounded-lg px-3 py-2 text-xs text-white shadow-lg backdrop-blur-sm"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col items-end leading-tight">
+            <span className="text-[10px] uppercase tracking-wide text-white/50">Nodes</span>
+            <span className="font-semibold tabular-nums">{nodeCount.toLocaleString()}</span>
+          </div>
+          <div className="h-6 w-px bg-white/20" />
+          <div className="flex flex-col items-end leading-tight">
+            <span className="text-[10px] uppercase tracking-wide text-white/50">Edges</span>
+            <span className="font-semibold tabular-nums">{linkCount.toLocaleString()}</span>
+          </div>
+        </div>
       </div>
 
-      {/* Cascade Badge — glows golden when a cascade/viral event is active */}
-      <div data-testid="cascade-badge" className="absolute bottom-20 left-6 z-10 pointer-events-none">
-        {emergentEvents.length > 0 && (
-          <span
-            className={`inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--sentiment-positive)] bg-green-950/60 border border-green-800/40 px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.3)] ${cascadeActive ? "cascade-badge-active" : ""}`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--sentiment-positive)] animate-pulse-dot" />
-            {(emergentEvents[emergentEvents.length - 1]?.event_type ?? "event").replace("_", " ")} detected
-          </span>
-        )}
+      {/* Community color legend — left side, offset 200px above vertical
+          center so it doesn't crowd the middle of the graph viewport.
+          Counts come from the live graph; click a row to highlight that
+          community (other communities dim). Click the active row again to
+          clear the highlight. */}
+      <div
+        data-testid="graph-community-legend"
+        className="absolute left-4 z-10 -translate-y-1/2 bg-slate-900/80 border border-slate-700/70 rounded-lg px-2 py-3 text-xs text-white shadow-lg backdrop-blur-sm"
+        style={{ top: `calc(50% - ${LEFT_LEGEND_OFFSET_PX}px)` }}
+      >
+        <div className="text-[10px] uppercase tracking-wide text-white/50 mb-2 px-1 font-semibold flex items-center justify-between gap-3">
+          <span>Communities</span>
+          {highlightedCommunity !== null && (
+            <button
+              type="button"
+              onClick={() => setHighlightedCommunity(null)}
+              className="text-[9px] uppercase tracking-wide text-white/60 hover:text-white transition-colors"
+              aria-label="Clear community highlight"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <ul className="flex flex-col gap-0.5">
+          {graphCommunities.length === 0 ? (
+            <li className="px-2 py-1 text-[10px] text-white/40 italic">
+              No communities loaded
+            </li>
+          ) : (
+            graphCommunities.map((c) => {
+              const isActive = highlightedCommunity === c.id;
+              const dimmed = highlightedCommunity !== null && !isActive;
+              return (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    data-testid={`legend-community-${c.id}`}
+                    onClick={() =>
+                      setHighlightedCommunity(isActive ? null : c.id)
+                    }
+                    aria-pressed={isActive}
+                    aria-label={`Highlight ${c.name} community`}
+                    className={`w-full flex items-center gap-2 px-2 py-1 rounded transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-white/15 ring-1 ring-white/40"
+                        : "hover:bg-white/10"
+                    } ${dimmed ? "opacity-30" : "opacity-100"}`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: c.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 text-left text-white/90 truncate">
+                      {c.name}
+                    </span>
+                    <span className="tabular-nums text-white/60 text-[11px] ml-2">
+                      {c.count.toLocaleString()}
+                    </span>
+                  </button>
+                </li>
+              );
+            })
+          )}
+        </ul>
       </div>
 
-      {/* Tooltip overlay */}
-      {hoverInfo && (
+      {hoverNode && (
         <div
-          className="absolute z-20 pointer-events-none px-2.5 py-1.5 rounded-md bg-black/80 border border-white/10 backdrop-blur-sm"
-          style={{
-            left: hoverInfo.x + 12,
-            top: hoverInfo.y - 10,
-          }}
+          data-testid="graph-hover-tooltip"
+          // Lifted above the 3D Controls overlay (now bottom-right) so a
+          // hovered node's metadata never sits underneath the controls hint.
+          className="absolute bottom-20 right-4 z-10 pointer-events-none bg-slate-900/90 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white shadow-lg"
         >
-          <p className="text-xs font-semibold text-white">{hoverInfo.label}</p>
-          <p className="text-[10px] text-white/60">
-            {hoverInfo.community} · {hoverInfo.type}
-          </p>
-          <p className="text-[10px] text-white/60">
-            Influence: {hoverInfo.influenceScore.toFixed(2)}
-          </p>
-          <p className="text-[10px] text-white/60">
-            Connections: {hoverInfo.connections}
-          </p>
+          <div className="font-semibold">{hoverNode.label}</div>
+          <div className="text-white/70">
+            Community:{" "}
+            {hoverNode.community_name ??
+              communityNameMap[hoverNode.community] ??
+              hoverNode.community}
+            {hoverNode.agent_type ? ` · ${hoverNode.agent_type}` : ""}
+          </div>
+          {typeof hoverNode.influence_score === "number" && (
+            <div className="text-white/70">
+              Influence: {hoverNode.influence_score.toFixed(2)}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Selected agent info */}
-      {selectedAgent && (
-        <div className="absolute top-14 left-4 z-10 pointer-events-none">
-          <span className="text-[11px] font-mono text-[var(--sentiment-positive)] bg-green-950/40 px-2 py-0.5 rounded">
-            Selected: {selectedAgent}
-          </span>
-        </div>
-      )}
-
-      {/* Legend — bottom-left */}
-      <div data-testid="network-legend" className="absolute bottom-4 left-4 z-10 bg-black/40 rounded-lg p-3 backdrop-blur-sm">
-        <div className="flex flex-col gap-1.5">
-          {legendItems.map((item) => {
-            const commId = COMMUNITIES.find((c) => c.name === item.name)?.id ?? item.name;
-            const isHighlighted = highlightedCommunity === commId;
-            return (
-              <button
-                key={item.name}
-                onClick={() => setHighlightedCommunity(isHighlighted ? null : commId)}
-                title={isHighlighted ? `Clear highlight` : `Highlight ${item.name}`}
-                className={`flex items-center gap-2 rounded px-1 transition-opacity cursor-pointer text-left ${
-                  highlightedCommunity && !isHighlighted ? "opacity-40" : "opacity-100"
-                }`}
-              >
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="text-[11px] text-white/80 w-12">
-                  {item.name}
-                </span>
-                <span className="text-[10px] text-white/50 font-mono">
-                  {item.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Performance Indicator — bottom-right (GAP-5) */}
-      <div data-testid="status-overlay" className="absolute bottom-2 right-2 z-10 pointer-events-none">
-        <span className="text-[10px] font-mono text-[var(--muted-foreground,rgba(255,255,255,0.4))]">
-          {nodeCount} nodes · {edgeCount} edges · {fps} FPS
-        </span>
+      {/* 3D Controls hint — bottom-right corner. Moved off the bottom-left
+          so it no longer overlaps the GraphLegend and the middle-left
+          Communities legend when the viewport is narrow. */}
+      <div className="absolute bottom-4 right-4 z-10 bg-black/40 rounded-lg p-3 backdrop-blur-sm text-xs text-white/70 pointer-events-none">
+        <div className="font-semibold text-white/90 mb-1">3D Controls</div>
+        <div>Left-drag: rotate · Scroll: zoom · Right-drag: pan</div>
       </div>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-function GraphButton({
-  icon,
-  label,
-  onClick,
-  testId,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick?: () => void;
-  testId?: string;
-}) {
-  return (
-    <button
-      data-testid={testId}
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className="w-8 h-8 flex items-center justify-center rounded-md bg-[var(--card)]/10 text-white/70 hover:bg-[var(--card)]/20 hover:text-white transition-colors"
-    >
-      {icon}
-    </button>
   );
 }

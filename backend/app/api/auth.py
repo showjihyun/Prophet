@@ -9,15 +9,14 @@ from typing import Any
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.user import ROLE_HIERARCHY, ROLE_VIEWER
+from app.database import get_session
+from app.models.user import ROLE_HIERARCHY, ROLE_VIEWER, User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
-
-# In-memory user store — mirrors the DB 'users' table for the current session.
-# Keys: username → {password_hash, user_id, role, created_at}
-_users: dict[str, dict[str, Any]] = {}
 
 _JWT_ALGORITHM = settings.jwt_algorithm
 _TOKEN_EXPIRE_HOURS = settings.jwt_token_expire_hours
@@ -118,16 +117,16 @@ def require_role(min_role: str):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/register", response_model=RegisterResponse, status_code=201)
-async def register(body: AuthRequest) -> RegisterResponse:
+async def register(
+    body: AuthRequest,
+    db: AsyncSession = Depends(get_session),
+) -> RegisterResponse:
     """Register a new user. Returns user_id and role.
 
     The ``role`` field in the request body is accepted but defaults to 'viewer'.
     Only an admin can register users with elevated roles (enforcement is left
     to callers of this endpoint — the field is recorded as-is for simplicity).
     """
-    if body.username in _users:
-        raise HTTPException(status_code=409, detail="Username already taken")
-
     # Validate role value
     if body.role not in ROLE_HIERARCHY:
         raise HTTPException(
@@ -135,28 +134,46 @@ async def register(body: AuthRequest) -> RegisterResponse:
             detail=f"Invalid role '{body.role}'. Must be one of: {list(ROLE_HIERARCHY)}",
         )
 
-    user_id = str(uuid.uuid4())
-    _users[body.username] = {
-        "user_id": user_id,
-        "password_hash": _hash_password(body.password),
-        "role": body.role,
-        "created_at": datetime.now(tz=timezone.utc).isoformat(),
-    }
-    return RegisterResponse(user_id=user_id, username=body.username, role=body.role)
+    # Check for duplicate username
+    result = await db.execute(select(User).where(User.username == body.username))
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail="Username already taken")
+
+    user = User(
+        user_id=uuid.uuid4(),
+        username=body.username,
+        password_hash=_hash_password(body.password),
+        role=body.role,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    return RegisterResponse(
+        user_id=str(user.user_id),
+        username=user.username,
+        role=user.role,
+    )
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(body: AuthRequest) -> LoginResponse:
+async def login(
+    body: AuthRequest,
+    db: AsyncSession = Depends(get_session),
+) -> LoginResponse:
     """Verify credentials and return JWT token (includes role claim)."""
-    user = _users.get(body.username)
-    if not user or user["password_hash"] != _hash_password(body.password):
+    result = await db.execute(select(User).where(User.username == body.username))
+    user = result.scalar_one_or_none()
+
+    if user is None or user.password_hash != _hash_password(body.password):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    token = _make_token(user["user_id"], body.username, user["role"])
+
+    token = _make_token(str(user.user_id), user.username, user.role)
     return LoginResponse(
         token=token,
-        user_id=user["user_id"],
-        username=body.username,
-        role=user["role"],
+        user_id=str(user.user_id),
+        username=user.username,
+        role=user.role,
     )
 
 

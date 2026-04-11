@@ -9,11 +9,9 @@ from app.engine.diffusion.schema import (
     ExpertOpinion,
     ExposureResult,
     FeedItem,
-    MonteCarloResult,
     NegativeEvent,
     PropagationEvent,
     RecSysConfig,
-    RunSummary,
 )
 from app.engine.diffusion.exposure_model import ExposureModel
 from app.engine.diffusion.propagation_model import PropagationModel
@@ -30,11 +28,9 @@ __all__ = [
     "ExpertOpinion",
     "ExposureResult",
     "FeedItem",
-    "MonteCarloResult",
     "NegativeEvent",
     "PropagationEvent",
     "RecSysConfig",
-    "RunSummary",
     # Models
     "ExposureModel",
     "PropagationModel",

@@ -65,7 +65,7 @@ class TestScaleTiers:
         orch = SimulationOrchestrator()
         t0 = time.perf_counter()
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         await orch.run_step(state.simulation_id)
         elapsed = time.perf_counter() - t0
         assert elapsed < 2.0, f"Dev tier create+1step took {elapsed:.2f}s, expected <2s"

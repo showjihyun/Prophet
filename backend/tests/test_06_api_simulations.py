@@ -7,17 +7,14 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.api import deps as _deps_mod
-from app.api import simulations as _sim_mod
 
 
 @pytest.fixture(autouse=True)
 def _reset_orchestrator():
-    """Reset the orchestrator singleton and monte carlo jobs between tests."""
+    """Reset the orchestrator singleton between tests."""
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
     yield
     _deps_mod._orchestrator = None
-    _sim_mod._monte_carlo_jobs.clear()
 
 
 def _valid_create_body() -> dict:
@@ -211,6 +208,32 @@ class TestInjectEvent:
         )
         assert resp.status_code == 409
 
+    async def test_inject_with_target_communities(self, client: AsyncClient, sim_id: str):
+        """target_communities should be accepted and forwarded to orchestrator."""
+        await client.post(f"/api/v1/simulations/{sim_id}/start")
+        resp = await client.post(
+            f"/api/v1/simulations/{sim_id}/inject-event",
+            json={
+                "event_type": "controversy",
+                "content": "scandal in community A",
+                "controversy": 0.9,
+                "target_communities": ["A", "C"],
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "event_id" in data
+        assert "effective_step" in data
+
+    async def test_inject_unknown_type_400(self, client: AsyncClient, sim_id: str):
+        """Unknown event type should return 400."""
+        await client.post(f"/api/v1/simulations/{sim_id}/start")
+        resp = await client.post(
+            f"/api/v1/simulations/{sim_id}/inject-event",
+            json={"event_type": "UNKNOWN_TYPE", "content": "test"},
+        )
+        assert resp.status_code == 400
+
 
 @pytest.mark.phase6
 class TestReplayAndCompare:
@@ -238,35 +261,6 @@ class TestReplayAndCompare:
         id2 = r2.json()["simulation_id"]
         resp = await client.get(f"/api/v1/simulations/{id1}/compare/{id2}")
         assert resp.status_code == 200
-
-
-@pytest.mark.phase6
-class TestMonteCarlo:
-    """SPEC: 06_API_SPEC.md#monte-carlo"""
-
-    async def test_start_returns_202(self, client: AsyncClient, sim_id: str):
-        resp = await client.post(
-            f"/api/v1/simulations/{sim_id}/monte-carlo",
-            json={"n_runs": 10},
-        )
-        assert resp.status_code == 202
-
-    async def test_get_job_status(self, client: AsyncClient, sim_id: str):
-        resp = await client.post(
-            f"/api/v1/simulations/{sim_id}/monte-carlo",
-            json={"n_runs": 10},
-        )
-        job_id = resp.json()["job_id"]
-        resp2 = await client.get(
-            f"/api/v1/simulations/{sim_id}/monte-carlo/{job_id}"
-        )
-        assert resp2.status_code == 200
-
-    async def test_get_nonexistent_job_404(self, client: AsyncClient, sim_id: str):
-        resp = await client.get(
-            f"/api/v1/simulations/{sim_id}/monte-carlo/nonexistent"
-        )
-        assert resp.status_code == 404
 
 
 @pytest.mark.phase6

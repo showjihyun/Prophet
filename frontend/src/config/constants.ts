@@ -23,8 +23,6 @@ export const LS_KEY_THEME = "prophet-theme";
 export const LS_KEY_SIMULATION_ID = "prophet-simulation-id";
 export const LS_KEY_USERNAME = "prophet-username";
 export const LS_KEY_PROJECT_ID = "prophet-project-id";
-export const LS_KEY_MC_PREFIX = "prophet-mc-";
-
 // ── WebSocket ──────────────────────────────────────────────────────────────
 
 export const WS_MAX_RETRIES = 5;
@@ -35,7 +33,6 @@ export const WS_MAX_RECONNECT_DELAY_MS = 30_000;
 // ── Polling / Timers ───────────────────────────────────────────────────────
 
 export const LLM_STATS_POLL_INTERVAL_MS = 5_000;
-export const MONTE_CARLO_POLL_INTERVAL_MS = 2_000;
 export const TOAST_DISMISS_TIMEOUT_MS = 5_000;
 export const SETTINGS_SAVE_SUCCESS_DURATION_MS = 3_000;
 export const QUERY_STALE_TIME_MS = 5_000;
@@ -52,17 +49,6 @@ export const DEFAULT_SLM_LLM_RATIO = 0.5;
 export const DEFAULT_SIMULATION_SPEED = 2;
 export const DEFAULT_RANDOM_SEED = 42;
 export const SIMULATION_SPEEDS = [1, 2, 5, 10] as const;
-
-// ── Monte Carlo ────────────────────────────────────────────────────────────
-
-export const DEFAULT_MONTE_CARLO_RUNS = 100;
-export const MONTE_CARLO_MIN_RUNS = 10;
-export const MONTE_CARLO_MAX_RUNS = 500;
-export const MONTE_CARLO_STEP = 10;
-export const MONTE_CARLO_LLM_TIME_FACTOR = 2.5;
-export const MONTE_CARLO_SLM_TIME_FACTOR = 0.3;
-export const MONTE_CARLO_LLM_COST_PER_RUN = 0.05;
-export const MONTE_CARLO_SLM_COST_PER_RUN = 0.001;
 
 // ── Engine Control ─────────────────────────────────────────────────────────
 
@@ -128,7 +114,7 @@ export const POLARIZATION_ROLLING_WINDOW = 10;
 // ── Default LLM Settings ──────────────────────────────────────────────────
 
 export const DEFAULT_LLM_PROVIDER = "ollama";
-export const DEFAULT_OLLAMA_MODEL = "llama3.1:8b";
+export const DEFAULT_OLLAMA_MODEL = "llama3.2:1b";
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 export const DEFAULT_OPENAI_MODEL = "gpt-4o";
 export const DEFAULT_LLM_CACHE_TTL_SECONDS = 3_600;
@@ -153,6 +139,8 @@ export const OPENAI_MODELS = [
 // @spec docs/spec/04_SIMULATION_SPEC.md#simulation-status
 
 import type { SimulationStatus } from "@/types/simulation";
+
+export type { SimulationStatus };
 
 export const SIM_STATUS = {
   CREATED: "created",

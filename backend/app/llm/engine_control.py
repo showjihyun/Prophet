@@ -134,20 +134,18 @@ class EngineController:
 
         # Reasoning depth
         if tier3_ratio <= 0.05:
-            reasoning_depth = "양적 분석"
+            reasoning_depth = "Quantitative Analysis"
         elif tier3_ratio <= 0.15:
-            reasoning_depth = "균형"
+            reasoning_depth = "Balanced"
         else:
-            reasoning_depth = "질적 분석"
+            reasoning_depth = "Qualitative Analysis"
 
         # Simulation velocity
         latency = distribution.estimated_latency_ms
-        if latency < 50:
+        if latency < 1000:
             simulation_velocity = f"~{latency:.0f}ms per step"
-        elif latency < 5000:
-            simulation_velocity = f"~{latency / 1000:.0f}s per step"
         else:
-            simulation_velocity = f"~{latency / 1000:.0f}s per step"
+            simulation_velocity = f"~{latency / 1000:.1f}s per step"
 
         # Prediction type
         if tier3_ratio <= 0.05:

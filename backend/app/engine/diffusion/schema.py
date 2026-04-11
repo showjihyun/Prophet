@@ -117,6 +117,7 @@ class PropagationEvent:
     step: int
     message_id: UUID
     contextual_packet: "ContextualPacket | None" = None
+    generated_content: str | None = None  # CG-03: Tier 3 agent-generated post text
 
 
 @dataclass
@@ -219,34 +220,6 @@ class ExpertOpinion:
     confidence: float
 
 
-@dataclass
-class RunSummary:
-    """Summary of a single Monte Carlo run.
-
-    SPEC: docs/spec/03_DIFFUSION_SPEC.md#monte-carlo-simulation
-    """
-    run_id: int
-    final_adoption: int
-    viral_detected: bool
-    steps_completed: int
-
-
-@dataclass
-class MonteCarloResult:
-    """Aggregated results of Monte Carlo simulation.
-
-    SPEC: docs/spec/03_DIFFUSION_SPEC.md#monte-carlo-simulation
-    """
-    n_runs: int
-    viral_probability: float
-    expected_reach: float
-    community_adoption: dict[str, float]
-    p5_reach: float
-    p50_reach: float
-    p95_reach: float
-    run_summaries: list[RunSummary]
-
-
 __all__ = [
     "RecSysConfig",
     "FeedItem",
@@ -259,6 +232,4 @@ __all__ = [
     "CommunitySentiment",
     "NegativeEvent",
     "ExpertOpinion",
-    "RunSummary",
-    "MonteCarloResult",
 ]

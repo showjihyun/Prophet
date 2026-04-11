@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 
 from app.api.deps import get_orchestrator
 from app.api.schemas import NetworkFormat, NetworkGraphResponse, NetworkMetricsResponse
-from app.api.simulations import _get_state_or_404
+from app.api.simulations import _get_state_or_404, _sim_id_to_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,15 @@ async def get_network(
     Full-graph serialization runs on a worker thread to avoid blocking the
     event loop for multi-thousand-node networks.
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    _sim_id_to_uuid(simulation_id)  # invalid UUIDs still 404
+    # Historical sims (DB-only after restart) have no in-memory network.
+    # Return empty graph instead of 404 — frontend handles it gracefully.
+    try:
+        state = _get_state_or_404(orchestrator, simulation_id)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        return NetworkGraphResponse(nodes=[], edges=[])
     etag = _network_etag(simulation_id, state.current_step, summary=summary, format=format.value)
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
@@ -87,7 +95,13 @@ async def get_network_metrics(
     """Current network metrics.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idnetworkmetrics
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    _sim_id_to_uuid(simulation_id)
+    try:
+        state = _get_state_or_404(orchestrator, simulation_id)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        return NetworkMetricsResponse()
     etag = f'W/"{simulation_id}-{state.current_step}-metrics"'
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = "private, max-age=0, must-revalidate"

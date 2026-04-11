@@ -82,9 +82,10 @@ class SentimentModel:
         n = len(beliefs)
         mean_belief = sum(beliefs) / n
 
-        # Variance
+        # Variance (Bessel's correction: n-1)
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#6.3
         if n > 1:
-            variance = sum((b - mean_belief) ** 2 for b in beliefs) / n
+            variance = sum((b - mean_belief) ** 2 for b in beliefs) / (n - 1)
         else:
             variance = 0.0
 

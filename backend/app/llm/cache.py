@@ -69,13 +69,16 @@ class ValkeyCacheBackend:
 
 
 class LLMResponseCache:
-    """Caches LLM responses to reduce cost in Monte Carlo runs and repeated scenarios.
+    """Caches LLM responses to reduce cost in repeated scenarios.
 
     Uses Valkey when available; falls back transparently to an in-memory dict
     when the Valkey server is unreachable.
 
     SPEC: docs/spec/05_LLM_SPEC.md#6-llm-response-cache-valkey
     """
+
+    # Re-probe Valkey every 5 minutes after initial failure
+    _REPROBE_INTERVAL_SECONDS: float = 300.0
 
     def __init__(self) -> None:
         """Initialise cache, connecting to Valkey lazily on first use.
@@ -90,15 +93,30 @@ class LLMResponseCache:
         # Valkey backend — initialised lazily in _backend()
         self._valkey: ValkeyCacheBackend | None = None
         self._valkey_ok: bool | None = None  # None = not yet probed
+        self._last_probe_time: float = 0.0
+
+        # Observability counters
+        self._valkey_failures: int = 0
+        self._fallback_gets: int = 0
+        self._fallback_sets: int = 0
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     async def _backend(self) -> ValkeyCacheBackend | None:
-        """Return a live ValkeyCacheBackend, or None if unavailable."""
+        """Return a live ValkeyCacheBackend, or None if unavailable.
+
+        Re-probes periodically after failure to allow recovery.
+        """
+        now = time.time()
+
+        # Re-probe after failure if enough time has passed
         if self._valkey_ok is False:
-            return None  # already known to be down
+            if now - self._last_probe_time < self._REPROBE_INTERVAL_SECONDS:
+                return None  # still in cooldown
+            logger.info("LLMResponseCache: re-probing Valkey after cooldown")
+            self._valkey_ok = None  # trigger fresh probe
 
         if self._valkey is None:
             try:
@@ -110,16 +128,23 @@ class LLMResponseCache:
             except Exception as exc:
                 logger.warning("Could not create Valkey backend: %s", exc)
                 self._valkey_ok = False
+                self._last_probe_time = now
+                self._valkey_failures += 1
                 return None
 
         if self._valkey_ok is None:
-            # First-time reachability probe
+            # Probe reachability
+            self._last_probe_time = now
             self._valkey_ok = await self._valkey.ping()
             if self._valkey_ok:
                 logger.info("LLMResponseCache: Valkey backend connected")
             else:
+                self._valkey_failures += 1
                 logger.warning(
-                    "LLMResponseCache: Valkey unreachable — using in-memory fallback"
+                    "LLMResponseCache: Valkey unreachable (failure #%d) "
+                    "— using in-memory fallback. Will re-probe in %ds.",
+                    self._valkey_failures,
+                    int(self._REPROBE_INTERVAL_SECONDS),
                 )
 
         return self._valkey if self._valkey_ok else None
@@ -169,6 +194,7 @@ class LLMResponseCache:
                     logger.warning("Valkey deserialise error for key %s: %s", key, exc)
 
         # In-memory fallback
+        self._fallback_gets += 1
         entry = self._store.get(key)
         if entry is None:
             return None
@@ -226,6 +252,20 @@ class LLMResponseCache:
         keys = self._simulation_keys.pop(sid, set())
         for key in keys:
             self._store.pop(key, None)
+
+
+    def health_status(self) -> dict[str, Any]:
+        """Return cache health status for observability.
+
+        SPEC: docs/spec/05_LLM_SPEC.md#6-llm-response-cache-valkey
+        """
+        return {
+            "valkey_connected": self._valkey_ok is True,
+            "valkey_failures": self._valkey_failures,
+            "fallback_gets": self._fallback_gets,
+            "fallback_sets": self._fallback_sets,
+            "inmemory_entries": len(self._store),
+        }
 
 
 __all__ = ["LLMResponseCache", "ValkeyCacheBackend"]

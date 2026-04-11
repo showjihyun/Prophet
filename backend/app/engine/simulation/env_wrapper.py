@@ -43,7 +43,7 @@ class ProphetEnv:
         """Reset environment to initial state. Returns initial observation."""
         state = self._orch.create_simulation(self._config)
         self._sim_id = state.simulation_id
-        self._orch.start(self._sim_id)
+        asyncio.get_event_loop().run_until_complete(self._orch.start(self._sim_id))
         self._current_step = 0
         self._done = False
         self._last_result = None

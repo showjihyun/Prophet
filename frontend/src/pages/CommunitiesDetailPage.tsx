@@ -2,95 +2,24 @@
  * CommunitiesDetailPage — Communities overview with cards and connection matrix.
  * @spec docs/spec/ui/UI_02_COMMUNITIES_DETAIL.md
  */
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
-import { apiClient, type CommunityInfo } from "../api/client";
+import { type CommunityInfo } from "../api/client";
+import {
+  useCommunities,
+  useCreateCommunity,
+  useUpdateCommunity,
+  useDeleteCommunity,
+} from "../api/queries";
 import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { useSimulationStore } from "../store/simulationStore";
 import { SIM_STATUS } from "@/config/constants";
 
-const COMMUNITIES = [
-  {
-    id: "alpha",
-    name: "Alpha Community",
-    color: "var(--community-alpha)",
-    agents: 1500,
-    sentiment: { positive: 62, neutral: 25, negative: 13 },
-    influencers: [
-      { id: "A-0042", score: 98.2 },
-      { id: "A-0187", score: 91.5 },
-      { id: "A-0334", score: 87.1 },
-    ],
-    emotions: { interest: 35, trust: 30, skepticism: 15, excitement: 20 },
-    status: "High" as const,
-  },
-  {
-    id: "beta",
-    name: "Beta Community",
-    color: "var(--community-beta)",
-    agents: 1200,
-    sentiment: { positive: 55, neutral: 30, negative: 15 },
-    influencers: [
-      { id: "B-0091", score: 94.7 },
-      { id: "B-0203", score: 88.3 },
-      { id: "B-0112", score: 82.6 },
-    ],
-    emotions: { interest: 25, trust: 40, skepticism: 20, excitement: 15 },
-    status: "Very High" as const,
-  },
-  {
-    id: "gamma",
-    name: "Gamma Community",
-    color: "var(--community-gamma)",
-    agents: 1100,
-    sentiment: { positive: 40, neutral: 35, negative: 25 },
-    influencers: [
-      { id: "G-0055", score: 85.9 },
-      { id: "G-0178", score: 79.4 },
-      { id: "G-0290", score: 74.2 },
-    ],
-    emotions: { interest: 30, trust: 20, skepticism: 30, excitement: 20 },
-    status: "Medium" as const,
-  },
-  {
-    id: "delta",
-    name: "Delta Community",
-    color: "var(--community-delta)",
-    agents: 1400,
-    sentiment: { positive: 48, neutral: 32, negative: 20 },
-    influencers: [
-      { id: "D-0067", score: 92.1 },
-      { id: "D-0145", score: 86.8 },
-      { id: "D-0223", score: 80.4 },
-    ],
-    emotions: { interest: 28, trust: 25, skepticism: 22, excitement: 25 },
-    status: "High" as const,
-  },
-  {
-    id: "bridge",
-    name: "Bridge Community",
-    color: "var(--community-bridge)",
-    agents: 300,
-    sentiment: { positive: 35, neutral: 40, negative: 25 },
-    influencers: [
-      { id: "BR-0012", score: 96.5 },
-      { id: "BR-0034", score: 90.2 },
-      { id: "BR-0056", score: 84.7 },
-    ],
-    emotions: { interest: 20, trust: 15, skepticism: 40, excitement: 25 },
-    status: "Low" as const,
-  },
-];
-
-const CONNECTION_MATRIX: Record<string, Record<string, number>> = {
-  alpha: { alpha: 1, beta: 0.78, gamma: 0.45, delta: 0.62, bridge: 0.85 },
-  beta: { alpha: 0.78, beta: 1, gamma: 0.55, delta: 0.42, bridge: 0.71 },
-  gamma: { alpha: 0.45, gamma: 1, beta: 0.55, delta: 0.68, bridge: 0.52 },
-  delta: { alpha: 0.62, beta: 0.42, gamma: 0.68, delta: 1, bridge: 0.59 },
-  bridge: { alpha: 0.85, beta: 0.71, gamma: 0.52, delta: 0.59, bridge: 1 },
-};
+// COMMUNITIES mock array + CONNECTION_MATRIX removed — the page now renders
+// only real community data from the API (via useCommunities TanStack Query).
+// When no data is available, an explicit empty state is shown instead of
+// fake agent IDs and canned sentiment distributions.
 
 const statusColors: Record<string, string> = {
   "Very High": "bg-[var(--destructive)]/15 text-[var(--destructive)]",
@@ -114,7 +43,18 @@ const COMMUNITY_META: Record<string, { name: string; color: string }> = {
   E: { name: "Bridge Community", color: "var(--community-bridge)" },
 };
 
-function apiToLocal(c: CommunityInfo): typeof COMMUNITIES[number] {
+interface LocalCommunity {
+  id: string;
+  name: string;
+  color: string;
+  agents: number;
+  sentiment: { positive: number; neutral: number; negative: number };
+  influencers: Array<{ id: string; score: number }>;
+  emotions: { interest: number; trust: number; skepticism: number; excitement: number };
+  status: "Very High" | "High" | "Medium" | "Low";
+}
+
+function apiToLocal(c: CommunityInfo): LocalCommunity {
   const meta = COMMUNITY_META[c.community_id] ?? { name: c.name || c.community_id, color: "var(--muted-foreground)" };
   const sentPos = Math.round(Math.max(0, c.mean_belief) * 100);
   const sentNeg = Math.round(Math.max(0, -c.mean_belief) * 100);
@@ -133,13 +73,23 @@ function apiToLocal(c: CommunityInfo): typeof COMMUNITIES[number] {
 export default function CommunitiesDetailPage() {
   const navigate = useNavigate();
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
-  const latestStep = useSimulationStore((s) => s.steps.length > 0 ? s.steps[s.steps.length - 1] : null);
-  const [communities, setCommunities] = useState(COMMUNITIES);
-  const [loading, setLoading] = useState(false);
+  // FE-PERF-M3: use canonical latestStep selector
+  const latestStep = useSimulationStore((s) => s.latestStep);
   const simStatus = useSimulationStore((s) => s.status);
   const canEdit = simulationId != null && (simStatus === SIM_STATUS.PAUSED || simStatus === SIM_STATUS.CONFIGURED || simStatus === SIM_STATUS.CREATED);
   // Use getState() so addToast subscription doesn't trigger re-renders
   const addToast = (t: { type: 'info' | 'success' | 'warning' | 'error'; message: string }) => useSimulationStore.getState().addToast(t);
+
+  // TanStack Query — list + 3 mutations with auto-invalidation
+  const communitiesQuery = useCommunities(simulationId);
+  const communities =
+    communitiesQuery.data?.communities && communitiesQuery.data.communities.length > 0
+      ? communitiesQuery.data.communities.map(apiToLocal)
+      : [];
+  const loading = communitiesQuery.isLoading;
+  const createCommunity = useCreateCommunity(simulationId);
+  const updateCommunity = useUpdateCommunity(simulationId);
+  const deleteCommunity = useDeleteCommunity(simulationId);
 
   const handleAddCommunity = async () => {
     if (!simulationId) return;
@@ -149,11 +99,8 @@ export default function CommunitiesDetailPage() {
     const size = parseInt(sizeStr ?? "100", 10);
     if (isNaN(size) || size < 10 || size > 5000) return;
     try {
-      await apiClient.communities.create(simulationId, { name: name.trim(), size });
+      await createCommunity.mutateAsync({ name: name.trim(), size });
       addToast({ type: "success", message: `Community "${name.trim()}" added with ${size} agents` });
-      // Refresh
-      const res = await apiClient.communities.list(simulationId);
-      if (res.communities.length > 0) setCommunities(res.communities.map(apiToLocal));
     } catch (e) {
       addToast({ type: "error", message: `Failed to add community: ${e}` });
     }
@@ -163,10 +110,8 @@ export default function CommunitiesDetailPage() {
     if (!simulationId) return;
     if (!window.confirm(`Delete community "${communityName}"? All its agents will be removed.`)) return;
     try {
-      const result = await apiClient.communities.remove(simulationId, communityId) as { agents_removed: number };
+      const result = await deleteCommunity.mutateAsync(communityId) as { agents_removed: number };
       addToast({ type: "success", message: `Removed "${communityName}" (${result.agents_removed} agents)` });
-      const res = await apiClient.communities.list(simulationId);
-      if (res.communities.length > 0) setCommunities(res.communities.map(apiToLocal));
     } catch (e) {
       addToast({ type: "error", message: `Failed to delete: ${e}` });
     }
@@ -177,30 +122,12 @@ export default function CommunitiesDetailPage() {
     const name = window.prompt("New community name:");
     if (!name?.trim()) return;
     try {
-      await apiClient.communities.update(simulationId, communityId, { name: name.trim() });
+      await updateCommunity.mutateAsync({ communityId, payload: { name: name.trim() } });
       addToast({ type: "success", message: `Community renamed to "${name.trim()}"` });
-      const res = await apiClient.communities.list(simulationId);
-      if (res.communities.length > 0) setCommunities(res.communities.map(apiToLocal));
     } catch (e) {
       addToast({ type: "error", message: `Failed to update: ${e}` });
     }
   };
-
-  useEffect(() => {
-    if (!simulationId) return;
-    let cancelled = false;
-    const fetchCommunities = async () => {
-      try {
-        const res = await apiClient.communities.list(simulationId);
-        if (!cancelled && res.communities.length > 0) {
-          setCommunities(res.communities.map(apiToLocal));
-        }
-      } catch { /* keep mock */ }
-      if (!cancelled) setLoading(false);
-    };
-    fetchCommunities();
-    return () => { cancelled = true; };
-  }, [simulationId, latestStep?.step]);
 
   const totalAgents = communities.reduce((s, c) => s + c.agents, 0);
   const avgSentiment = latestStep?.mean_sentiment ?? 0.72;
@@ -446,8 +373,15 @@ export default function CommunitiesDetailPage() {
                       </span>
                     </td>
                     {communities.map((col) => {
+                      // Without a real inter-community edge-weight API,
+                      // derive a placeholder strength: self = 1.0, other
+                      // communities scale by their relative size overlap.
                       const strength =
-                        CONNECTION_MATRIX[row.id]?.[col.id] ?? 0;
+                        row.id === col.id
+                          ? 1.0
+                          : Math.min(row.agents, col.agents) /
+                              Math.max(row.agents, col.agents, 1) *
+                              0.8;
                       const size = Math.max(8, Math.round(strength * 24));
                       const isSelf = row.id === col.id;
                       return (

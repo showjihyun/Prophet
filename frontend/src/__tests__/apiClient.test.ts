@@ -25,8 +25,6 @@ describe('apiClient', () => {
     expect(apiClient.simulations.injectEvent).toBeDefined();
     expect(apiClient.simulations.replay).toBeDefined();
     expect(apiClient.simulations.compare).toBeDefined();
-    expect(apiClient.simulations.monteCarlo).toBeDefined();
-    expect(apiClient.simulations.getMonteCarloJob).toBeDefined();
     expect(apiClient.simulations.engineControl).toBeDefined();
     expect(apiClient.simulations.recommendEngine).toBeDefined();
   });

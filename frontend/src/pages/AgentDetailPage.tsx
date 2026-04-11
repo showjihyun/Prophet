@@ -2,9 +2,10 @@
  * AgentDetailPage — Agent profile, personality, activity chart, and interactions.
  * @spec docs/spec/ui/UI_04_AGENT_DETAIL.md
  */
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { apiClient, type AgentDetail, type MemoryRecord } from "../api/client";
+import { type AgentDetail, type MemoryRecord } from "../api/client";
+import { useAgent, useAgentMemory, useNetwork } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 import { SIM_STATUS } from "@/config/constants";
 
@@ -35,25 +36,7 @@ import PageNav from "../components/shared/PageNav";
 import AgentInterveneModal from "../components/shared/AgentInterveneModal";
 import EgoGraph from "../components/graph/EgoGraph";
 
-const MOCK_AGENT = {
-  id: "A-0042",
-  agentNumber: 3847,
-  community: "Alpha",
-  communityColor: "var(--community-alpha)",
-  influence: 98.2,
-  connections: 247,
-  subscribers: 12,
-  trust: 0.87,
-  personality: {
-    Openness: 78,
-    Skepticism: 42,
-    Adaptability: 65,
-    Advocacy: 88,
-    "Trust/Safety": 71,
-  },
-  memorySummary:
-    "Agent has been a consistent advocate for the primary message within the Alpha community. Recent interactions show increasing trust with Bridge community members. Memory includes 34 episodic events, 12 semantic concepts related to brand messaging, and active social connections with 5 high-influence peers.",
-};
+// MOCK_AGENT removed — page requires a real agent record from the API.
 
 const SENTIMENT_DATA = [
   { day: "D41", positive: 60, negative: 20 },
@@ -73,14 +56,8 @@ interface Interaction {
   time: string;
 }
 
-const MOCK_INTERACTIONS: Interaction[] = [
-  { target: "B-0091", type: "Share", sentiment: "Positive", message: "Great insight on the campaign strategy, sharing with my network...", time: "2h ago" },
-  { target: "A-0187", type: "Reply", sentiment: "Positive", message: "I agree with the approach. The data supports this direction.", time: "4h ago" },
-  { target: "BR-0012", type: "Influence", sentiment: "Neutral", message: "Bridging the gap between Alpha and Beta communities on this topic.", time: "6h ago" },
-  { target: "D-0067", type: "Mention", sentiment: "Positive", message: "Referenced Agent D-0067's analysis in the community discussion.", time: "8h ago" },
-  { target: "G-0055", type: "Share", sentiment: "Negative", message: "Disagreeing with the Gamma community's stance on this issue.", time: "12h ago" },
-  { target: "A-0334", type: "Reply", sentiment: "Positive", message: "Excellent follow-up on yesterday's interaction chain.", time: "1d ago" },
-];
+// MOCK_INTERACTIONS removed — derivedInteractions (from real step history) is the
+// single source of truth. See `derivedInteractions` useMemo below.
 
 const SENTIMENT_STYLES: Record<string, React.CSSProperties> = {
   Positive: { backgroundColor: "color-mix(in srgb, var(--sentiment-positive) 15%, transparent)", color: "var(--sentiment-positive)" },
@@ -107,16 +84,7 @@ interface ConnectionItem {
   influence: number;
 }
 
-const MOCK_CONNECTIONS: ConnectionItem[] = [
-  { id: "a1", name: "Agent #1043", community: "Alpha", color: "#3b82f6", trust: 0.92, influence: 0.85 },
-  { id: "a2", name: "Agent #4214", community: "Beta", color: "#22c55e", trust: 0.87, influence: 0.72 },
-  { id: "a3", name: "Agent #0891", community: "Alpha", color: "#3b82f6", trust: 0.84, influence: 0.68 },
-  { id: "a4", name: "Agent #2301", community: "Gamma", color: "#f97316", trust: 0.79, influence: 0.61 },
-  { id: "a5", name: "Agent #7782", community: "Delta", color: "#a855f7", trust: 0.75, influence: 0.55 },
-  { id: "a6", name: "Agent #0012", community: "Bridge", color: "#ef4444", trust: 0.73, influence: 0.90 },
-  { id: "a7", name: "Agent #5567", community: "Beta", color: "#22c55e", trust: 0.71, influence: 0.48 },
-  { id: "a8", name: "Agent #3344", community: "Alpha", color: "#3b82f6", trust: 0.68, influence: 0.52 },
-];
+// MOCK_CONNECTIONS removed — `connections` state is loaded from the network API.
 
 // ---------------------------------------------------------------------------
 // Mock messages data for the Messages tab
@@ -132,64 +100,7 @@ interface MessageItem {
   replyTo?: string;
 }
 
-const MOCK_MESSAGES: MessageItem[] = [
-  {
-    id: "m1",
-    type: "share",
-    content: "The AI camera phone looks promising. Battery specs need verification though.",
-    timestamp: "2m ago",
-    sentiment: "positive",
-    reach: 47,
-    reactions: { like: 12, comment: 3, repost: 2 },
-  },
-  {
-    id: "m2",
-    type: "comment",
-    content: "Responding to Agent #1043: I agree the camera quality is competitive, but the price point concerns me.",
-    timestamp: "15m ago",
-    sentiment: "neutral",
-    reach: 23,
-    reactions: { like: 5, comment: 1, repost: 0 },
-    replyTo: "Agent #1043",
-  },
-  {
-    id: "m3",
-    type: "repost",
-    content: "RT @Agent #4214: This campaign is gaining traction in the Beta community. Watch the cascade.",
-    timestamp: "32m ago",
-    sentiment: "positive",
-    reach: 89,
-    reactions: { like: 24, comment: 7, repost: 15 },
-    replyTo: "Agent #4214",
-  },
-  {
-    id: "m4",
-    type: "adopt",
-    content: "Decision: Adopting the product. Key factor: trusted recommendation from Agent #0592.",
-    timestamp: "1h ago",
-    sentiment: "positive",
-    reach: 12,
-    reactions: { like: 3, comment: 0, repost: 1 },
-  },
-  {
-    id: "m5",
-    type: "comment",
-    content: "I'm skeptical about the marketing claims. Has anyone actually tested the AI features?",
-    timestamp: "2h ago",
-    sentiment: "negative",
-    reach: 56,
-    reactions: { like: 8, comment: 12, repost: 4 },
-  },
-  {
-    id: "m6",
-    type: "share",
-    content: "Sharing expert analysis: The technology behind the AI camera is solid, based on the review from Community Delta.",
-    timestamp: "3h ago",
-    sentiment: "positive",
-    reach: 134,
-    reactions: { like: 31, comment: 9, repost: 18 },
-  },
-];
+// MOCK_MESSAGES removed — apiMessages is the source of truth.
 
 const TABS = ["Activity", "Connections", "Messages"] as const;
 
@@ -201,23 +112,59 @@ const COMMUNITY_ID_TO_NAME: Record<string, { name: string; color: string }> = {
   E: { name: "Bridge", color: "var(--community-bridge)" },
 };
 
-function apiToAgent(a: AgentDetail) {
-  const comm = COMMUNITY_ID_TO_NAME[a.community_id] ?? { name: a.community_id, color: "var(--muted-foreground)" };
+type AgentView = {
+  id: string;
+  agentNumber: string;
+  community: string;
+  communityColor: string;
+  influence: number;
+  connections: number;
+  subscribers: number;
+  trust: number;
+  personality: Record<string, number>;
+  memorySummary: string;
+};
+
+function apiToAgent(
+  a: AgentDetail,
+  communityNameOverride?: string,
+): AgentView {
+  // The agent endpoint returns community_id as a UUID. The static
+  // COMMUNITY_ID_TO_NAME map only knows letter keys (A-E). If we have an
+  // override (e.g. from the network endpoint's community_name) use it,
+  // otherwise show a friendly fallback rather than the raw UUID.
+  const fromMap = COMMUNITY_ID_TO_NAME[a.community_id];
+  const community =
+    communityNameOverride ??
+    fromMap?.name ??
+    "Community";
+  const communityColor = fromMap?.color ?? "var(--muted-foreground)";
+
   return {
     id: a.agent_id,
-    agentNumber: a.agent_id.replace(/\D/g, "").slice(-4) || a.agent_id.slice(0, 6),
-    community: comm.name,
-    communityColor: comm.color,
+    // Show first 8 hex chars of the UUID (standard short-id convention).
+    // 4 chars was too short and felt "clipped"; 8 gives enough entropy
+    // to be unique across 1k+ agents while staying compact.
+    agentNumber: a.agent_id.replace(/-/g, "").slice(0, 8),
+    community,
+    communityColor,
     influence: Math.round(a.influence_score * 1000) / 10,
     connections: 0,
     subscribers: 0,
     trust: a.emotion?.trust ?? 0,
     personality: Object.fromEntries(
-      Object.entries(a.personality ?? {}).map(([k, v]) => [k.charAt(0).toUpperCase() + k.slice(1), Math.round(v * 100)]),
+      Object.entries(a.personality ?? {}).map(([k, v]) => [
+        k.charAt(0).toUpperCase() + k.slice(1),
+        Math.round(v * 100),
+      ]),
     ),
-    memorySummary: a.memories.length > 0
-      ? a.memories.slice(0, 3).map((m) => m.content ?? String(m)).join(" | ")
-      : MOCK_AGENT.memorySummary,
+    memorySummary:
+      a.memories.length > 0
+        ? a.memories
+            .slice(0, 3)
+            .map((m) => m.content ?? String(m))
+            .join(" | ")
+        : "No recorded memories yet — agent has not produced any episodic events in this run.",
   };
 }
 
@@ -225,90 +172,122 @@ export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-H3: subscribe to latestStep gate, read recent steps lazily
+  const latestStep = useSimulationStore((s) => s.latestStep);
+  const stepsLength = useSimulationStore((s) => s.steps.length);
   const status = useSimulationStore((s) => s.status);
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Activity");
   const [interveneOpen, setInterveneOpen] = useState(false);
   const [connSearch, setConnSearch] = useState("");
   const [msgFilter, setMsgFilter] = useState("all");
 
-  const [agent, setAgent] = useState({ ...MOCK_AGENT, id: agentId ?? MOCK_AGENT.id });
-  // Connections: start with MOCK_CONNECTIONS as fallback; replaced when network data loads
-  const [connections, setConnections] = useState<ConnectionItem[]>(MOCK_CONNECTIONS);
+  // Agent state is nullable — we render a loading state until the real
+  // record arrives from the API. (We used to seed with mock data on first
+  // paint, which leaked fake info into the UI before the real record loaded.)
+  // TanStack Query — agent + network + memory in parallel, all cached.
+  // Navigating to another page and back returns instantly without refetch
+  // (network and agent are heavy reads). React Query also dedupes if
+  // multiple components ask for the same data simultaneously.
+  const agentQuery = useAgent(simulationId, agentId ?? null);
+  const networkQuery = useNetwork(simulationId);
+  const memoryQuery = useAgentMemory(simulationId, agentId ?? null);
 
-  // Fetch real agent data from API
-  useEffect(() => {
-    if (!simulationId || !agentId) return;
-    apiClient.agents.get(simulationId, agentId).then((res) => {
-      setAgent(apiToAgent(res));
-    }).catch(() => {
-      setAgent({ ...MOCK_AGENT, id: agentId });
+  const agentLoading = agentQuery.isLoading;
+  const agentNotFound = agentQuery.isError;
+
+  // Derive view-model from query data. useMemo because apiToAgent walks
+  // network nodes to find the friendly community_name and computes degree.
+  const agent = useMemo<AgentView | null>(() => {
+    if (!agentQuery.data) return null;
+    let communityName: string | undefined;
+    let connectionCount = 0;
+    let subscriberCount = 0;
+    if (networkQuery.data) {
+      const graph = networkQuery.data;
+      const node = graph.nodes.find(
+        (n) => String(n.data.agent_id) === agentId,
+      );
+      const name = node?.data.community_name;
+      if (typeof name === "string" && name.length > 0) {
+        communityName = name;
+      }
+      // degree = all edges touching this agent
+      const nodeId = agentId ?? "";
+      const allEdges = graph.edges.filter(
+        (e) => String(e.data.source) === nodeId || String(e.data.target) === nodeId,
+      );
+      connectionCount = allEdges.length;
+      // subscribers = edges where this agent is the target (incoming)
+      subscriberCount = graph.edges.filter(
+        (e) => String(e.data.target) === nodeId,
+      ).length;
+    }
+    const view = apiToAgent(agentQuery.data as AgentDetail, communityName);
+    view.connections = connectionCount;
+    view.subscribers = subscriberCount;
+    return view;
+  }, [agentQuery.data, networkQuery.data, agentId]);
+
+  // Derive connections from the cached network graph
+  const connections = useMemo<ConnectionItem[]>(() => {
+    const graph = networkQuery.data;
+    if (!graph || !agentId) return [];
+    const connected = graph.edges
+      .filter((e) => String(e.data.source) === agentId || String(e.data.target) === agentId)
+      .slice(0, 20);
+    return connected.map((e, i) => {
+      const peerId =
+        String(e.data.source) === agentId
+          ? String(e.data.target)
+          : String(e.data.source);
+      const peerNode = graph.nodes.find((n) => String(n.data.id) === peerId);
+      const community = (peerNode?.data.community as string) ?? "Unknown";
+      return {
+        id: `c${i}`,
+        name: `Agent ${peerId}`,
+        community,
+        color: COMMUNITY_COLORS[community] ?? "#888",
+        trust: (e.data.weight as number) ?? 0.5,
+        influence: (peerNode?.data.influence_score as number) ?? 0.5,
+      };
     });
-  }, [simulationId, agentId]);
+  }, [networkQuery.data, agentId]);
 
-  // Fetch real connections from network graph
-  useEffect(() => {
-    if (!simulationId || !agentId) return;
-    apiClient.network.get(simulationId).then((graph) => {
-      const connected = graph.edges
-        .filter((e) => String(e.data.source) === agentId || String(e.data.target) === agentId)
-        .slice(0, 20);
-      const conns: ConnectionItem[] = connected.map((e, i) => {
-        const peerId =
-          String(e.data.source) === agentId
-            ? String(e.data.target)
-            : String(e.data.source);
-        const peerNode = graph.nodes.find((n) => String(n.data.id) === peerId);
-        const community = (peerNode?.data.community as string) ?? "Unknown";
-        return {
-          id: `c${i}`,
-          name: `Agent ${peerId}`,
-          community,
-          color: COMMUNITY_COLORS[community] ?? "#888",
-          trust: (e.data.weight as number) ?? 0.5,
-          influence: (peerNode?.data.influence_score as number) ?? 0.5,
-        };
-      });
-      if (conns.length > 0) setConnections(conns);
-    }).catch(() => {});
-  }, [simulationId, agentId]);
-
-  // Fetch real agent messages (memory records) from API
-  const [apiMessages, setApiMessages] = useState<MessageItem[]>([]);
-  useEffect(() => {
-    if (!simulationId || !agentId) return;
-    apiClient.agents.getMemory(simulationId, agentId).then((res) => {
-      const msgs: MessageItem[] = (res.memories ?? []).map((m: MemoryRecord, i: number) => {
-        const type: MessageItem["type"] =
-          m.memory_type === "episodic" ? "share" :
-          m.memory_type === "semantic" ? "comment" : "share";
-        const sentiment: MessageItem["sentiment"] =
-          m.importance > 0.6 ? "positive" :
-          m.importance < 0.3 ? "negative" : "neutral";
-        return {
-          id: `mem-${i}`,
-          type,
-          content: m.content,
-          timestamp: m.timestamp != null ? `Step ${m.timestamp}` : "—",
-          sentiment,
-          reach: Math.round(m.importance * 100),
-          reactions: { like: 0, comment: 0, repost: 0 },
-          replyTo: m.source_agent_id ? `Agent ${m.source_agent_id}` : undefined,
-        };
-      });
-      if (msgs.length > 0) setApiMessages(msgs);
-    }).catch(() => {});
-  }, [simulationId, agentId]);
+  // Derive messages from the cached memory query
+  const apiMessages = useMemo<MessageItem[]>(() => {
+    const res = memoryQuery.data;
+    if (!res) return [];
+    return (res.memories ?? []).map((m: MemoryRecord, i: number) => {
+      const type: MessageItem["type"] =
+        m.memory_type === "episodic" ? "share" :
+        m.memory_type === "semantic" ? "comment" : "share";
+      const sentiment: MessageItem["sentiment"] =
+        m.importance > 0.6 ? "positive" :
+        m.importance < 0.3 ? "negative" : "neutral";
+      return {
+        id: `mem-${i}`,
+        type,
+        content: m.content,
+        timestamp: m.timestamp != null ? `Step ${m.timestamp}` : "—",
+        sentiment,
+        reach: Math.round(m.importance * 100),
+        reactions: { like: 0, comment: 0, repost: 0 },
+        replyTo: m.source_agent_id ? `Agent ${m.source_agent_id}` : undefined,
+      };
+    });
+  }, [memoryQuery.data]);
 
   // Derive sentiment chart data from store steps (last 7), fallback to SENTIMENT_DATA
   const sentimentData = useMemo(() => {
+    const steps = useSimulationStore.getState().steps;
     if (steps.length === 0) return SENTIMENT_DATA;
     return steps.slice(-7).map((s) => ({
       day: `D${s.step}`,
       positive: Math.max(0, s.mean_sentiment) * 100,
       negative: Math.max(0, -s.mean_sentiment) * 100,
     }));
-  }, [steps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength]);
 
   const filteredConnections = useMemo(
     () =>
@@ -322,6 +301,7 @@ export default function AgentDetailPage() {
 
   // Derive interactions from step history — each step where action_distribution changes
   const derivedInteractions = useMemo<Interaction[]>(() => {
+    const steps = useSimulationStore.getState().steps;
     if (steps.length === 0) return [];
     const ACTION_TYPE_MAP: Record<string, Interaction["type"]> = {
       share: "Share",
@@ -348,11 +328,14 @@ export default function AgentDetailPage() {
         time: `Step ${step.step}`,
       };
     });
-  }, [steps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength]);
 
-  const interactions = derivedInteractions.length > 0 ? derivedInteractions : MOCK_INTERACTIONS;
+  // Real-data-only: no mock fallbacks. An empty list shows a clear empty
+  // state in the UI rather than fake content for a real agent id.
+  const interactions = derivedInteractions;
 
-  const messagesSource = apiMessages.length > 0 ? apiMessages : MOCK_MESSAGES;
+  const messagesSource = apiMessages;
   const filteredMessages = useMemo(
     () =>
       msgFilter === "all"
@@ -360,6 +343,73 @@ export default function AgentDetailPage() {
         : messagesSource.filter((m) => m.type === msgFilter),
     [msgFilter, messagesSource],
   );
+
+  // Loading / not-found / no-sim gates — never render the body with a
+  // null agent and never fall back to mock data.
+  if (!simulationId) {
+    return (
+      <div
+        data-testid="agent-detail-page"
+        className="min-h-screen bg-[var(--muted)] flex items-center justify-center"
+      >
+        <div className="max-w-md text-center flex flex-col items-center gap-4 p-8">
+          <h2 className="text-xl font-semibold text-[var(--foreground)]">
+            No active simulation
+          </h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Open a simulation in <code className="font-mono">/simulation</code>{" "}
+            and click an agent in the graph to see its details here.
+          </p>
+          <button
+            onClick={() => navigate("/simulation")}
+            className="h-9 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
+          >
+            Go to simulation
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (agentLoading || agent === null) {
+    return (
+      <div
+        data-testid="agent-detail-page"
+        className="min-h-screen bg-[var(--muted)] flex items-center justify-center"
+      >
+        <div className="flex flex-col items-center gap-3 text-[var(--muted-foreground)]">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          <p className="text-sm">Loading agent…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (agentNotFound) {
+    return (
+      <div
+        data-testid="agent-detail-page"
+        className="min-h-screen bg-[var(--muted)] flex items-center justify-center"
+      >
+        <div className="max-w-md text-center flex flex-col items-center gap-4 p-8">
+          <h2 className="text-xl font-semibold text-[var(--foreground)]">
+            Agent not found
+          </h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            No agent with id <code className="font-mono">{agentId}</code> exists in the
+            current simulation. The simulation may have been reset, or the
+            agent id was passed from a stale URL.
+          </p>
+          <button
+            onClick={() => navigate("/simulation")}
+            className="h-9 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
+          >
+            Back to simulation
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -594,7 +644,7 @@ export default function AgentDetailPage() {
                     "radial-gradient(ellipse at center, #0f172a 0%, #020617 100%)",
                 }}
               >
-                <EgoGraph agentId={String(agent.agentNumber)} />
+                <EgoGraph agentId={agent.id} />
                 <div className="absolute top-3 left-4 z-10 pointer-events-none">
                   <span className="text-white text-sm font-semibold">
                     Ego Network Graph

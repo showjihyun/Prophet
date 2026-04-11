@@ -3,15 +3,18 @@ SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_orchestrator, get_session, get_persistence
+from app.api.deps import get_orchestrator, get_session, get_simulation_repo
 from app.api.schemas import (
     CreateProjectRequest,
     CreateScenarioRequest,
@@ -24,6 +27,7 @@ from app.api.schemas import (
 from app.engine.network.schema import CommunityConfig
 from app.engine.simulation.schema import CampaignConfig, SimulationConfig
 from app.models.project import Project, Scenario
+from app.repositories.protocols import SimulationRepository
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
@@ -279,7 +283,7 @@ async def run_scenario(
     scenario_id: str,
     session: AsyncSession = Depends(get_session),
     orchestrator: Any = Depends(get_orchestrator),
-    persist: Any = Depends(get_persistence),
+    repo: SimulationRepository = Depends(get_simulation_repo),
 ) -> dict[str, Any]:
     """Create and start a simulation from a scenario config.
     SPEC: docs/spec/06_API_SPEC.md#9-project-scenario-endpoints
@@ -348,17 +352,44 @@ async def run_scenario(
 
     state = orchestrator.create_simulation(sim_config)
 
-    # Persist simulation to DB
+    # Persist simulation to DB. ``save_creation`` is STRICT (wraps
+    # ``persist_creation`` which re-raises on failure), so a successful
+    # return guarantees the DB row exists and FK references are safe.
+    # On failure, we must still clean up the ghost in-memory state.
     edges = list(state.network.graph.edges(data=True)) if state.network else []
-    await persist.persist_creation(session, state.simulation_id, sim_config, state.agents, edges)
+    try:
+        await repo.save_creation(
+            state.simulation_id, sim_config, state.agents, edges, session=session,
+        )
+    except Exception:
+        logger.exception(
+            "run_scenario: save_creation failed for %s — cleaning up memory",
+            state.simulation_id,
+        )
+        try:
+            await orchestrator.delete_simulation(state.simulation_id)
+        except KeyError:
+            pass  # already gone
+        raise HTTPException(
+            status_code=500,
+            detail="Simulation could not be persisted to database. Please retry.",
+        )
 
-    # Start the simulation
-    orchestrator.start(state.simulation_id)
-
-    # Update scenario with simulation_id and running status
+    # Row is guaranteed to exist — link the scenario and start the simulation.
+    await orchestrator.start(state.simulation_id)
     scenario.simulation_id = state.simulation_id
     scenario.status = "running"
-    await session.commit()
+    try:
+        await session.commit()
+    except Exception:
+        logger.exception(
+            "FK commit failed for scenario %s → simulation %s",
+            scenario_id, state.simulation_id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Scenario could not be linked to simulation. Please retry.",
+        )
 
     return {"simulation_id": str(state.simulation_id), "status": "running"}
 

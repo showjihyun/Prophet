@@ -18,10 +18,21 @@ from fastapi.responses import StreamingResponse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_orchestrator, get_session, get_persistence
+from app.api.deps import (
+    get_orchestrator,
+    get_session,
+    get_simulation_repo,
+    get_simulation_service,
+)
 from app.api.ws import manager as ws_manager
-from app.engine.simulation.persistence import SimulationPersistence
-from app.engine.simulation.exceptions import StepNotFoundError
+from app.repositories.protocols import SimulationRepository
+from app.services.simulation_service import SimulationService
+from app.engine.simulation.exceptions import (
+    InvalidStateError,
+    InvalidStateTransitionError,
+    SimulationCapacityError,
+    StepNotFoundError,
+)
 from app.api.schemas import (
     CreateSimulationRequest,
     EngineControlRequest,
@@ -29,8 +40,6 @@ from app.api.schemas import (
     ErrorResponse,
     InjectEventRequest,
     InjectEventResponse,
-    MonteCarloRequest,
-    MonteCarloStatusResponse,
     PaginatedResponse,
     RecommendEngineRequest,
     RecommendEngineResponse,
@@ -46,28 +55,33 @@ from app.api.schemas import (
 )
 from app.engine.agent.group_chat import GroupChatManager, GroupChat, GroupMessage
 from app.engine.agent.interview import AgentInterviewer, InterviewResponse
-from app.engine.network.schema import CommunityConfig
-from app.engine.simulation.monte_carlo import MonteCarloRunner
-from app.engine.simulation.schema import (
-    CampaignConfig,
-    SimulationConfig,
-)
+from app.engine.simulation.schema import StepResult
 from app.llm.engine_control import EngineController
+from app.services.ports import SimulationNotFoundError, StopOutcome
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/simulations", tags=["simulations"])
 
-# ---- Monte Carlo jobs (Phase 6 placeholder until Celery is wired) ----
-_monte_carlo_jobs: dict[str, dict[str, Any]] = {}
 
-# ---- Default communities when none are provided ----
-_DEFAULT_COMMUNITIES: list[CommunityConfig] = [
-    CommunityConfig(id="A", name="early_adopters", size=100, agent_type="early_adopter"),
-    CommunityConfig(id="B", name="general_consumers", size=500, agent_type="consumer"),
-    CommunityConfig(id="C", name="skeptics", size=200, agent_type="skeptic"),
-    CommunityConfig(id="D", name="experts", size=30, agent_type="expert"),
-    CommunityConfig(id="E", name="influencers", size=170, agent_type="influencer"),
-]
+def _fire_and_forget(coro, *, label: str = "ws_broadcast") -> asyncio.Task:
+    """Create a background task with error logging.
 
+    Prevents silent failures in fire-and-forget async tasks (H4).
+    """
+    task = asyncio.create_task(coro)
+
+    def _log_exc(t: asyncio.Task) -> None:
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            logger.error("Background task '%s' failed: %s", label, exc)
+
+    task.add_done_callback(_log_exc)
+    return task
 
 def _community_metric_dict(metric: Any) -> dict:
     """Convert CommunityStepMetrics to a plain dict (handles dataclass and dict)."""
@@ -142,59 +156,13 @@ def _require_status(state: Any, *allowed: SimulationStatus) -> None:
 @router.post("/", status_code=201, response_model=SimulationResponse)
 async def create_simulation(
     body: CreateSimulationRequest,
-    orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> SimulationResponse:
     """Create a new simulation run.
     SPEC: docs/spec/06_API_SPEC.md#post-simulations
     """
-    sim_id = uuid.uuid4()
-
-    # Build communities from request or use defaults
-    if body.communities and isinstance(body.communities, list):
-        communities = [
-            CommunityConfig(
-                id=c.get("id", str(i)),
-                name=c.get("name", f"community_{i}"),
-                size=c.get("size", 100),
-                agent_type=c.get("agent_type", "consumer"),
-                personality_profile=c.get("personality_profile", {}),
-            )
-            for i, c in enumerate(body.communities)
-        ]
-    else:
-        communities = list(_DEFAULT_COMMUNITIES)
-
-    config = SimulationConfig(
-        simulation_id=sim_id,
-        name=body.name,
-        description=body.description or "",
-        communities=communities,
-        campaign=CampaignConfig(
-            name=body.campaign.name,
-            budget=body.campaign.budget or 0,
-            channels=body.campaign.channels,
-            message=body.campaign.message,
-            target_communities=body.campaign.target_communities,
-            novelty=body.campaign.novelty or 0.5,
-            utility=body.campaign.utility or 0.5,
-            controversy=body.campaign.controversy or 0.0,
-        ),
-        max_steps=body.max_steps or 50,
-        random_seed=body.random_seed,
-        default_llm_provider=body.default_llm_provider,
-        slm_llm_ratio=body.slm_llm_ratio,
-        slm_model=body.slm_model,
-        budget_usd=body.budget_usd,
-        platform=body.platform,
-    )
-
-    state = orchestrator.create_simulation(config)
-
-    # Persist to DB (fire-and-forget, does not block response)
-    edges = list(state.network.graph.edges(data=True)) if state.network else []
-    await persist.persist_creation(session, state.simulation_id, config, state.agents, edges)
+    state = await service.create(body, session=session)
 
     # Network metrics are computed lazily via GET /network/metrics — avoid
     # running O(n^2) NetworkX algorithms on the create hot path.
@@ -216,17 +184,15 @@ async def list_simulations(
     offset: int = Query(0, ge=0),
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    repo: SimulationRepository = Depends(get_simulation_repo),
 ) -> PaginatedResponse:
     """List all simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulations
     """
     # Build a dict of in-memory simulations (live, takes precedence).
-    # Snapshot values() to a list to avoid mutation-during-iteration.
+    # ``list_states`` returns a snapshot — safe against concurrent mutation.
     mem_items: dict[str, dict] = {}
-    for state in list(orchestrator._simulations.values()):
-        if status is not None and state.status != status:
-            continue
+    for state in orchestrator.list_states(status=status):
         mem_items[str(state.simulation_id)] = {
             "simulation_id": str(state.simulation_id),
             "name": state.config.name,
@@ -238,8 +204,8 @@ async def list_simulations(
     # Pull a windowed slice from DB with SQL-side filter/limit.
     # Fetch a bit extra to absorb in-memory overrides that collide by id.
     db_limit = limit + offset + len(mem_items)
-    db_sims = await persist.load_simulations(
-        session, status=status, limit=db_limit, offset=0
+    db_sims = await repo.list_all(
+        status=status, limit=db_limit, offset=0, session=session,
     )
     for db_sim in db_sims:
         sid = db_sim["simulation_id"]
@@ -254,7 +220,7 @@ async def list_simulations(
 
     items = list(mem_items.values())
     # Total = DB count (SQL) + in-memory-only rows not present in DB.
-    db_total = await persist.count_simulations(session, status=status)
+    db_total = await repo.count(status=status, session=session)
     db_ids = {s["simulation_id"] for s in db_sims}
     mem_only = sum(1 for sid in mem_items if sid not in db_ids)
     total = db_total + mem_only
@@ -267,7 +233,7 @@ async def get_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    repo: SimulationRepository = Depends(get_simulation_repo),
 ) -> SimulationDetailResponse:
     """Get simulation details.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_id
@@ -292,10 +258,10 @@ async def get_simulation(
             created_at=datetime.now(timezone.utc),
         )
     except (ValueError, KeyError):
-        pass
+        pass  # simulation not in memory — fall through to DB lookup
 
     # Fallback: point-lookup from DB (read-only, completed/historical sims)
-    db_sim = await persist.load_simulation(session, sim_uuid)
+    db_sim = await repo.find_by_id(sim_uuid, session=session)
     if db_sim is None:
         raise HTTPException(
             status_code=404,
@@ -329,7 +295,7 @@ async def start_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Start the simulation.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstart
@@ -337,13 +303,7 @@ async def start_simulation(
     state = _get_state_or_404(orchestrator, simulation_id)
     _require_status(state, SimulationStatus.CONFIGURED, SimulationStatus.PAUSED)
     now = datetime.now(timezone.utc)
-    sim_uuid = _sim_id_to_uuid(simulation_id)
-    orchestrator.start(sim_uuid)
-    await persist.persist_status(session, sim_uuid, "running")
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": "running"},
-    }))
+    await service.start(_sim_id_to_uuid(simulation_id), session=session)
     return StatusResponse(status=SimulationStatus.RUNNING, started_at=now)
 
 
@@ -352,7 +312,7 @@ async def step_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StepResultResponse:
     """Execute exactly one step.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstep
@@ -362,16 +322,8 @@ async def step_simulation(
 
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        result = await orchestrator.run_step(sim_uuid)
+        result = await service.step(sim_uuid, session=session)
     except Exception as exc:
-        # Orchestrator has already flipped state to FAILED. Persist that and
-        # broadcast so the frontend can swap to the recover UI instead of
-        # repeatedly hitting /resume and getting 409.
-        await persist.persist_status(session, sim_uuid, state.status, state.current_step)
-        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-            "type": "status_change",
-            "data": {"status": state.status},
-        }))
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -382,159 +334,6 @@ async def step_simulation(
                 instance=f"/api/v1/simulations/{simulation_id}/step",
             ).model_dump(),
         ) from exc
-
-    # Persist step result + agent snapshots + status update
-    await persist.persist_step(session, sim_uuid, result, agents=state.agents)
-    await persist.persist_status(session, sim_uuid, state.status, state.current_step)
-
-    # Persist LLM call summary for this step (one synthetic record per LLM call)
-    if result.llm_calls_this_step > 0:
-        # Build LLM call records from tier distribution and orchestrator config
-        from app.config import settings as _cfg
-        tier_dist = result.llm_tier_distribution  # {tier: count}
-        llm_records = []
-        for tier, count in tier_dist.items():
-            provider = _cfg.default_llm_provider if tier <= 2 else "ollama"
-            model = _cfg.slm_model if tier <= 2 else _cfg.anthropic_default_model
-            for _ in range(count):
-                llm_records.append({
-                    "agent_id": None,
-                    "step": result.step,
-                    "provider": provider,
-                    "model": model,
-                    "prompt_hash": "",
-                    "latency_ms": result.step_duration_ms / max(1, result.llm_calls_this_step),
-                    "tokens": None,
-                    "cached": False,
-                    "tier": int(tier),
-                })
-        if not llm_records:
-            # Fallback: at least record that LLM calls happened
-            llm_records = [{"agent_id": None, "step": result.step, "provider": _cfg.default_llm_provider, "model": _cfg.slm_model, "prompt_hash": "", "tier": 1}]
-        await persist.persist_llm_calls(session, sim_uuid, llm_records)
-
-    # M-5: Persist expert opinions (from emergent events with "expert" in type)
-    expert_events = [
-        e for e in result.emergent_events
-        if "expert" in (e.event_type or "").lower()
-    ]
-    if expert_events:
-        opinions = [
-            {
-                "agent_id": e.community_id,  # use community_id as proxy agent_id when available
-                "opinion_text": e.description,
-                "score": (e.severity * 2) - 1,  # severity [0,1] → score [-1,1]
-                "confidence": e.severity,
-                "step": result.step,
-            }
-            for e in expert_events
-            if e.community_id is not None
-        ]
-        if opinions:
-            asyncio.create_task(
-                persist.persist_expert_opinions(session, sim_uuid, result.step, opinions)
-            )
-
-    # M-7: Persist agent memories (collect from agent state, cap at 100)
-    agent_memories: list[dict] = []
-    for agent in state.agents:
-        memories = getattr(agent, 'memories', None) or []
-        for mem in memories:
-            if isinstance(mem, dict):
-                mem_entry = dict(mem)
-                mem_entry.setdefault("agent_id", agent.agent_id)
-                mem_entry.setdefault("step", result.step)
-                agent_memories.append(mem_entry)
-            elif hasattr(mem, 'content'):
-                agent_memories.append({
-                    "agent_id": agent.agent_id,
-                    "memory_type": getattr(mem, 'memory_type', 'episodic'),
-                    "content": getattr(mem, 'content', ''),
-                    "emotion_weight": getattr(mem, 'emotion_weight', 0.5),
-                    "step": result.step,
-                    "social_weight": getattr(mem, 'social_weight', 0.0),
-                })
-            if len(agent_memories) >= 100:
-                break
-        if len(agent_memories) >= 100:
-            break
-    if agent_memories:
-        asyncio.create_task(
-            persist.persist_agent_memories(session, sim_uuid, agent_memories)
-        )
-
-    # Broadcast step result via WebSocket
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-        "type": "step_result",
-        "data": {
-            "simulation_id": str(sim_uuid),
-            "step": result.step,
-            "total_adoption": result.total_adoption,
-            "adoption_rate": result.adoption_rate,
-            "diffusion_rate": result.diffusion_rate,
-            "mean_sentiment": result.mean_sentiment,
-            "sentiment_variance": result.sentiment_variance,
-            "community_metrics": {
-                k: _community_metric_dict(v)
-                for k, v in result.community_metrics.items()
-            },
-            "emergent_events": [
-                {
-                    "event_type": e.event_type,
-                    "step": e.step,
-                    "community_id": str(e.community_id) if e.community_id else None,
-                    "severity": e.severity,
-                    "description": e.description,
-                }
-                for e in result.emergent_events
-            ],
-            "action_distribution": {k: v for k, v in result.action_distribution.items()},
-            "llm_calls_this_step": result.llm_calls_this_step,
-            "step_duration_ms": result.step_duration_ms,
-        },
-    }))
-
-    # Broadcast individual emergent events
-    for event in result.emergent_events:
-        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-            "type": "emergent_event",
-            "data": {
-                "event_type": event.event_type,
-                "step": event.step,
-                "community_id": str(event.community_id) if event.community_id else None,
-                "severity": event.severity,
-                "description": event.description,
-            },
-        }))
-
-    # C-4: Broadcast agent_update for subscribed agents
-    agent_state_map: dict[str, dict] = {}
-    for agent in state.agents:
-        aid = str(agent.agent_id)
-        agent_state_map[aid] = {
-            "agent_id": aid,
-            "step": result.step,
-            "belief": agent.belief,
-            "action": agent.action.value if hasattr(agent.action, 'value') else str(agent.action),
-            "adopted": agent.adopted,
-            "exposure_count": agent.exposure_count,
-            "emotion": {
-                "interest": agent.emotion.interest,
-                "trust": agent.emotion.trust,
-                "skepticism": agent.emotion.skepticism,
-                "excitement": agent.emotion.excitement,
-            },
-        }
-    asyncio.create_task(
-        ws_manager.broadcast_agent_updates(str(sim_uuid), agent_state_map)
-    )
-
-    # Broadcast status change if simulation completed
-    if state.status == "completed":
-        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-            "type": "status_change",
-            "data": {"status": "completed"},
-        }))
 
     cm_resp: dict[str, Any] = {}
     for cid, metric in result.community_metrics.items():
@@ -564,7 +363,7 @@ async def run_all_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> RunAllResponse:
     """Run all remaining steps to completion and return a report.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idrun-all
@@ -574,8 +373,19 @@ async def run_all_simulation(
     sim_uuid = _sim_id_to_uuid(simulation_id)
 
     try:
-        report = await orchestrator.run_all(sim_uuid)
-    except ValueError as exc:
+        report = await service.run_all(sim_uuid, session=session)
+    except SimulationCapacityError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/capacity-exceeded",
+                title="Simulation Capacity Exceeded",
+                status=429,
+                detail=str(exc),
+                instance=f"/api/v1/simulations/{simulation_id}/run-all",
+            ).model_dump(),
+        )
+    except (InvalidStateError, InvalidStateTransitionError, ValueError) as exc:
         raise HTTPException(
             status_code=409,
             detail=ErrorResponse(
@@ -586,27 +396,18 @@ async def run_all_simulation(
                 instance=f"/api/v1/simulations/{simulation_id}/run-all",
             ).model_dump(),
         )
-
-    # Persist final status
-    await persist.persist_status(session, sim_uuid, report["status"], report["total_steps"])
-
-    # Broadcast completion via WebSocket
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-        "type": "run_all_complete",
-        "data": {
-            "simulation_id": simulation_id,
-            "total_steps": report["total_steps"],
-            "final_adoption_rate": report["final_adoption_rate"],
-            "final_mean_sentiment": report["final_mean_sentiment"],
-            "emergent_events_count": report["emergent_events_count"],
-            "duration_ms": report["duration_ms"],
-            "status": report["status"],
-        },
-    }))
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": report["status"]},
-    }))
+    except Exception as exc:
+        logger.error("run_all failed for %s: %s", simulation_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/internal",
+                title="Simulation Execution Failed",
+                status=500,
+                detail=str(exc),
+                instance=f"/api/v1/simulations/{simulation_id}/run-all",
+            ).model_dump(),
+        )
 
     return RunAllResponse(
         simulation_id=simulation_id,
@@ -625,20 +426,14 @@ async def pause_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Pause after current step completes.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idpause
     """
     state = _get_state_or_404(orchestrator, simulation_id)
     _require_status(state, SimulationStatus.RUNNING)
-    sim_uuid = _sim_id_to_uuid(simulation_id)
-    await orchestrator.pause(sim_uuid)
-    await persist.persist_status(session, sim_uuid, "paused", state.current_step)
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": "paused"},
-    }))
+    await service.pause(_sim_id_to_uuid(simulation_id), session=session)
     return StatusResponse(
         status=SimulationStatus.PAUSED, current_step=state.current_step,
     )
@@ -648,18 +443,15 @@ async def pause_simulation(
 async def resume_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Resume from paused state.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idresume
     """
     state = _get_state_or_404(orchestrator, simulation_id)
     _require_status(state, SimulationStatus.PAUSED)
-    sim_uuid = _sim_id_to_uuid(simulation_id)
-    await orchestrator.resume(sim_uuid)
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": "running"},
-    }))
+    await service.resume(_sim_id_to_uuid(simulation_id), session=session)
     return StatusResponse(status=SimulationStatus.RUNNING)
 
 
@@ -668,39 +460,48 @@ async def stop_simulation(
     simulation_id: str,
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Stop and mark as completed.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstop
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
-    _require_status(
-        state,
-        SimulationStatus.RUNNING,
-        SimulationStatus.PAUSED,
-        SimulationStatus.CONFIGURED,
-        SimulationStatus.FAILED,
-        SimulationStatus.COMPLETED,
-    )
     sim_uuid = _sim_id_to_uuid(simulation_id)
 
-    # If stopping from failed/completed, reset to created for restart
-    if state.status in ("failed", "completed"):
-        state.status = "created"
-        state.current_step = 0
-        await persist.persist_status(session, sim_uuid, "created")
-        asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-            "type": "status_change",
-            "data": {"status": "created"},
-        }))
-        return StatusResponse(status=SimulationStatus.CREATED)
+    # Validate status transition if sim is in memory — preserve 409 behavior
+    # for unexpected states. DB-only sims skip this check.
+    try:
+        state = _get_state_or_404(orchestrator, simulation_id)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        state = None
 
-    state.status = "completed"
-    await persist.persist_status(session, sim_uuid, "completed")
-    asyncio.create_task(ws_manager.broadcast(str(sim_uuid), {
-        "type": "status_change",
-        "data": {"status": "completed"},
-    }))
+    if state is not None:
+        _require_status(
+            state,
+            SimulationStatus.RUNNING,
+            SimulationStatus.PAUSED,
+            SimulationStatus.CONFIGURED,
+            SimulationStatus.FAILED,
+            SimulationStatus.COMPLETED,
+        )
+
+    try:
+        outcome = await service.stop(sim_uuid, session=session)
+    except SimulationNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/not-found",
+                title="Simulation Not Found",
+                status=404,
+                detail=f"Simulation uuid={simulation_id} does not exist",
+                instance=f"/api/v1/simulations/{simulation_id}",
+            ).model_dump(),
+        )
+
+    if outcome is StopOutcome.RESET:
+        return StatusResponse(status=SimulationStatus.CREATED)
     return StatusResponse(status=SimulationStatus.COMPLETED)
 
 
@@ -712,7 +513,7 @@ async def get_steps(
     metrics: str | None = Query(None),
     orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
-    persist: SimulationPersistence = Depends(get_persistence),
+    repo: SimulationRepository = Depends(get_simulation_repo),
 ) -> StepHistoryResponse:
     """Get step history.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idsteps
@@ -757,7 +558,7 @@ async def get_steps(
             ))
     else:
         # Fallback: load from DB (completed/historical sims not in memory)
-        db_steps = await persist.load_steps(session, sim_uuid)
+        db_steps = await repo.load_steps(sim_uuid, session=session)
         for sr in db_steps:
             step_num = sr.get("step", 0)
             if from_step is not None and step_num < from_step:
@@ -798,10 +599,11 @@ async def inject_event(
 
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        orchestrator.inject_event(
+        await orchestrator.inject_event(
             sim_uuid,
             event_type=body.event_type,
             payload={"content": body.content, "controversy": body.controversy},
+            target_communities=body.target_communities or None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -821,17 +623,31 @@ async def replay_from_step(
     _get_state_or_404(orchestrator, simulation_id)
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
-        result = orchestrator.replay_step(sim_uuid, step)
-        return ReplayResponse(
-            replay_id=result["replay_id"],
-            from_step=result["from_step"],
-        )
+        result = await orchestrator.replay_step(sim_uuid, step)
     except (ValueError, StepNotFoundError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        # Real failure — surface it as a 500 so the UI can tell the user
+        # the replay did NOT happen. Previously this returned a fake
+        # replay_id + the requested step, making the frontend believe the
+        # branch succeeded when nothing had been created.
         import logging
-        logging.getLogger(__name__).warning(f"replay_step error: {e}")
-        return ReplayResponse(replay_id=str(uuid.uuid4()), from_step=step)
+        logging.getLogger(__name__).exception("replay_step failed for %s", simulation_id)
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/replay-failed",
+                title="Replay Failed",
+                status=500,
+                detail=f"Simulation replay from step {step} failed: {e}",
+                instance=f"/api/v1/simulations/{simulation_id}/replay/{step}",
+            ).model_dump(),
+        ) from e
+
+    return ReplayResponse(
+        replay_id=result["replay_id"],
+        from_step=result["from_step"],
+    )
 
 
 @router.get(
@@ -846,8 +662,22 @@ async def compare_simulations(
     """Compare two simulation runs.
     SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idcompareother_simulation_id
     """
-    state_a = _get_state_or_404(orchestrator, simulation_id)
-    state_b = _get_state_or_404(orchestrator, other_id)
+    # Validate UUIDs first — invalid IDs should always 404.
+    _sim_id_to_uuid(simulation_id)
+    _sim_id_to_uuid(other_id)
+    # Historical sims (DB-only after restart) have no in-memory step_history.
+    # Return an empty comparison rather than 404.
+    try:
+        state_a = _get_state_or_404(orchestrator, simulation_id)
+        state_b = _get_state_or_404(orchestrator, other_id)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        return ScenarioComparisonResponse(
+            simulation_a=simulation_id,
+            simulation_b=other_id,
+            comparison={},
+        )
 
     last_a = state_a.step_history[-1] if state_a.step_history else None
     last_b = state_b.step_history[-1] if state_b.step_history else None
@@ -909,221 +739,6 @@ async def compare_simulations(
     )
 
 
-async def _run_monte_carlo(job_id: str, simulation_id: str, config: Any, n_runs: int) -> None:
-    """Background task to actually run Monte Carlo.
-    SPEC: docs/spec/04_SIMULATION_SPEC.md#metriccollector
-    """
-    try:
-        _monte_carlo_jobs[job_id]["status"] = "running"
-        runner = MonteCarloRunner()
-        result = await runner.run(config, n_runs=n_runs)
-        completed_at = datetime.now(timezone.utc)
-        _monte_carlo_jobs[job_id].update({
-            "status": "completed",
-            "viral_probability": result.viral_probability,
-            "expected_reach": result.expected_reach,
-            "p5_reach": result.p5_reach,
-            "p50_reach": result.p50_reach,
-            "p95_reach": result.p95_reach,
-            "community_adoption": result.community_adoption,
-            "completed_at": completed_at.isoformat(),
-        })
-        # Persist to PostgreSQL (NF07: DB is source of truth)
-        await _persist_monte_carlo(job_id, simulation_id, n_runs, result, completed_at)
-    except Exception as e:
-        _monte_carlo_jobs[job_id].update({
-            "status": "failed",
-            "error_message": str(e),
-        })
-        await _persist_monte_carlo_failure(job_id, simulation_id, n_runs, str(e))
-
-
-async def _persist_monte_carlo(
-    job_id: str, simulation_id: str, n_runs: int, result: Any, completed_at: datetime
-) -> None:
-    """Persist completed MC results to monte_carlo_runs table."""
-    from app.database import async_session
-    from app.models.propagation import MonteCarloRun
-    try:
-        async with async_session() as session:
-            run = MonteCarloRun(
-                job_id=uuid.UUID(job_id),
-                simulation_id=uuid.UUID(simulation_id),
-                status="completed",
-                n_runs=n_runs,
-                viral_probability=result.viral_probability,
-                expected_reach=result.expected_reach,
-                p5_reach=result.p5_reach,
-                p50_reach=result.p50_reach,
-                p95_reach=result.p95_reach,
-                community_adoption=result.community_adoption,
-                started_at=_monte_carlo_jobs.get(job_id, {}).get("started_at"),
-                completed_at=completed_at,
-            )
-            session.add(run)
-            await session.commit()
-    except Exception:
-        pass  # Best-effort persist; in-memory result is still available
-
-
-async def _persist_monte_carlo_failure(
-    job_id: str, simulation_id: str, n_runs: int, error: str
-) -> None:
-    """Persist failed MC job to monte_carlo_runs table."""
-    from app.database import async_session
-    from app.models.propagation import MonteCarloRun
-    try:
-        async with async_session() as session:
-            run = MonteCarloRun(
-                job_id=uuid.UUID(job_id),
-                simulation_id=uuid.UUID(simulation_id),
-                status="failed",
-                n_runs=n_runs,
-                error_message=error,
-                started_at=_monte_carlo_jobs.get(job_id, {}).get("started_at"),
-            )
-            session.add(run)
-            await session.commit()
-    except Exception:
-        pass
-
-
-@router.post(
-    "/{simulation_id}/monte-carlo",
-    status_code=202,
-    response_model=MonteCarloStatusResponse,
-)
-async def start_monte_carlo(
-    simulation_id: str,
-    body: MonteCarloRequest,
-    orchestrator: Any = Depends(get_orchestrator),
-) -> MonteCarloStatusResponse:
-    """Run Monte Carlo analysis.
-    SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idmonte-carlo
-    """
-    state = _get_state_or_404(orchestrator, simulation_id)
-    job_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
-    job = {
-        "job_id": job_id,
-        "simulation_id": simulation_id,
-        "status": "queued",
-        "n_runs": body.n_runs,
-        "started_at": now,
-    }
-    _monte_carlo_jobs[job_id] = job
-
-    # Fire background task using the simulation's config
-    asyncio.create_task(_run_monte_carlo(job_id, simulation_id, state.config, body.n_runs))
-
-    return MonteCarloStatusResponse(
-        job_id=job_id,
-        status="queued",
-        n_runs=body.n_runs,
-        started_at=now,
-    )
-
-
-@router.get(
-    "/{simulation_id}/monte-carlo",
-    response_model=MonteCarloStatusResponse | None,
-)
-async def get_latest_monte_carlo(
-    simulation_id: str,
-    session: AsyncSession = Depends(get_session),
-) -> MonteCarloStatusResponse | None:
-    """Get the latest Monte Carlo result for a simulation.
-    SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idmonte-carlo
-    """
-    # Check in-memory first
-    for job in reversed(list(_monte_carlo_jobs.values())):
-        if job.get("simulation_id") == simulation_id:
-            return MonteCarloStatusResponse(**{k: v for k, v in job.items() if k != "simulation_id"})
-
-    # Fallback: PostgreSQL
-    from app.models.propagation import MonteCarloRun
-    from sqlalchemy import select
-    result = await session.execute(
-        select(MonteCarloRun)
-        .where(MonteCarloRun.simulation_id == uuid.UUID(simulation_id))
-        .order_by(MonteCarloRun.created_at.desc())
-        .limit(1)
-    )
-    row = result.scalar_one_or_none()
-    if row is None:
-        return None
-    return MonteCarloStatusResponse(
-        job_id=str(row.job_id),
-        status=row.status,
-        n_runs=row.n_runs,
-        viral_probability=row.viral_probability,
-        expected_reach=row.expected_reach,
-        p5_reach=row.p5_reach,
-        p50_reach=row.p50_reach,
-        p95_reach=row.p95_reach,
-        community_adoption=row.community_adoption,
-        started_at=row.started_at,
-        completed_at=row.completed_at,
-        error_message=getattr(row, 'error_message', None),
-    )
-
-
-@router.get(
-    "/{simulation_id}/monte-carlo/{job_id}",
-    response_model=MonteCarloStatusResponse,
-)
-async def get_monte_carlo_status(
-    simulation_id: str,
-    job_id: str,
-    orchestrator: Any = Depends(get_orchestrator),
-    session: AsyncSession = Depends(get_session),
-) -> MonteCarloStatusResponse:
-    """Get Monte Carlo job status and results.
-    SPEC: docs/spec/06_API_SPEC.md#get-simulationssimulation_idmonte-carlojob_id
-    """
-    _get_state_or_404(orchestrator, simulation_id)
-    job = _monte_carlo_jobs.get(job_id)
-    if job is not None:
-        return MonteCarloStatusResponse(**job)
-
-    # Fallback: check PostgreSQL (NF07)
-    from app.models.propagation import MonteCarloRun
-    from sqlalchemy import select
-    try:
-        result = await session.execute(
-            select(MonteCarloRun).where(MonteCarloRun.job_id == uuid.UUID(job_id))
-        )
-        row = result.scalar_one_or_none()
-        if row is not None:
-            return MonteCarloStatusResponse(
-                job_id=str(row.job_id),
-                status=row.status,
-                n_runs=row.n_runs,
-                viral_probability=row.viral_probability,
-                expected_reach=row.expected_reach,
-                p5_reach=row.p5_reach,
-                p50_reach=row.p50_reach,
-                p95_reach=row.p95_reach,
-                community_adoption=row.community_adoption,
-                started_at=row.started_at,
-                completed_at=row.completed_at,
-                error_message=getattr(row, 'error_message', None),
-            )
-    except Exception:
-        pass
-
-    raise HTTPException(
-        status_code=404,
-        detail=ErrorResponse(
-            type="https://prophet.io/errors/not-found",
-            title="Monte Carlo Job Not Found",
-            status=404,
-            detail=f"Job uuid={job_id} does not exist",
-            instance=f"/api/v1/simulations/{simulation_id}/monte-carlo/{job_id}",
-        ).model_dump(),
-    )
-
-
 @router.post("/{simulation_id}/engine-control", response_model=EngineControlResponse)
 async def engine_control(
     simulation_id: str,
@@ -1141,6 +756,7 @@ async def engine_control(
         total_agents=len(state.agents),
         slm_llm_ratio=body.slm_llm_ratio,
         budget_usd=body.budget_usd,
+        tier1_model=body.slm_model,
     )
     impact = controller.get_impact_assessment(dist)
 
@@ -1170,19 +786,40 @@ async def recommend_engine(
     """Budget-based auto engine recommendation.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationsrecommend-engine
     """
-    # Fallback heuristic
+    # Use EngineController for consistent tier calculation
     ratio = min(1.0, body.budget_usd / (body.agent_count * body.max_steps * 0.001))
+    ratio = round(max(0.0, min(1.0, ratio)), 2)
+
+    controller = EngineController()
+    dist = controller.compute_tier_distribution(
+        total_agents=body.agent_count,
+        slm_llm_ratio=ratio,
+        budget_usd=body.budget_usd,
+    )
+
+    estimated_total_cost = round(dist.estimated_cost_per_step * body.max_steps, 2)
+    estimated_time_ms = dist.estimated_latency_ms * body.max_steps
+    if estimated_time_ms < 60_000:
+        estimated_total_time = f"~{estimated_time_ms / 1000:.0f}s"
+    else:
+        estimated_total_time = f"~{estimated_time_ms / 60_000:.0f}min"
+
+    mode = "Speed" if ratio < 0.3 else "Quality" if ratio > 0.7 else "Balanced"
+
+    from app.api.schemas import TierDistribution as ApiTierDistribution
     return RecommendEngineResponse(
-        recommended_ratio=round(ratio, 2),
-        recommended_slm_model="gemma2:2b" if ratio < 0.3 else "phi4",
-        tier_distribution={
-            "tier1_count": int(body.agent_count * (1 - ratio)),
-            "tier2_count": int(body.agent_count * ratio * 0.8),
-            "tier3_count": int(body.agent_count * ratio * 0.2),
-        },
-        estimated_total_cost=round(body.budget_usd * 0.9, 2),
-        estimated_total_time="N/A",
-        mode="SLM 모드" if ratio < 0.3 else "Hybrid",
+        recommended_ratio=ratio,
+        recommended_slm_model=dist.tier1_model,
+        tier_distribution=ApiTierDistribution(
+            tier1_count=dist.tier1_count,
+            tier2_count=dist.tier2_count,
+            tier3_count=dist.tier3_count,
+            estimated_cost_per_step=dist.estimated_cost_per_step,
+            estimated_latency_ms=dist.estimated_latency_ms,
+        ),
+        estimated_total_cost=estimated_total_cost,
+        estimated_total_time=estimated_total_time,
+        mode=mode,
     )
 
 
@@ -1360,11 +997,57 @@ async def export_simulation(
     simulation_id: str,
     format: str = Query("json", pattern="^(json|csv)$"),
     orchestrator: Any = Depends(get_orchestrator),
+    session: AsyncSession = Depends(get_session),
+    repo: SimulationRepository = Depends(get_simulation_repo),
 ) -> StreamingResponse:
     """Export simulation results as JSON or CSV download.
     SPEC: docs/spec/06_API_SPEC.md#simulation-endpoints
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+
+    # Try in-memory first, fall back to DB for historical sims.
+    step_rows: list[dict[str, Any]] = []
+    sim_name = simulation_id
+    sim_status = "unknown"
+    sim_step = 0
+    sim_max_steps = 0
+    total_agents = 0
+    try:
+        state = orchestrator.get_state(sim_uuid)
+        sim_name = state.config.name
+        sim_status = state.status
+        sim_step = state.current_step
+        sim_max_steps = state.config.max_steps
+        total_agents = len(state.agents)
+        for s in state.step_history:
+            step_rows.append({
+                "step": s.step,
+                "adoption_rate": s.adoption_rate,
+                "mean_sentiment": s.mean_sentiment,
+                "diffusion_rate": s.diffusion_rate,
+                "sentiment_variance": s.sentiment_variance,
+                "total_adoption": s.total_adoption,
+                "llm_calls_this_step": s.llm_calls_this_step,
+            })
+    except (ValueError, KeyError):
+        # Historical sim — load from DB
+        db_sim = await repo.find_by_id(sim_uuid, session=session)
+        if db_sim:
+            sim_name = db_sim.get("name", simulation_id)
+            sim_status = db_sim.get("status", "completed")
+            sim_step = db_sim.get("current_step", 0)
+            sim_max_steps = db_sim.get("max_steps", 0)
+        db_steps = await repo.load_steps(sim_uuid, session=session)
+        for sr in db_steps:
+            step_rows.append({
+                "step": sr.get("step", 0),
+                "adoption_rate": sr.get("adoption_rate", 0.0),
+                "mean_sentiment": sr.get("mean_sentiment", 0.0),
+                "diffusion_rate": sr.get("diffusion_rate", 0.0),
+                "sentiment_variance": sr.get("sentiment_variance", 0.0),
+                "total_adoption": sr.get("total_adoption", 0),
+                "llm_calls_this_step": sr.get("llm_calls_this_step", 0),
+            })
 
     if format == "csv":
         output = io.StringIO()
@@ -1373,14 +1056,11 @@ async def export_simulation(
             "step", "adoption_rate", "mean_sentiment", "diffusion_rate",
             "sentiment_variance", "llm_calls",
         ])
-        for step in state.step_history:
+        for row in step_rows:
             writer.writerow([
-                step.step,
-                step.adoption_rate,
-                step.mean_sentiment,
-                step.diffusion_rate,
-                step.sentiment_variance,
-                step.llm_calls_this_step,
+                row["step"], row["adoption_rate"], row["mean_sentiment"],
+                row["diffusion_rate"], row["sentiment_variance"],
+                row["llm_calls_this_step"],
             ])
         output.seek(0)
         return StreamingResponse(
@@ -1392,23 +1072,20 @@ async def export_simulation(
         )
     else:
         data = {
-            "simulation_id": str(state.simulation_id),
-            "config": {
-                "name": state.config.name,
-                "max_steps": state.config.max_steps,
-            },
-            "status": state.status,
-            "current_step": state.current_step,
-            "total_agents": len(state.agents),
+            "simulation_id": simulation_id,
+            "config": {"name": sim_name, "max_steps": sim_max_steps},
+            "status": sim_status,
+            "current_step": sim_step,
+            "total_agents": total_agents,
             "steps": [
                 {
-                    "step": s.step,
-                    "adoption_rate": s.adoption_rate,
-                    "mean_sentiment": s.mean_sentiment,
-                    "diffusion_rate": s.diffusion_rate,
-                    "total_adoption": s.total_adoption,
+                    "step": r["step"],
+                    "adoption_rate": r["adoption_rate"],
+                    "mean_sentiment": r["mean_sentiment"],
+                    "diffusion_rate": r["diffusion_rate"],
+                    "total_adoption": r["total_adoption"],
                 }
-                for s in state.step_history
+                for r in step_rows
             ],
         }
         content = json.dumps(data, indent=2, default=str)

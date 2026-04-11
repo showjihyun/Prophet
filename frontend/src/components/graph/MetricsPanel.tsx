@@ -5,10 +5,10 @@
  * Real-time metrics: Active Agents, Sentiment Distribution,
  * Polarization Index, Cascade Stats, Top Influencers.
  */
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSimulationStore } from "../../store/simulationStore";
-import { apiClient } from "../../api/client";
+import { useAgents } from "../../api/queries";
+import HelpTooltip from "../shared/HelpTooltip";
 
 const COMMUNITY_COLORS: Record<string, string> = {
   Alpha: "var(--community-alpha)",
@@ -18,24 +18,10 @@ const COMMUNITY_COLORS: Record<string, string> = {
   Bridge: "var(--community-bridge)",
 };
 
-const MOCK_TOP_INFLUENCERS = [
-  { id: "A-0042", community: "Alpha", score: 98.2 },
-  { id: "BR-0012", community: "Bridge", score: 96.5 },
-  { id: "B-0091", community: "Beta", score: 94.7 },
-  { id: "D-0067", community: "Delta", score: 92.1 },
-];
-
-// Mock defaults for when no live data is available
-const MOCK_METRICS = {
-  activeAgents: 5847,
-  totalAgents: 6500,
-  sentimentPositive: 62,
-  sentimentNeutral: 25,
-  sentimentNegative: 13,
-  polarization: 0.72,
-  cascadeDepth: 12,
-  cascadeWidth: 847,
-};
+// MOCK_TOP_INFLUENCERS / MOCK_METRICS removed — the panel now renders only
+// real values from the simulation store + agent query. Empty/zero states
+// are explicit ("—" placeholders) so the user can tell when data hasn't
+// arrived yet. Real-data-only.
 
 const COMMUNITY_ID_TO_NAME: Record<string, string> = {
   A: "Alpha", B: "Beta", C: "Gamma", D: "Delta", E: "Bridge",
@@ -45,48 +31,58 @@ export default function MetricsPanel() {
   const navigate = useNavigate();
   const latestStep = useSimulationStore((s) => s.latestStep);
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id) ?? null;
-  const stepNum = latestStep?.step ?? 0;
-  const [topInfluencers, setTopInfluencers] = useState(MOCK_TOP_INFLUENCERS);
 
-  // Fetch top influencers from API — throttled to every 10 steps
-  useEffect(() => {
-    if (!simulationId) return;
-    if (stepNum > 0 && stepNum % 10 !== 0) return; // throttle: skip non-multiples of 10
-    apiClient.agents.list(simulationId, { limit: 4 }).then((res) => {
-      const sorted = [...res.items].sort((a, b) => b.influence_score - a.influence_score).slice(0, 4);
-      setTopInfluencers(
-        sorted.map((a) => ({
+  // TanStack Query — fetched once per simulation, deduplicated across
+  // any other consumer asking for the same `agents` list. Throttling-by-10
+  // is no longer necessary because the cache already prevents duplicate
+  // fetches; if a fresh value is needed, the query is refetched lazily.
+  const agentsQuery = useAgents(simulationId, { limit: 4 });
+  const topInfluencers = agentsQuery.data
+    ? [...agentsQuery.data.items]
+        .sort((a, b) => b.influence_score - a.influence_score)
+        .slice(0, 4)
+        .map((a) => ({
           id: a.agent_id,
           community: COMMUNITY_ID_TO_NAME[a.community_id] ?? a.community_id,
           score: Math.round(a.influence_score * 100 * 10) / 10,
-        })),
-      );
-    }).catch(() => { /* keep mock */ });
-  }, [simulationId, Math.floor(stepNum / 10)]); // eslint-disable-line react-hooks/exhaustive-deps
+        }))
+    : [];
 
-  // Derive metrics from latest step or fall back to mock
-  const activeAgents = latestStep?.total_adoption ?? MOCK_METRICS.activeAgents;
-  const totalAgents = simulationId ? (latestStep ? Math.round(latestStep.total_adoption / Math.max(latestStep.adoption_rate, 0.01)) : MOCK_METRICS.totalAgents) : MOCK_METRICS.totalAgents;
-  const activePercent = ((activeAgents / totalAgents) * 100).toFixed(1);
+  // Real-data-only: every metric is null when no step has arrived yet.
+  // The render path uses these nulls to show "—" placeholders instead of
+  // fake numbers.
+  const hasStep = latestStep !== null;
+  const activeAgents = hasStep ? latestStep.total_adoption : null;
+  const totalAgents =
+    hasStep && latestStep.adoption_rate > 0
+      ? Math.round(latestStep.total_adoption / latestStep.adoption_rate)
+      : null;
+  const activePercent =
+    activeAgents !== null && totalAgents !== null && totalAgents > 0
+      ? ((activeAgents / totalAgents) * 100).toFixed(1)
+      : null;
 
   // Sentiment: derive from mean_sentiment [-1, 1] range
-  const sentimentPositive = latestStep
+  const sentimentPositive = hasStep
     ? Math.round(Math.max(0, latestStep.mean_sentiment) * 100)
-    : MOCK_METRICS.sentimentPositive;
-  const sentimentNegative = latestStep
+    : null;
+  const sentimentNegative = hasStep
     ? Math.round(Math.max(0, -latestStep.mean_sentiment) * 100)
-    : MOCK_METRICS.sentimentNegative;
-  const sentimentNeutral = latestStep
-    ? 100 - sentimentPositive - sentimentNegative
-    : MOCK_METRICS.sentimentNeutral;
+    : null;
+  const sentimentNeutral =
+    sentimentPositive !== null && sentimentNegative !== null
+      ? 100 - sentimentPositive - sentimentNegative
+      : null;
 
-  const polarization = latestStep?.sentiment_variance ?? MOCK_METRICS.polarization;
+  const polarization = hasStep ? latestStep.sentiment_variance : null;
 
   // Action distribution for cascade stats
-  const cascadeDepth = latestStep?.llm_calls_this_step ?? MOCK_METRICS.cascadeDepth;
-  const cascadeWidth = latestStep
+  const cascadeDepth = hasStep ? latestStep.llm_calls_this_step : null;
+  const cascadeWidth = hasStep
     ? Object.values(latestStep.action_distribution).reduce((a, b) => a + b, 0)
-    : MOCK_METRICS.cascadeWidth;
+    : null;
+
+  const dash = "—";
 
   return (
     <div
@@ -111,42 +107,45 @@ export default function MetricsPanel() {
       <div className="flex flex-col" style={{ gap: "var(--card-gap)" }}>
         {/* Active Agents */}
         <MetricCard testId="active-agents-metric">
-          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1">
-            Active Agents
+          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1 flex items-center gap-1.5">
+            <span>Active Agents</span>
+            <HelpTooltip term="activeAgents" align="right" />
           </div>
           <div className="flex items-baseline gap-1">
             <span className="text-2xl font-bold text-[var(--foreground)]">
-              {activeAgents.toLocaleString()}
+              {activeAgents !== null ? activeAgents.toLocaleString() : dash}
             </span>
             <span className="text-xs text-[var(--muted-foreground)]">
-              / {totalAgents.toLocaleString()}
+              / {totalAgents !== null ? totalAgents.toLocaleString() : dash}
             </span>
           </div>
           <div className="mt-2 h-2 rounded-full bg-[var(--secondary)] overflow-hidden">
             <div
               className="h-full rounded-full bg-[var(--community-alpha)] transition-all duration-500"
-              style={{ width: `${activePercent}%` }}
+              style={{ width: `${activePercent ?? 0}%` }}
             />
           </div>
         </MetricCard>
 
         {/* Sentiment Distribution */}
         <MetricCard testId="sentiment-distribution">
-          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2">
-            Sentiment Distribution
+          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2 flex items-center gap-1.5">
+            <span>Sentiment Distribution</span>
+            <HelpTooltip term="sentimentDistribution" align="right" />
           </div>
-          <SentimentBar label="Positive" value={sentimentPositive} color="var(--sentiment-positive)" />
-          <SentimentBar label="Neutral" value={sentimentNeutral} color="var(--sentiment-neutral)" />
-          <SentimentBar label="Negative" value={sentimentNegative} color="var(--sentiment-negative)" />
+          <SentimentBar label="Positive" value={sentimentPositive ?? 0} color="var(--sentiment-positive)" missing={sentimentPositive === null} />
+          <SentimentBar label="Neutral" value={sentimentNeutral ?? 0} color="var(--sentiment-neutral)" missing={sentimentNeutral === null} />
+          <SentimentBar label="Negative" value={sentimentNegative ?? 0} color="var(--sentiment-negative)" missing={sentimentNegative === null} />
         </MetricCard>
 
         {/* Polarization Index */}
         <MetricCard testId="polarization-index">
-          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1">
-            Polarization Index
+          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-1 flex items-center gap-1.5">
+            <span>Polarization Index</span>
+            <HelpTooltip term="polarization" align="right" />
           </div>
           <span className="text-lg font-bold text-[var(--foreground)]">
-            {polarization.toFixed(2)}
+            {polarization !== null ? polarization.toFixed(2) : dash}
           </span>
           <div className="relative mt-2 h-2 rounded-full overflow-hidden">
             <div
@@ -156,39 +155,49 @@ export default function MetricsPanel() {
                   "linear-gradient(to right, #22c55e, #eab308, #ef4444)",
               }}
             />
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[var(--card)] border-2 border-[var(--foreground)] shadow"
-              style={{ left: `${Math.min(polarization * 100, 100)}%` }}
-            />
+            {polarization !== null && (
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[var(--card)] border-2 border-[var(--foreground)] shadow"
+                style={{ left: `${Math.min(polarization * 100, 100)}%` }}
+              />
+            )}
           </div>
         </MetricCard>
 
         {/* Cascade Stats */}
         <div className="grid grid-cols-2 gap-2">
           <MetricCard testId="cascade-depth">
-            <div className="text-[11px] text-[var(--muted-foreground)] font-medium">
-              Depth
+            <div className="text-[11px] text-[var(--muted-foreground)] font-medium flex items-center gap-1.5">
+              <span>Depth</span>
+              <HelpTooltip term="cascadeDepth" />
             </div>
             <span className="text-lg font-bold text-[var(--foreground)]">
-              {cascadeDepth}
+              {cascadeDepth !== null ? cascadeDepth : dash}
             </span>
           </MetricCard>
           <MetricCard testId="cascade-width">
-            <div className="text-[11px] text-[var(--muted-foreground)] font-medium">
-              Width
+            <div className="text-[11px] text-[var(--muted-foreground)] font-medium flex items-center gap-1.5">
+              <span>Width</span>
+              <HelpTooltip term="cascadeWidth" align="right" />
             </div>
             <span className="text-lg font-bold text-[var(--foreground)]">
-              {cascadeWidth.toLocaleString()}
+              {cascadeWidth !== null ? cascadeWidth.toLocaleString() : dash}
             </span>
           </MetricCard>
         </div>
 
         {/* Top Influencers */}
         <MetricCard testId="top-influencers">
-          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2">
-            Top Influencers
+          <div className="text-[11px] text-[var(--muted-foreground)] font-medium mb-2 flex items-center gap-1.5">
+            <span>Top Influencers</span>
+            <HelpTooltip term="influencer" align="right" />
           </div>
           <div className="flex flex-col gap-1.5">
+            {topInfluencers.length === 0 && (
+              <span className="text-[11px] text-[var(--muted-foreground)]">
+                No agents available yet.
+              </span>
+            )}
             {topInfluencers.map((inf, i) => (
               <button
                 key={inf.id}
@@ -232,10 +241,12 @@ function SentimentBar({
   label,
   value,
   color,
+  missing = false,
 }: {
   label: string;
   value: number;
   color: string;
+  missing?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2 mb-1.5 last:mb-0">
@@ -245,11 +256,11 @@ function SentimentBar({
       <div className="flex-1 h-2 rounded-full bg-[var(--secondary)] overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${value}%`, backgroundColor: color }}
+          style={{ width: `${missing ? 0 : value}%`, backgroundColor: color }}
         />
       </div>
       <span className="text-[11px] font-medium text-[var(--foreground)] w-8 text-right">
-        {value}%
+        {missing ? "—" : `${value}%`}
       </span>
     </div>
   );

@@ -91,14 +91,14 @@ class LLMAdapterRegistry:
         return adapter
 
     def get_default(self) -> LLMAdapter:
-        """Returns adapter for DEFAULT_LLM_PROVIDER env var.
+        """Returns adapter for configured default_llm_provider.
 
         SPEC: docs/spec/05_LLM_SPEC.md#4-llmadapterregistry
 
-        Falls back to 'ollama' if env var not set.
+        Uses settings.default_llm_provider (default: 'ollama').
         """
-        default_name = os.environ.get("DEFAULT_LLM_PROVIDER", "ollama")
-        return self.get(default_name)
+        from app.config import settings
+        return self.get(settings.default_llm_provider)
 
     async def get_healthy(self) -> LLMAdapter:
         """Returns first healthy provider from priority list [ollama, claude, openai].
@@ -321,13 +321,33 @@ class LLMAdapterRegistry:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    # Elite providers preferred for Tier 3 (in priority order)
+    _ELITE_PROVIDERS = ["claude", "openai", "gemini"]
+
     def _pick_adapter(
         self, tier: int, preferred: str | None = None
     ) -> Any | None:
-        """Select adapter for *tier*.  Tier 1 uses Ollama / SLM."""
+        """Select adapter for *tier* with tier-aware routing.
+
+        SPEC: docs/spec/05_LLM_SPEC.md#4-llmadapterregistry
+
+        Tier 1/2: prefer local Ollama (SLM), fast and cheap.
+        Tier 3: prefer elite provider (Claude → OpenAI → Gemini), fallback to Ollama.
+        """
         if preferred and preferred in self._adapters:
             return self._adapters[preferred]
-        # Fallback: pick first registered adapter (tests register one)
+
+        if tier >= 3:
+            # Tier 3: pick first available elite provider
+            for name in self._ELITE_PROVIDERS:
+                if name in self._adapters:
+                    return self._adapters[name]
+
+        # Tier 1/2 or no elite available: prefer Ollama
+        if "ollama" in self._adapters:
+            return self._adapters["ollama"]
+
+        # Last resort: any registered adapter
         if self._adapters:
             return next(iter(self._adapters.values()))
         return None

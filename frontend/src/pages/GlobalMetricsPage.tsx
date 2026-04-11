@@ -17,6 +17,7 @@ import {
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
 import { apiClient } from "../api/client";
+import { useSimulationSteps } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 import type { CommunityStepMetrics } from "../types/simulation";
 
@@ -33,21 +34,20 @@ function polarizationColor(v: number): string {
 
 export default function GlobalMetricsPage() {
   const simulation = useSimulationStore((s) => s.simulation);
-  const steps = useSimulationStore((s) => s.steps);
+  // FE-PERF-H2: subscribe to length + latestStep, read full array lazily inside memos
+  const stepsLength = useSimulationStore((s) => s.steps.length);
+  const latestStep = useSimulationStore((s) => s.latestStep);
   const simId = simulation?.simulation_id ?? null;
 
-  // Fetch steps from API if store is empty but simulation exists
+  // TanStack Query — only enabled when the live store is empty.
+  // Cached across navigations.
+  const stepsQuery = useSimulationSteps(stepsLength === 0 ? simId : null);
+  // Hydrate the store once when fetched data arrives.
   useEffect(() => {
-    if (simId && steps.length === 0) {
-      apiClient.simulations.getSteps(simId).then((fetched) => {
-        const { appendStep } = useSimulationStore.getState();
-        for (const s of fetched) appendStep(s);
-      }).catch(() => {});
+    if (stepsQuery.data && stepsLength === 0) {
+      useSimulationStore.getState().setStepsBulk(stepsQuery.data);
     }
-  }, [simId, steps.length]);
-
-  // Derive all metrics from steps (react-state-management: useMemo for derived)
-  const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
+  }, [stepsQuery.data, stepsLength]);
 
   const totalAgents = useMemo(() => {
     if (!latestStep?.community_metrics) return 0;
@@ -57,12 +57,14 @@ export default function GlobalMetricsPage() {
   }, [latestStep]);
 
   const polarizationData = useMemo(() => {
-    const recent = steps.slice(-10);
+    // Lazy read — re-runs when latestStep / stepsLength change
+    const recent = useSimulationStore.getState().steps.slice(-10);
     return recent.map((s) => ({
       day: `D${s.step}`,
       value: s.sentiment_variance ?? 0,
     }));
-  }, [steps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength]);
 
   const sentimentByCommunity = useMemo(() => {
     if (!latestStep?.community_metrics) return [];
@@ -82,46 +84,118 @@ export default function GlobalMetricsPage() {
     });
   }, [latestStep]);
 
-  // Tier distribution from step's llm_calls and action_distribution
+  // Real tier distribution from /llm/stats endpoint.
+  // Previously this was computed as `slmLlmRatio * totalAgents` which is a
+  // slider value, not actual telemetry — it bore no relation to what the
+  // engine really did. Now we call the real endpoint and map its
+  // tier_breakdown (tier number → call count) directly.
+  type LLMStatsResponse = {
+    total_calls: number;
+    tier_breakdown?: Record<string, number>;
+  };
+  const [llmStats, setLlmStats] = useState<LLMStatsResponse | null>(null);
+  // Poll LLM stats at most every 5 steps to avoid flooding the backend
+  // during fast simulations (speed 10 = 100ms/step = 10 req/s without this).
+  useEffect(() => {
+    if (!simId) { setLlmStats(null); return; }
+    // Throttle: only hit /llm/stats every 5 steps once we're past step 0.
+    const stepNum = latestStep?.step ?? 0;
+    if (stepNum > 0 && stepNum % 5 !== 0) return;
+    let cancelled = false;
+    apiClient.llm.getStats(simId)
+      .then((res) => {
+        if (!cancelled) setLlmStats(res as LLMStatsResponse);
+      })
+      .catch(() => {
+        if (!cancelled) setLlmStats(null);
+      });
+    return () => { cancelled = true; };
+  }, [simId, latestStep]);
+
   const tierStats = useMemo(() => {
-    const agents = Math.round(totalAgents) || 0;
-    const ratio = useSimulationStore.getState().slmLlmRatio || 0.8;
-    const t1 = Math.round(agents * ratio);
-    const t2 = Math.round(agents * (1 - ratio) * 0.8);
-    const t3 = agents - t1 - t2;
-    const total = Math.max(agents, 1);
+    const breakdown = llmStats?.tier_breakdown ?? {};
+    const t1 = Number(breakdown["1"] ?? breakdown[1] ?? 0);
+    const t2 = Number(breakdown["2"] ?? breakdown[2] ?? 0);
+    const t3 = Number(breakdown["3"] ?? breakdown[3] ?? 0);
+    const total = Math.max(t1 + t2 + t3, 1);
     return {
       t1, t2, t3,
       t1Pct: ((t1 / total) * 100).toFixed(1),
       t2Pct: ((t2 / total) * 100).toFixed(1),
       t3Pct: ((t3 / total) * 100).toFixed(1),
+      hasData: t1 + t2 + t3 > 0,
     };
-  }, [totalAgents]);
+  }, [llmStats]);
 
-  // Cascade analytics from steps
+  // Cascade analytics — derived from real step history and emergent events.
+  //   depth:  longest consecutive run of non-zero-diffusion steps (the
+  //           classic "cascade depth" definition from SPEC 03_DIFFUSION)
+  //   width:  maximum adoption delta seen in any single step
+  //   paths:  count of emergent events with "cascade"/"viral" in event_type
+  //   decay:  drop in diffusion_rate from peak → latest step
   const cascadeStats = useMemo(() => {
+    const steps = useSimulationStore.getState().steps;
     if (steps.length === 0) return { depth: "0", width: "0", paths: "0", decay: "0/step" };
-    const adoptions = steps.map((s) => s.total_adoption ?? 0);
-    const maxAdoption = Math.max(...adoptions, 0);
+
+    // Longest consecutive run of active propagation
+    let longestRun = 0;
+    let currentRun = 0;
+    for (const s of steps) {
+      if ((s.diffusion_rate ?? 0) > 0) {
+        currentRun += 1;
+        if (currentRun > longestRun) longestRun = currentRun;
+      } else {
+        currentRun = 0;
+      }
+    }
+
+    // Widest single-step propagation (peak adoption delta)
+    let peakDelta = 0;
+    let prevAdopt = 0;
+    for (const s of steps) {
+      const delta = (s.total_adoption ?? 0) - prevAdopt;
+      if (delta > peakDelta) peakDelta = delta;
+      prevAdopt = s.total_adoption ?? 0;
+    }
+
+    // Real cascade event count from emergent_events
+    const cascadeEvents = steps.reduce((sum, s) => {
+      const events = s.emergent_events ?? [];
+      return sum + events.filter((e) => {
+        const t = (e.event_type ?? "").toLowerCase();
+        return t.includes("cascade") || t.includes("viral");
+      }).length;
+    }, 0);
+
+    // Decay: peak diffusion_rate vs latest
     const diffRates = steps.map((s) => s.diffusion_rate ?? 0);
-    const avgDiffRate = diffRates.reduce((a, b) => a + b, 0) / Math.max(diffRates.length, 1);
+    const peakRate = Math.max(...diffRates, 0);
+    const latestRate = diffRates[diffRates.length - 1] ?? 0;
+    const decay = peakRate > 0 ? ((peakRate - latestRate) / peakRate).toFixed(2) : "0";
+
     return {
-      depth: (steps.length * 0.3).toFixed(1),
-      width: String(maxAdoption),
-      paths: String(steps.filter((s) => (s.diffusion_rate ?? 0) > 5).length),
-      decay: `${avgDiffRate.toFixed(2)}/step`,
+      depth: String(longestRun),
+      width: String(peakDelta),
+      paths: String(cascadeEvents),
+      decay: `${decay}/step`,
     };
-  }, [steps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, stepsLength]);
 
   const currentStep = latestStep?.step ?? 0;
   const maxSteps = simulation?.max_steps ?? 365;
   const polarization = latestStep?.sentiment_variance ?? 0;
-  const prevPol = steps.length >= 2 ? steps[steps.length - 2]?.sentiment_variance ?? 0 : 0;
+  // prevPol: read from store lazily — only changes when latestStep changes
+  const prevPol = useMemo(() => {
+    const steps = useSimulationStore.getState().steps;
+    return steps.length >= 2 ? steps[steps.length - 2]?.sentiment_variance ?? 0 : 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep]);
   const polDelta = polarization - prevPol;
   const activeCascades = latestStep ? Math.round((latestStep.adoption_rate ?? 0) * Math.max(totalAgents, 1)) : 0;
 
   // Check if we have real data or should show "no data" state
-  const hasData = steps.length > 0;
+  const hasData = stepsLength > 0;
 
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -213,7 +287,7 @@ export default function GlobalMetricsPage() {
                 <BarChart data={polarizationData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <XAxis dataKey="day" tick={{ fontSize: 11 }} />
                   <YAxis domain={[0, 1]} tick={{ fontSize: 11 }} tickCount={6} />
-                  <Tooltip formatter={(value: number) => [value.toFixed(2), "Polarization Index"]} />
+                  <Tooltip formatter={(value) => [Number(value).toFixed(2), "Polarization Index"]} />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                     {polarizationData.map((entry, i) => (
                       <Cell key={i} fill={polarizationColor(entry.value)} />
@@ -230,7 +304,7 @@ export default function GlobalMetricsPage() {
                 <BarChart data={sentimentByCommunity} layout="vertical" margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" width={56} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(value: number, name: string) => [`${value}%`, name.charAt(0).toUpperCase() + name.slice(1)]} />
+                  <Tooltip formatter={(value, name) => [`${value}%`, String(name).charAt(0).toUpperCase() + String(name).slice(1)]} />
                   <Bar dataKey="positive" stackId="sentiment" fill="var(--sentiment-positive)" name="Positive" />
                   <Bar dataKey="neutral" stackId="sentiment" fill="var(--sentiment-neutral)" name="Neutral" />
                   <Bar dataKey="negative" stackId="sentiment" fill="var(--sentiment-negative)" name="Negative" radius={[0, 4, 4, 0]} />

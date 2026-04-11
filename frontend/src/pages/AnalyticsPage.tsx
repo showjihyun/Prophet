@@ -2,7 +2,7 @@
  * AnalyticsPage — Post-run analytics for a completed simulation.
  * @spec docs/spec/07_FRONTEND_SPEC.md#simulationsidanalytics
  */
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   LineChart,
@@ -17,10 +17,9 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { ArrowLeft, TrendingUp, AlertTriangle, BarChart3, Zap } from "lucide-react";
+import { ArrowLeft, TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
 import { useSimulationStore } from "../store/simulationStore";
-import { apiClient } from "../api/client";
-import { LS_KEY_MC_PREFIX } from "@/config/constants";
+import { useSimulationSteps } from "../api/queries";
 import type { StepResult, EmergentEvent } from "../types/simulation";
 
 // ----- Colour palette for communities -----
@@ -130,39 +129,36 @@ function Section({
 export default function AnalyticsPage() {
   const navigate = useNavigate();
   const simulation = useSimulationStore((s) => s.simulation);
-  const storeSteps = useSimulationStore((s) => s.steps);
+  // FE-PERF-H1: subscribe to length + latestStep, read array lazily inside memos
+  const storeStepsLength = useSimulationStore((s) => s.steps.length);
+  const latestStep = useSimulationStore((s) => s.latestStep);
 
-  const [fetchedSteps, setFetchedSteps] = useState<StepResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // TanStack Query — only fetches when the live store is empty.
+  // Cached across navigations, so reopening Analytics is instant.
+  const stepsQuery = useSimulationSteps(
+    storeStepsLength === 0 ? simulation?.simulation_id ?? null : null,
+  );
+  const fetchedSteps = stepsQuery.data ?? [];
+  const loading = stepsQuery.isLoading;
+  const error = stepsQuery.error
+    ? stepsQuery.error instanceof Error
+      ? stepsQuery.error.message
+      : "Failed to load steps"
+    : null;
 
-  // Derive steps: prefer store (live), fall back to locally fetched
-  const steps = storeSteps.length > 0 ? storeSteps : fetchedSteps;
+  // Derive steps: prefer store (live), fall back to query-fetched
+  const steps = useMemo<StepResult[]>(() => {
+    const live = useSimulationStore.getState().steps;
+    return live.length > 0 ? live : fetchedSteps;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestStep, storeStepsLength, fetchedSteps]);
 
-  // Fetch steps from API only when store is empty
-  useEffect(() => {
-    if (storeSteps.length > 0) return;
-    if (!simulation) return;
-
-    const simulationId = simulation.simulation_id;
-    queueMicrotask(() => setLoading(true));
-    apiClient.simulations
-      .getSteps(simulationId)
-      .then((fetched) => {
-        setFetchedSteps(fetched);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load steps");
-        setLoading(false);
-      });
-  }, [simulation, storeSteps.length]);
-
-  const adoptionData = buildAdoptionData(steps);
-  const sentimentData = buildSentimentData(steps);
-  const communityAdoption = buildCommunityAdoption(steps);
-  const communityKeys = getCommunityKeys(steps);
-  const emergentEvents = collectEmergentEvents(steps);
+  // FE-PERF-MEDIUM: memoize all recharts data so charts don't re-build on every parent render
+  const adoptionData = useMemo(() => buildAdoptionData(steps), [steps]);
+  const sentimentData = useMemo(() => buildSentimentData(steps), [steps]);
+  const communityAdoption = useMemo(() => buildCommunityAdoption(steps), [steps]);
+  const communityKeys = useMemo(() => getCommunityKeys(steps), [steps]);
+  const emergentEvents = useMemo(() => collectEmergentEvents(steps), [steps]);
 
   // Steps where emergent events occurred (for ReferenceLine markers)
   const eventSteps = [...new Set(emergentEvents.map((e) => e.step))];
@@ -289,7 +285,7 @@ export default function AnalyticsPage() {
                       borderRadius: "6px",
                       fontSize: "11px",
                     }}
-                    formatter={(v: number) => [`${v}%`]}
+                    formatter={(v) => `${v}%`}
                   />
                   <Legend wrapperStyle={{ fontSize: "11px" }} />
                   {/* Event markers */}
@@ -413,7 +409,7 @@ export default function AnalyticsPage() {
                       borderRadius: "6px",
                       fontSize: "11px",
                     }}
-                    formatter={(v: number) => [`${v}%`, "Adoption"]}
+                    formatter={(v) => [`${v}%`, "Adoption"]}
                   />
                   <Bar dataKey="rate" name="Adoption Rate" radius={[4, 4, 0, 0]}>
                     {communityAdoption.map((entry, idx) => (
@@ -497,13 +493,6 @@ export default function AnalyticsPage() {
             )}
           </Section>
 
-          {/* Monte Carlo Results */}
-          <Section
-            title="Monte Carlo Results"
-            icon={<Zap className="w-4 h-4 text-[var(--community-bridge)]" />}
-          >
-            <MonteCarloSection simulationId={simulation?.simulation_id ?? null} />
-          </Section>
         </main>
       )}
     </div>
@@ -538,74 +527,3 @@ function SummaryCard({
   );
 }
 
-function MonteCarloSection({ simulationId }: { simulationId: string | null }) {
-  const [mcData, setMcData] = useState<Record<string, unknown> | null>(null);
-
-  // Load MC results: API first (PostgreSQL), localStorage fallback
-  useEffect(() => {
-    if (!simulationId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await apiClient.simulations.getLatestMonteCarlo(simulationId);
-        if (!cancelled && res) { queueMicrotask(() => setMcData(res)); return; }
-      } catch { /* API unavailable, try localStorage */ }
-      try {
-        const stored = localStorage.getItem(`${LS_KEY_MC_PREFIX}${simulationId}`);
-        if (!cancelled && stored) queueMicrotask(() => setMcData(JSON.parse(stored)));
-      } catch { /* ignore */ }
-    })();
-    return () => { cancelled = true; };
-  }, [simulationId]);
-
-  if (!mcData || mcData.status !== "completed") {
-    return (
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-6 text-center">
-        <Zap className="w-8 h-8 text-[var(--muted-foreground)] mx-auto mb-2" />
-        <p className="text-sm text-[var(--muted-foreground)]">
-          No Monte Carlo results for this simulation.
-        </p>
-        <p className="text-xs text-[var(--muted-foreground)] mt-1">
-          Run a Monte Carlo analysis from the simulation control panel to see results here.
-        </p>
-      </div>
-    );
-  }
-
-  const vp = typeof mcData.viral_probability === "number" ? mcData.viral_probability : 0;
-  const reach = typeof mcData.expected_reach === "number" ? mcData.expected_reach : 0;
-  const p5 = typeof mcData.p5_reach === "number" ? mcData.p5_reach : 0;
-  const p50 = typeof mcData.p50_reach === "number" ? mcData.p50_reach : 0;
-  const p95 = typeof mcData.p95_reach === "number" ? mcData.p95_reach : 0;
-  const communityAdoption = (mcData.community_adoption ?? {}) as Record<string, number>;
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <SummaryCard label="Viral Probability" value={`${(vp * 100).toFixed(1)}%`} accent={vp > 0.5 ? "positive" : "warning"} />
-        <SummaryCard label="Expected Reach" value={String(Math.round(reach))} />
-        <SummaryCard label="P5 (pessimistic)" value={String(Math.round(p5))} accent="negative" />
-        <SummaryCard label="P50 (median)" value={String(Math.round(p50))} />
-        <SummaryCard label="P95 (optimistic)" value={String(Math.round(p95))} accent="positive" />
-      </div>
-      {Object.keys(communityAdoption).length > 0 && (
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
-          <h4 className="text-sm font-medium text-[var(--foreground)] mb-3">Community Adoption</h4>
-          <div className="space-y-2">
-            {Object.entries(communityAdoption).map(([cid, rate]) => (
-              <div key={cid} className="flex items-center gap-3">
-                <span className="text-xs text-[var(--muted-foreground)] w-24 truncate">{cid}</span>
-                <div className="flex-1 h-2 bg-[var(--secondary)] rounded-full overflow-hidden">
-                  <div className="h-full bg-[var(--primary)] rounded-full" style={{ width: `${(rate as number) * 100}%` }} />
-                </div>
-                <span className="text-xs font-medium text-[var(--foreground)] w-12 text-right">
-                  {((rate as number) * 100).toFixed(0)}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

@@ -16,6 +16,7 @@ import ProjectScenariosPage from "./pages/ProjectScenariosPage";
 // Lazy: all other pages code-split into separate chunks
 // FE-PERF-08: SimulationPage lazy-loaded to keep Cytoscape (~400KB) out of initial bundle
 const SimulationPage = lazy(() => import("./pages/SimulationPage"));
+const SimulationListPage = lazy(() => import("./pages/SimulationListPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const ComparisonPage = lazy(() => import("./pages/ComparisonPage"));
 const GlobalMetricsPage = lazy(() => import("./pages/GlobalMetricsPage"));
@@ -87,9 +88,9 @@ function App() {
             {/* Default: redirect to Projects */}
             <Route path="/" element={<Navigate to="/projects" replace />} />
 
-            {/* Simulation workspace — full screen, no sidebar */}
-            <Route path="/simulation" element={<SimulationPage />} />
-            {/* Parametric simulation route — loads sim from URL param */}
+            {/* Simulation detail workspace — full screen, no sidebar */}
+            <Route path="/simulation/:simulationId" element={<SimulationPage />} />
+            {/* Legacy alias (plural) — keep for any external bookmarks */}
             <Route path="/simulations/:simulationId" element={<SimulationPage />} />
 
             {/* Login — no sidebar */}
@@ -97,6 +98,8 @@ function App() {
 
             {/* All other pages get sidebar */}
             <Route element={<SidebarLayout />}>
+              {/* Simulation list — landing page for the Simulation menu. */}
+              <Route path="/simulation" element={<SimulationListPage />} />
               <Route path="/projects" element={<ProjectsListPage />} />
               <Route path="/projects/:projectId" element={<ProjectScenariosPage />} />
               <Route path="/projects/:projectId/new-scenario" element={<CampaignSetupPage />} />

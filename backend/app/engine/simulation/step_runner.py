@@ -6,9 +6,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import replace
 from typing import TYPE_CHECKING
+import uuid
 from uuid import UUID, uuid4
 
 from app.engine.agent.perception import EnvironmentEvent, NeighborAction
@@ -69,7 +70,12 @@ def _build_campaign_events(
         if not target_ids:
             target_ids = all_community_ids  # fallback if no match
 
-    campaign_id = UUID(int=hash(campaign.name) % (2**128))
+    # Deterministic name-based UUID. Using ``hash()`` here would be
+    # non-deterministic across Python processes (PYTHONHASHSEED randomizes
+    # string hashing) — ``uuid5`` is a stable SHA-1-based namespace UUID
+    # so the same campaign config always produces the same campaign_id,
+    # which is required for simulation replay and comparison.
+    campaign_id = uuid.uuid5(uuid.NAMESPACE_OID, f"prophet.campaign:{campaign.name}")
 
     return [
         CampaignEvent(
@@ -108,6 +114,49 @@ def _build_environment_events(
             )
         )
     return env_events
+
+
+def _compute_community_link_counts(
+    network: "SocialNetwork",
+) -> tuple[dict[UUID, int], dict[UUID, int]]:
+    """Compute intra-community and cross-community edge counts from the live graph.
+
+    Returns (internal_links, external_links) where each maps community_id to edge count.
+    Used by CascadeDetector for echo chamber detection.
+    SPEC: docs/spec/03_DIFFUSION_SPEC.md#cascadedetector
+    """
+    G = network.graph
+    internal: dict[UUID, int] = {}
+    external: dict[UUID, int] = {}
+
+    # Build node -> community_id lookup (defensive: test fixtures may use
+    # non-UUID community identifiers like short strings)
+    node_community: dict = {}
+    for node, data in G.nodes(data=True):
+        cid_raw = data.get("community_id")
+        if cid_raw is not None:
+            if isinstance(cid_raw, UUID):
+                node_community[node] = cid_raw
+            else:
+                try:
+                    node_community[node] = UUID(str(cid_raw))
+                except (ValueError, AttributeError):
+                    node_community[node] = cid_raw  # keep as-is (str key)
+        else:
+            node_community[node] = None
+
+    for u, v in G.edges():
+        cid_u = node_community.get(u)
+        cid_v = node_community.get(v)
+        if cid_u is None or cid_v is None:
+            continue
+        if cid_u == cid_v:
+            internal[cid_u] = internal.get(cid_u, 0) + 1
+        else:
+            external[cid_u] = external.get(cid_u, 0) + 1
+            external[cid_v] = external.get(cid_v, 0) + 1
+
+    return internal, external
 
 
 def _build_graph_context(
@@ -161,11 +210,17 @@ def _build_graph_context(
     for cid, beliefs in community_agents.items():
         community_beliefs[cid] = sum(beliefs) / len(beliefs) if beliefs else 0.0
 
+    # Per-agent belief and emotion maps for opinion dynamics + emotional contagion
+    agent_beliefs: dict[UUID, float] = {a.agent_id: a.belief for a in agents}
+    agent_emotions = {a.agent_id: a.emotion for a in agents}
+
     return GraphContext(
         edges=edges,
         trust_matrix=trust_matrix,
         neighbor_ids=neighbor_ids,
         community_beliefs=community_beliefs,
+        agent_beliefs=agent_beliefs,
+        agent_emotions=agent_emotions,
     )
 
 
@@ -186,20 +241,29 @@ class StepRunner:
         9. Increment current_step, return StepResult
     """
 
-    def __init__(self, llm_adapter=None, gateway=None) -> None:
-        """SPEC: docs/spec/04_SIMULATION_SPEC.md"""
-        from app.config import settings
-        self._agent_tick = AgentTick(llm_adapter=llm_adapter, gateway=gateway)
+    def __init__(self, llm_adapter=None, gateway=None, session_factory=None, simulation_id=None) -> None:
+        """SPEC: docs/spec/04_SIMULATION_SPEC.md
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§3 MP-02
+        """
+        self._session_factory = session_factory
+        self._simulation_id = simulation_id
+        self._agent_tick = AgentTick(
+            llm_adapter=llm_adapter, gateway=gateway,
+            session_factory=session_factory, simulation_id=simulation_id,
+        )
         self._tier_selector = TierSelector()
         self._exposure_model = ExposureModel()
         self._sentiment_model = SentimentModel()
+        # Domain defaults for cascade config (no config singleton dependency)
         cascade_config = CascadeConfig(
-            viral_cascade_threshold=settings.cascade_viral_threshold,
-            slow_adoption_steps=settings.cascade_slow_adoption_steps,
+            viral_cascade_threshold=0.15,
+            slow_adoption_steps=5,
         )
         self._cascade_detector = CascadeDetector(config=cascade_config)
         self._network_evolver = NetworkEvolver()
-        self._gateway = LLMGateway()
+        # Use the passed-in gateway (shared with the orchestrator so stats are
+        # accumulated in one place); create a new one only when none was given.
+        self._gateway = gateway if gateway is not None else LLMGateway()
         self._negative_cascade = NegativeCascadeModel()
         from app.engine.platform.registry import PlatformRegistry
         self._platform_registry = PlatformRegistry()
@@ -270,6 +334,8 @@ class StepRunner:
                 bridge_node_ids=comm_bridge_nodes,
                 llm_adapter=self._agent_tick._llm_adapter,
                 gateway=self._gateway,
+                session_factory=self._session_factory,
+                simulation_id=self._simulation_id,
             ))
 
         return orchestrators
@@ -328,9 +394,27 @@ class StepRunner:
                 agents = state.agents
             env_events.extend(remaining)
 
-        # Tier config for communities
+        # Separate injected events with target_communities for per-community filtering
+        targeted_inject_events: list[EnvironmentEvent] = []
+        global_env_events: list[EnvironmentEvent] = []
+        for ev in env_events:
+            if hasattr(ev, "target_communities") and ev.target_communities:
+                targeted_inject_events.append(ev)
+            else:
+                global_env_events.append(ev)
+
+        # Tier config for communities.
+        #
+        # ``slm_llm_ratio`` is the user-facing knob: 1.0 = pure SLM (no Tier 3
+        # LLM calls at all), 0.0 = full Tier 3 budget. Linearly interpolate
+        # the cap so the API parameter actually controls inference cost.
+        # Round 7-a fix: previously this hardcoded ``config.llm_tier3_ratio``
+        # so ``slm_llm_ratio=1.0`` did nothing — every step still made
+        # ~10% of agents call Tier 3, which was the dominant runtime cost.
+        sim_slm_ratio = max(0.0, min(1.0, config.slm_llm_ratio))
+        effective_tier3 = config.llm_tier3_ratio * (1.0 - sim_slm_ratio)
         tier_config = TierConfig(
-            max_tier3_ratio=config.llm_tier3_ratio,
+            max_tier3_ratio=effective_tier3,
             max_tier2_ratio=config.llm_tier3_ratio,
         )
 
@@ -346,11 +430,25 @@ class StepRunner:
 
         # ── Phase 1: Intra-Community (parallel) ──
         community_orchs = self._build_community_orchestrators(state)
+
+        def _events_for_community(co: CommunityOrchestrator) -> list[EnvironmentEvent]:
+            """Filter targeted inject events: match on community UUID, config id, or name."""
+            if not targeted_inject_events:
+                return global_env_events
+            cid_str = str(co.community_id)
+            cname = co.community_config.name if co.community_config else ""
+            matched = [
+                ev for ev in targeted_inject_events
+                if cid_str in ev.target_communities
+                or cname in ev.target_communities
+            ]
+            return global_env_events + matched
+
         community_results: list[CommunityTickResult] = await asyncio.gather(*[
             co.tick(
                 step=step_num,
                 campaign_events=campaign_events,
-                env_events=env_events,
+                env_events=_events_for_community(co),
                 tier_config=tier_config,
                 seed=seed,
                 recsys_config=recsys_config,
@@ -373,10 +471,11 @@ class StepRunner:
         total_llm_calls = 0
         action_dist: dict[str, int] = {}
 
+        all_thread_messages = []
         for cr in community_results:
             for ua in cr.updated_agents:
                 updated_agent = replace(ua, step=step_num + 1)
-                if env_events and ua.action != AgentAction.IGNORE:
+                if (global_env_events or targeted_inject_events) and ua.action != AgentAction.IGNORE:
                     updated_agent = replace(
                         updated_agent,
                         exposure_count=updated_agent.exposure_count + 1,
@@ -385,6 +484,7 @@ class StepRunner:
 
             all_propagation_events.extend(cr.propagation_events)
             total_llm_calls += cr.llm_calls
+            all_thread_messages.extend(cr.thread_messages)
 
             for action_name, count in cr.action_distribution.items():
                 action_dist[action_name] = action_dist.get(action_name, 0) + count
@@ -409,7 +509,11 @@ class StepRunner:
                 )
                 community_sentiments[cid] = cs
 
-        # Cascade detection
+        # Cascade detection — compute real intra/inter-community edge counts.
+        # Offload to thread pool: O(N+E) graph traversal blocks the event loop.
+        internal_link_counts, external_link_counts = await asyncio.get_event_loop().run_in_executor(
+            None, _compute_community_link_counts, state.network,
+        )
         total_agents = len(updated_agents)
         adopted_count = sum(1 for a in updated_agents if a.adopted)
         adoption_rate = adopted_count / total_agents if total_agents > 0 else 0.0
@@ -428,8 +532,8 @@ class StepRunner:
             community_adoption_rates={
                 cid: cs.adoption_rate for cid, cs in community_sentiments.items()
             },
-            internal_links={cid: 10 for cid in community_ids},
-            external_links={cid: 1 for cid in community_ids},
+            internal_links=internal_link_counts,
+            external_links=external_link_counts,
             adopted_agent_ids=[a.agent_id for a in updated_agents if a.adopted],
         )
 
@@ -472,9 +576,11 @@ class StepRunner:
         all_beliefs = [a.belief for a in updated_agents]
         mean_sentiment = sum(all_beliefs) / len(all_beliefs) if all_beliefs else 0.0
         if len(all_beliefs) > 1:
+            # Bessel's correction: /（n-1) for sample variance
+            # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#6.3
             sentiment_var = sum(
                 (b - mean_sentiment) ** 2 for b in all_beliefs
-            ) / len(all_beliefs)
+            ) / (len(all_beliefs) - 1)
         else:
             sentiment_var = 0.0
 
@@ -487,11 +593,15 @@ class StepRunner:
         else:
             diffusion_rate = float(adopted_count)
 
-        # Community metrics
+        # Community metrics — pre-bucket agents by community (O(N) once)
+        _agents_by_community: dict[UUID, list] = defaultdict(list)
+        for _a in updated_agents:
+            _agents_by_community[_a.community_id].append(_a)
+
         community_metrics: dict[str, CommunityStepMetrics] = {}
         for cid in community_ids:
             cs = community_sentiments[cid]
-            comm_agents = [a for a in updated_agents if a.community_id == cid]
+            comm_agents = _agents_by_community[cid]
             comm_adopted = sum(1 for a in comm_agents if a.adopted)
             comm_rate = comm_adopted / len(comm_agents) if comm_agents else 0.0
 
@@ -530,6 +640,7 @@ class StepRunner:
             llm_calls_this_step=total_llm_calls,
             llm_tier_distribution=tier_dist,
             step_duration_ms=elapsed_ms,
+            thread_messages=all_thread_messages,
         )
 
 
@@ -548,7 +659,7 @@ class StepRunner:
             {
                 "source": str(e.source_agent_id),
                 "target": str(e.target_agent_id),
-                "action": str(getattr(e, "action_type", "share")),
+                "action": str(e.action_type),
                 "probability": float(e.probability),
             }
             for e in sorted_events

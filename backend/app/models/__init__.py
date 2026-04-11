@@ -7,10 +7,12 @@ from app.models.agent import Agent, AgentState
 from app.models.campaign import Campaign
 from app.models.memory import AgentMemory
 from app.models.network import NetworkEdge
-from app.models.propagation import PropagationEvent, ExpertOpinion, EmergentEvent, MonteCarloRun, LLMCall
+from app.models.propagation import PropagationEvent, ExpertOpinion, EmergentEvent, LLMCall
 from app.models.project import Project, Scenario
 from app.models.llm_cache import LLMVectorCache
 from app.models.user import User
+from app.models.thread import ThreadMessageRow
+from app.models.community_opinion import CommunityOpinion
 
 __all__ = [
     "Simulation", "SimStep", "SimulationEvent",
@@ -19,8 +21,10 @@ __all__ = [
     "Campaign",
     "AgentMemory",
     "NetworkEdge",
-    "PropagationEvent", "ExpertOpinion", "EmergentEvent", "MonteCarloRun", "LLMCall",
+    "PropagationEvent", "ExpertOpinion", "EmergentEvent", "LLMCall",
     "Project", "Scenario",
     "LLMVectorCache",
     "User",
+    "ThreadMessageRow",
+    "CommunityOpinion",
 ]

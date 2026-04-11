@@ -10,24 +10,39 @@ based on what real users actually need.
 
 ## ✅ Shipped
 
-- 6-layer agent engine (perception, memory, emotion, cognition, decision, influence)
+- 6-layer agent engine (perception, memory, emotion, cognition, decision, influence — including PersonalityDrift)
 - Hybrid network generator (Watts-Strogatz + Barabási-Albert + bridges)
 - Diffusion engine with auto cascade detection
 - 3-tier LLM inference (Mass SLM / Heuristic / Elite LLM)
 - Real-time WebSocket visualization
-- Monte Carlo simulation
+- 3D graph visualization (react-force-graph-3d with orbit controls and node overlays)
+- Monte Carlo parallel execution
 - Pause / Resume / Step / Reset / Run-All controls
-- Community management (CRUD + agent reassignment)
+- Community management (CRUD + agent reassignment + templates)
 - Project / scenario management
-- Export to JSON / CSV
+- Export to JSON / CSV (with DB fallback for historical simulations)
 - Real-time propagation animation with zoom-based LOD
 - Tier A+B performance optimizations (backend + frontend)
 - Docker Compose deployment
+- TanStack Query migration (all pages and components)
+- ControlPanel refactoring (split into focused sub-components)
+- API hardening for historical simulations (DB safety improvements)
+- 821 backend tests / 344 frontend tests all passing (1,165+ total)
 
 ---
 
-## 🟡 In Progress
+## 🟡 In Progress / Known Gaps
 
+- **pgvector / GraphRAG memory persistence** — Memory layer currently runs in-memory only;
+  pgvector is installed but not wired for agent memory persistence across restarts
+- **Valkey cache layer** — Configured in Docker Compose but not initialized in the
+  application layer; LLM responses are not cached in production
+- **Expert signal calibration** — Opinion scores and credibility are hardcoded defaults
+  (`opinion_score=0.5`, `credibility=0.8`); not yet driven by real agent state
+- **Sync tick embedding path** — Tier 1 and Tier 2 agents receive no vector embeddings
+  during tick processing; the embedding path is dead code for most agents
+- **Content-level tracking** — Content spread tracking uses `agent_id` as a placeholder
+  instead of actual content/message identifiers
 - **Hosted Cloud Starter tier** — managed Prophet, $99/month, 5K agents max
 - **Scenario template library** — pre-built scenarios for common launches
   (CPG, public health, internal comms, political messaging)

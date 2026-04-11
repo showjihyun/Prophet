@@ -4,8 +4,9 @@ SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
 import asyncio
 import logging
 import random as stdlib_random
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field, replace
+from typing import Awaitable, Callable
 from uuid import UUID, uuid4
 
 import networkx as nx
@@ -62,9 +63,8 @@ _VALID_TRANSITIONS: dict[str, set[str]] = {
     },
 }
 
-from app.config import settings as _settings
-
-_MAX_CONCURRENT = _settings.sim_max_concurrent
+# Domain defaults — overridable via constructor injection
+_MAX_CONCURRENT_DEFAULT = 3
 
 # Allowed event types for inject_event
 # SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idinject-event
@@ -72,14 +72,18 @@ _ALLOWED_EVENT_TYPES = {
     "campaign_ad", "influencer_post", "expert_review",
     "community_discussion", "negative_pr", "competitor_attack",
     "controversy", "celebrity_endorsement", "news_article",
-    "regulatory_change", "product_update",
+    "regulatory_change", "product_update", "bad_review",
 }
+
+
+_SNAPSHOT_WINDOW = 20  # max agent snapshots to keep in memory
 
 
 @dataclass
 class SimulationState:
     """In-memory runtime state for a simulation.
     SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+    SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.3
     """
     simulation_id: UUID
     config: SimulationConfig
@@ -90,6 +94,8 @@ class SimulationState:
     step_history: list[StepResult] = field(default_factory=list)
     injected_events: list[EnvironmentEvent] = field(default_factory=list)
     ws_connected: bool = True
+    # Agent snapshots for replay — step → deep-copied agent list
+    agent_snapshots: dict[int, list[AgentState]] = field(default_factory=dict)
 
 
 class SimulationOrchestrator:
@@ -101,16 +107,21 @@ class SimulationOrchestrator:
     for simulations. Uses in-memory state for Phase 6.
     """
 
-    MAX_SIMULATIONS = _settings.sim_max_simulations
-    SIMULATION_TTL_SECONDS = _settings.sim_ttl_seconds
+    MAX_SIMULATIONS = 50
+    SIMULATION_TTL_SECONDS = 86400  # 24h
 
-    def __init__(self, llm_adapter=None, slm_adapter=None, gateway=None) -> None:
+    def __init__(self, llm_adapter=None, slm_adapter=None, gateway=None, session_factory=None) -> None:
         """Initialize the orchestrator.
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§3 MP-02
         """
         self._simulations: dict[UUID, SimulationState] = {}
-        self._locks: dict[UUID, asyncio.Lock] = {}
-        self._step_runner = StepRunner(llm_adapter=llm_adapter, gateway=gateway)
+        self._locks: defaultdict[UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._session_factory = session_factory
+        self._step_runner = StepRunner(
+            llm_adapter=llm_adapter, gateway=gateway,
+            session_factory=session_factory,
+        )
         self._llm_adapter = llm_adapter
         self._slm_adapter = slm_adapter
         self._gateway = gateway
@@ -121,9 +132,7 @@ class SimulationOrchestrator:
         self._network_metrics_cache: dict[UUID, tuple[int, dict]] = {}
 
     def _get_lock(self, simulation_id: UUID) -> asyncio.Lock:
-        """Get or create a per-simulation asyncio lock."""
-        if simulation_id not in self._locks:
-            self._locks[simulation_id] = asyncio.Lock()
+        """Get or create a per-simulation asyncio lock (atomic via defaultdict)."""
         return self._locks[simulation_id]
 
     # ------------------------------------------------------------------ #
@@ -139,6 +148,10 @@ class SimulationOrchestrator:
         now = _dt.now(_tz.utc)
         expired: list[UUID] = []
         for sim_id, state in self._simulations.items():
+            # Never evict RUNNING simulations — they may be mid-step
+            # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.1
+            if state.status == SimulationStatus.RUNNING.value:
+                continue
             created_at = getattr(state, 'created_at', None)
             if created_at is not None:
                 age = (now - created_at).total_seconds()
@@ -150,14 +163,16 @@ class SimulationOrchestrator:
             self._network_payload_cache.pop(sim_id, None)
             self._network_metrics_cache.pop(sim_id, None)
 
-        # Also enforce max count (remove oldest first)
+        # Also enforce max count (remove oldest first, skip RUNNING)
         if len(self._simulations) > self.MAX_SIMULATIONS:
             sorted_sims = sorted(
                 self._simulations.keys(),
                 key=lambda k: getattr(self._simulations[k], 'created_at', _dt.min),
             )
-            while len(self._simulations) > self.MAX_SIMULATIONS:
+            while len(self._simulations) > self.MAX_SIMULATIONS and sorted_sims:
                 oldest = sorted_sims.pop(0)
+                if self._simulations[oldest].status == SimulationStatus.RUNNING.value:
+                    continue
                 del self._simulations[oldest]
                 self._locks.pop(oldest, None)
                 self._network_payload_cache.pop(oldest, None)
@@ -201,15 +216,43 @@ class SimulationOrchestrator:
         agents: list[AgentState] = []
         nodes = list(network.graph.nodes(data=True))
 
-        # Compute degree centrality for influence scores
-        centrality = nx.degree_centrality(network.graph)
+        # Compute blended influence score: degree + betweenness centrality
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#5.1 — Network A-
+        degree_cent = nx.degree_centrality(network.graph)
+        # Sampled betweenness for scalability (k=100 max)
+        _k = min(100, len(network.graph))
+        between_cent = nx.betweenness_centrality(network.graph, k=_k, seed=seed)
+        centrality = {
+            n: 0.6 * degree_cent.get(n, 0.0) + 0.4 * between_cent.get(n, 0.0)
+            for n in network.graph.nodes()
+        }
+
+        # Cache community UUIDs so every agent in the same community sees the
+        # same UUID without re-hashing per node. The UUID is derived from
+        # ``(sim_id, community_string)`` so it is:
+        #   (a) deterministic within a simulation (for seed repeatability) and
+        #   (b) globally unique across simulations (avoiding the
+        #       ``communities_pkey`` violation that bare ``hash(cid_str)``
+        #       caused when two sims shared community ids like "A", "B").
+        import hashlib as _hashlib
+        community_uuid_cache: dict[str, UUID] = {}
+
+        def _community_uuid(cid_str: str) -> UUID:
+            if cid_str in community_uuid_cache:
+                return community_uuid_cache[cid_str]
+            if seed is None:
+                uid = uuid4()
+            else:
+                digest = _hashlib.sha256(
+                    f"{sim_id}:{cid_str}".encode()
+                ).digest()
+                uid = UUID(bytes=digest[:16])
+            community_uuid_cache[cid_str] = uid
+            return uid
 
         for node_id, node_data in nodes:
             community_id_str = node_data.get("community_id", "default")
-            # Map community string id to a deterministic UUID
-            community_uuid = uuid4() if seed is None else UUID(
-                int=hash(community_id_str) % (2**128)
-            )
+            community_uuid = _community_uuid(community_id_str)
             # Store the UUID on the node for later lookup
             network.graph.nodes[node_id]["community_uuid"] = community_uuid
 
@@ -282,29 +325,31 @@ class SimulationOrchestrator:
         self._locks[sim_id] = asyncio.Lock()
         return state
 
-    def start(self, simulation_id: UUID) -> None:
+    async def start(self, simulation_id: UUID) -> None:
         """Transition to RUNNING state.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.1
 
         Raises:
             InvalidStateTransitionError: invalid transition
             SimulationCapacityError: max concurrent exceeded
         """
-        state = self._get_state(simulation_id)
-        self._validate_transition(state.status, SimulationStatus.RUNNING.value)
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            self._validate_transition(state.status, SimulationStatus.RUNNING.value)
 
-        # Check concurrent limit
-        running_count = sum(
-            1 for s in self._simulations.values()
-            if s.status == SimulationStatus.RUNNING.value
-        )
-        if running_count >= _MAX_CONCURRENT:
-            raise SimulationCapacityError(
-                f"Max {_MAX_CONCURRENT} concurrent simulations exceeded"
+            # Check concurrent limit
+            running_count = sum(
+                1 for s in self._simulations.values()
+                if s.status == SimulationStatus.RUNNING.value
             )
+            if running_count >= _MAX_CONCURRENT_DEFAULT:
+                raise SimulationCapacityError(
+                    f"Max {_MAX_CONCURRENT_DEFAULT} concurrent simulations exceeded"
+                )
 
-        state.status = SimulationStatus.RUNNING.value
+            state.status = SimulationStatus.RUNNING.value
 
     async def run_step(self, simulation_id: UUID) -> StepResult:
         """Execute one simulation step.
@@ -317,6 +362,16 @@ class SimulationOrchestrator:
         async with self._get_lock(simulation_id):
             state = self._get_state(simulation_id)
             try:
+                # Snapshot agents before step for replay support (P1.3)
+                from copy import deepcopy
+                state.agent_snapshots[state.current_step] = deepcopy(state.agents)
+                # Evict oldest snapshots beyond sliding window
+                if len(state.agent_snapshots) > _SNAPSHOT_WINDOW:
+                    oldest_key = min(state.agent_snapshots)
+                    del state.agent_snapshots[oldest_key]
+
+                # Set simulation_id for pgvector memory persistence (MP-02)
+                self._step_runner._simulation_id = simulation_id
                 result = await self._step_runner.execute_step(state, state.current_step)
                 state.step_history.append(result)
                 state.current_step += 1
@@ -330,13 +385,22 @@ class SimulationOrchestrator:
                 state.status = SimulationStatus.FAILED.value
                 raise
 
-    async def run_all(self, simulation_id: UUID) -> dict:
+    async def run_all(
+        self,
+        simulation_id: UUID,
+        step_callback: Callable[[StepResult], Awaitable[None]] | None = None,
+    ) -> dict:
         """Run all remaining steps to completion and return a summary report.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.2
 
         If the simulation is CONFIGURED it will be started automatically.
         Runs until max_steps is reached or the simulation moves to COMPLETED/FAILED.
+
+        Args:
+            step_callback: optional async callback invoked after each step
+                           for persistence or progress reporting.
 
         Returns a report dict with:
           total_steps, final_adoption_rate, final_mean_sentiment,
@@ -348,7 +412,7 @@ class SimulationOrchestrator:
 
         # Auto-start from CONFIGURED
         if state.status == SimulationStatus.CONFIGURED.value:
-            self.start(simulation_id)
+            await self.start(simulation_id)
         elif state.status != SimulationStatus.RUNNING.value:
             raise ValueError(
                 f"run_all requires CONFIGURED or RUNNING status, got '{state.status}'"
@@ -360,6 +424,14 @@ class SimulationOrchestrator:
         while state.status == SimulationStatus.RUNNING.value:
             result = await self.run_step(simulation_id)
             emergent_count += len(result.emergent_events)
+            if step_callback:
+                try:
+                    await step_callback(result)
+                except Exception as cb_exc:
+                    logger.error(
+                        "run_all step_callback failed at step %d: %s",
+                        result.step, cb_exc,
+                    )
             # Yield control to event loop so WebSocket broadcasts can fire
             await asyncio.sleep(0)
 
@@ -422,6 +494,35 @@ class SimulationOrchestrator:
             self._validate_transition(state.status, SimulationStatus.RUNNING.value)
             state.status = SimulationStatus.RUNNING.value
 
+    async def reset(self, simulation_id: UUID) -> None:
+        """Reset a COMPLETED or FAILED simulation back to CREATED.
+
+        SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+
+        This is the domain-owned counterpart of the previous
+        ``state.status = "created"`` mutation that used to live in the
+        API route handler. It puts the simulation back to an initial
+        state so it can be re-configured and restarted, and it is the
+        **only** sanctioned way for the Service layer to roll an
+        in-memory simulation backwards.
+
+        Raises:
+            InvalidStateError: when the current status is not
+                ``COMPLETED`` or ``FAILED``.
+        """
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
+            if state.status not in (
+                SimulationStatus.COMPLETED.value,
+                SimulationStatus.FAILED.value,
+            ):
+                raise InvalidStateError(
+                    "reset only allowed from COMPLETED or FAILED, "
+                    f"current status: {state.status}"
+                )
+            state.status = SimulationStatus.CREATED.value
+            state.current_step = 0
+
     async def modify_agent(
         self,
         simulation_id: UUID,
@@ -475,56 +576,60 @@ class SimulationOrchestrator:
 
             return state.agents[agent_idx]
 
-    def inject_event(
+    async def inject_event(
         self,
         simulation_id: UUID,
         event: EnvironmentEvent | None = None,
         event_type: str | None = None,
         payload: dict | None = None,
+        target_communities: list[str] | None = None,
     ) -> None:
         """Inject an external event mid-simulation.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.1
 
         Raises:
             ValueError: unknown event_type
         """
-        state = self._get_state(simulation_id)
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
 
-        if event is not None:
-            state.injected_events.append(event)
-            return
+            if event is not None:
+                state.injected_events.append(event)
+                return
 
-        # String-based injection (for error test compatibility)
-        if event_type is not None:
-            NEGATIVE_EVENT_TYPES = {"negative_pr", "competitor_attack", "bad_review", "controversy", "regulatory_change"}
-            POSITIVE_EVENT_TYPES = {"celebrity_endorsement", "product_update", "news_article"}
-            DIRECT_TYPES = {"campaign_ad", "influencer_post", "expert_review", "community_discussion"}
-            if event_type in NEGATIVE_EVENT_TYPES:
-                mapped_type = "community_discussion"
-            elif event_type in POSITIVE_EVENT_TYPES:
-                mapped_type = "influencer_post"
-            elif event_type in DIRECT_TYPES:
-                mapped_type = event_type
-            else:
-                raise ValueError(
-                    f"Unknown event type: '{event_type}'. "
-                    f"Valid types: {sorted(_ALLOWED_EVENT_TYPES)}"
+            # String-based injection (for error test compatibility)
+            if event_type is not None:
+                NEGATIVE_EVENT_TYPES = {"negative_pr", "competitor_attack", "bad_review", "controversy", "regulatory_change"}
+                POSITIVE_EVENT_TYPES = {"celebrity_endorsement", "product_update", "news_article"}
+                DIRECT_TYPES = {"campaign_ad", "influencer_post", "expert_review", "community_discussion"}
+                if event_type in NEGATIVE_EVENT_TYPES:
+                    mapped_type = "community_discussion"
+                elif event_type in POSITIVE_EVENT_TYPES:
+                    mapped_type = "influencer_post"
+                elif event_type in DIRECT_TYPES:
+                    mapped_type = event_type
+                else:
+                    raise ValueError(
+                        f"Unknown event type: '{event_type}'. "
+                        f"Valid types: {sorted(_ALLOWED_EVENT_TYPES)}"
+                    )
+                env_event = EnvironmentEvent(
+                    event_type=mapped_type,
+                    content_id=uuid4(),
+                    message=str(payload) if payload else "",
+                    source_agent_id=None,
+                    channel="direct",
+                    timestamp=state.current_step,
+                    target_communities=target_communities or [],
                 )
-            env_event = EnvironmentEvent(
-                event_type=mapped_type,
-                content_id=uuid4(),
-                message=str(payload) if payload else "",
-                source_agent_id=None,
-                channel="direct",
-                timestamp=state.current_step,
-            )
-            state.injected_events.append(env_event)
-            return
+                state.injected_events.append(env_event)
+                return
 
-        raise ValueError("Either event or event_type must be provided")
+            raise ValueError("Either event or event_type must be provided")
 
-    def replay_step(
+    async def replay_step(
         self,
         simulation_id: UUID,
         target_step: int,
@@ -532,6 +637,7 @@ class SimulationOrchestrator:
         """Replay from a specific step, creating a branch.
 
         SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#1.1
 
         Finds the step in history, creates a replay branch with unique replay_id,
         then resets current_step to target_step so the simulation can be re-run
@@ -541,48 +647,56 @@ class SimulationOrchestrator:
             ValueError: target_step > current_step
             StepNotFoundError: step not in history
         """
-        from uuid import uuid4
+        async with self._get_lock(simulation_id):
+            state = self._get_state(simulation_id)
 
-        state = self._get_state(simulation_id)
+            if target_step > state.current_step:
+                raise ValueError(
+                    f"target_step {target_step} > current_step {state.current_step}"
+                )
 
-        if target_step > state.current_step:
-            raise ValueError(
-                f"target_step {target_step} > current_step {state.current_step}"
-            )
+            # Find the step result in history
+            step_result = None
+            for sr in state.step_history:
+                if sr.step == target_step:
+                    step_result = sr
+                    break
 
-        # Find the step result in history
-        step_result = None
-        for sr in state.step_history:
-            if sr.step == target_step:
-                step_result = sr
-                break
+            if step_result is None:
+                raise StepNotFoundError(
+                    f"Step {target_step} not found in history for simulation {simulation_id}"
+                )
 
-        if step_result is None:
-            raise StepNotFoundError(
-                f"Step {target_step} not found in history for simulation {simulation_id}"
-            )
+            # Generate replay branch ID
+            replay_id = uuid4()
 
-        # Generate replay branch ID
-        replay_id = uuid4()
+            # Store original history length before truncation
+            original_steps = state.current_step
 
-        # Store original history length before truncation
-        original_steps = state.current_step
+            # Restore agent state from snapshot if available (P1.3)
+            if target_step in state.agent_snapshots:
+                from copy import deepcopy
+                state.agents = deepcopy(state.agent_snapshots[target_step])
 
-        # Reset current_step to target so simulation can be re-run from this point.
-        # Trim history to only include steps up to and including target_step.
-        state.current_step = target_step
-        state.step_history = [sr for sr in state.step_history if sr.step <= target_step]
+            # Reset current_step to target so simulation can be re-run from this point.
+            # Trim history to only include steps up to and including target_step.
+            state.current_step = target_step
+            state.step_history = [sr for sr in state.step_history if sr.step <= target_step]
+            # Evict snapshots beyond replay point
+            state.agent_snapshots = {
+                k: v for k, v in state.agent_snapshots.items() if k <= target_step
+            }
 
-        # Re-enable running from this branch point
-        if state.status == SimulationStatus.COMPLETED.value:
-            state.status = SimulationStatus.PAUSED.value
+            # Re-enable running from this branch point
+            if state.status == SimulationStatus.COMPLETED.value:
+                state.status = SimulationStatus.PAUSED.value
 
-        return {
-            "replay_id": str(replay_id),
-            "from_step": target_step,
-            "original_steps": original_steps,
-            "status": state.status,
-        }
+            return {
+                "replay_id": str(replay_id),
+                "from_step": target_step,
+                "original_steps": original_steps,
+                "status": state.status,
+            }
 
     # ------------------------------------------------------------------ #
     # Helpers
@@ -593,6 +707,43 @@ class SimulationOrchestrator:
         if simulation_id not in self._simulations:
             raise ValueError(f"Simulation {simulation_id} not found")
         return self._simulations[simulation_id]
+
+    def _community_name_map(self, sim_uuid: UUID) -> dict[str, str]:
+        """Build a ``community_uuid → config community name`` map for a sim.
+
+        Walks the graph exactly once per call. Use this instead of an O(N)
+        graph scan per endpoint hit — the AgentInspector triggers
+        ``get_agent`` on every node click, and a 5k-node graph made that a
+        ~5k-iteration linear walk per interaction.
+
+        Caching one level deeper (per ``(sim_uuid, current_step)``) is not
+        worth the invalidation cost: community membership doesn't change
+        between steps for the lifetime of a simulation, and the build cost
+        is already dominated by the graph walk which is O(N) once.
+
+        Returns an empty dict if the sim has no network yet.
+        """
+        state = self._get_state(sim_uuid)
+        if state.network is None or state.network.graph is None:
+            return {}
+
+        # uuid → short key (one walk)
+        short_key_by_uuid: dict[str, str] = {}
+        for _nid, ndata in state.network.graph.nodes(data=True):
+            cuuid = str(ndata.get("community_uuid", ""))
+            if cuuid and cuuid not in short_key_by_uuid:
+                short_key = str(ndata.get("community_id", ""))
+                if short_key:
+                    short_key_by_uuid[cuuid] = short_key
+
+        # short key → config.name
+        name_by_short: dict[str, str] = {cc.id: cc.name for cc in state.config.communities}
+
+        return {
+            cuuid: name_by_short[short]
+            for cuuid, short in short_key_by_uuid.items()
+            if short in name_by_short
+        }
 
     def _validate_transition(self, from_status: str, to_status: str) -> None:
         """Validate state transition.
@@ -607,6 +758,24 @@ class SimulationOrchestrator:
     def get_state(self, simulation_id: UUID) -> SimulationState:
         """Public accessor for simulation state."""
         return self._get_state(simulation_id)
+
+    def list_states(
+        self, *, status: str | None = None,
+    ) -> list[SimulationState]:
+        """Return a snapshot list of all in-memory simulation states.
+
+        SPEC: docs/spec/04_SIMULATION_SPEC.md#simulationorchestrator-interface
+
+        The returned list is a **snapshot** — callers can iterate without
+        worrying about concurrent mutation of the underlying dict.
+
+        :param status: optional status filter (e.g. ``"running"``,
+            ``"configured"``). When ``None``, all states are returned.
+        """
+        states = list(self._simulations.values())
+        if status is not None:
+            states = [s for s in states if s.status == status]
+        return states
 
     # ------------------------------------------------------------------ #
     # Agent / Community query methods (called from API endpoints)
@@ -677,9 +846,20 @@ class SimulationOrchestrator:
         if agent is None:
             raise ValueError(f"Agent {agent_id_str} not found in simulation {simulation_id}")
 
+        # Resolve human-readable community name so the frontend doesn't have
+        # to show a raw UUID in the inspector. Uses the cached
+        # community_uuid → cc.name map so this endpoint is O(1) per call
+        # regardless of graph size (previously walked every node on every
+        # inspector click — 5000 iterations per click on large sims).
+        # Falls back to ``None`` (not the raw UUID) so downstream code
+        # can treat "missing human name" honestly.
+        community_uuid_str = str(agent.community_id)
+        community_name = self._community_name_map(sim_uuid).get(community_uuid_str)
+
         return {
             "agent_id": str(agent.agent_id),
             "community_id": str(agent.community_id),
+            "community_name": community_name,
             "agent_type": agent.agent_type.value,
             "action": agent.action.value,
             "adopted": agent.adopted,
@@ -944,13 +1124,18 @@ class SimulationOrchestrator:
             # Bug 3+4 fix: add `community` (short key) and `label` fields
             community_key = community_uuid_to_key.get(community_uuid, node_data.get("community_id", ""))
             agent_id_str = str(agent.agent_id) if agent else str(node_id)
-            short_id = agent_id_str[:8]
+            # Deterministic agent UUIDs pack most entropy into the low bits
+            # (first 8 chars are often "00000000"), so prefer the node_id —
+            # which is guaranteed unique within the graph — for the display
+            # label. Falls back to the agent UUID tail if node_id is missing.
+            label_suffix = str(node_id) if node_id is not None else agent_id_str[-8:]
+            community_display = community_names.get(community_uuid, str(community_key))
             node_dict: dict = {
                 "id": str(node_id),
-                "label": f"Agent {short_id}",
+                "label": f"Agent #{label_suffix}",
                 "community": str(community_key),
                 "community_id": community_uuid,
-                "community_name": community_names.get(community_uuid, str(community_key)),
+                "community_name": community_display,
             }
             if agent:
                 node_dict.update({
@@ -1153,12 +1338,27 @@ class SimulationOrchestrator:
             total_duration = sum(s.step_duration_ms for s in state.step_history)
             avg_latency = total_duration / max(total_calls, 1)
 
+        # Pull real cache-hit and token counts from the gateway that actually
+        # executed the LLM calls.  The step_runner holds the live gateway
+        # instance (shared with all CommunityOrchestrators for this sim).
+        gw_stats: dict = {}
+        gw = getattr(self._step_runner, "_gateway", None)
+        if gw is not None:
+            gw_stats = gw.get_stats()
+
+        cached_calls = (
+            gw_stats.get("inmemory_hits", 0)
+            + gw_stats.get("valkey_hits", 0)
+            + gw_stats.get("vector_hits", 0)
+        )
+        total_tokens = gw_stats.get("total_tokens", 0)
+
         return {
             "total_calls": total_calls,
-            "cached_calls": 0,
+            "cached_calls": cached_calls,
             "provider_breakdown": provider_breakdown,
             "avg_latency_ms": round(avg_latency, 1),
-            "total_tokens": 0,
+            "total_tokens": total_tokens,
             "tier_breakdown": tier_breakdown,
         }
 
@@ -1193,33 +1393,68 @@ class SimulationOrchestrator:
         sim_uuid = UUID(str(simulation_id)) if not isinstance(simulation_id, UUID) else simulation_id
         state = self._get_state(sim_uuid)
 
-        calls: list[dict] = []
         default_provider = state.config.default_llm_provider or "ollama"
 
-        # Build call log from agents with LLM tier usage
-        for agent in state.agents:
-            if agent.llm_tier_used is None:
-                continue
-            if agent_id and str(agent.agent_id) != agent_id:
-                continue
-            agent_provider = "ollama-slm" if agent.llm_tier_used == 1 else default_provider
-            if provider and agent_provider != provider:
-                continue
-            if step is not None and agent.step != step:
-                continue
+        # --- Fetch real per-call data from the gateway ring buffer ---
+        # The ring buffer stores the most recent LLM calls with real latency
+        # and token counts, but without per-agent metadata (lightweight).
+        gw = getattr(self._step_runner, "_gateway", None)
+        gw_call_log: list[dict] = gw.get_call_log() if gw is not None else []
 
-            calls.append({
-                "call_id": f"call-{agent.agent_id}-s{agent.step}",
-                "step": agent.step,
-                "agent_id": str(agent.agent_id),
-                "provider": agent_provider,
-                "latency_ms": 0.0,
-                "tokens": 0,
-                "cached": False,
-            })
+        calls: list[dict] = []
 
-        # Sort by step descending, limit
-        calls.sort(key=lambda c: c["step"], reverse=True)
+        if not agent_id and step is None:
+            # No fine-grained filter requested — serve directly from ring buffer
+            # (most recent calls first) with provider filter if specified.
+            for i, entry in enumerate(reversed(gw_call_log)):
+                call_provider = entry.get("provider", default_provider)
+                if provider and call_provider != provider:
+                    continue
+                calls.append({
+                    "call_id": f"gw-call-{i}",
+                    "step": None,
+                    "agent_id": None,
+                    "provider": call_provider,
+                    "latency_ms": round(entry.get("latency_ms", 0.0), 2),
+                    "tokens": entry.get("tokens", 0),
+                    "cached": entry.get("cached", False),
+                })
+                if len(calls) >= limit:
+                    break
+        else:
+            # Filtered view: reconstruct from agent state (which has step/agent_id),
+            # then enrich with average latency/tokens from the gateway ring buffer.
+            avg_latency = 0.0
+            avg_tokens = 0
+            if gw_call_log:
+                real_calls = [e for e in gw_call_log if not e.get("cached", False)]
+                if real_calls:
+                    avg_latency = sum(e.get("latency_ms", 0.0) for e in real_calls) / len(real_calls)
+                    avg_tokens = sum(e.get("tokens", 0) for e in real_calls) // len(real_calls)
+
+            for agent in state.agents:
+                if agent.llm_tier_used is None:
+                    continue
+                if agent_id and str(agent.agent_id) != agent_id:
+                    continue
+                agent_provider = "ollama-slm" if agent.llm_tier_used == 1 else default_provider
+                if provider and agent_provider != provider:
+                    continue
+                if step is not None and agent.step != step:
+                    continue
+
+                calls.append({
+                    "call_id": f"call-{agent.agent_id}-s{agent.step}",
+                    "step": agent.step,
+                    "agent_id": str(agent.agent_id),
+                    "provider": agent_provider,
+                    "latency_ms": round(avg_latency, 2),
+                    "tokens": avg_tokens,
+                    "cached": False,
+                })
+
+            calls.sort(key=lambda c: (c["step"] or 0), reverse=True)
+
         return {"calls": calls[:limit]}
 
     def get_llm_impact(self, simulation_id: str | UUID) -> dict:

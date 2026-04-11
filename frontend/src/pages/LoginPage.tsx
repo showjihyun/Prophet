@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Brain, LogIn, UserPlus } from "lucide-react";
-import { apiClient } from "../api/client";
+import { useLogin, useRegister } from "../api/queries";
 import { LS_KEY_TOKEN, LS_KEY_USERNAME } from "@/config/constants";
 
 export default function LoginPage() {
@@ -13,38 +13,34 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const login = useLogin();
+  const register = useRegister();
+  const loading = login.isPending || register.isPending;
 
   async function handleLogin() {
     setError(null);
-    setLoading(true);
     try {
-      const res = await apiClient.auth.login(username, password);
+      const res = await login.mutateAsync({ username, password });
       localStorage.setItem(LS_KEY_TOKEN, res.token);
       localStorage.setItem(LS_KEY_USERNAME, res.username);
       navigate("/projects");
     } catch {
       setError("Invalid username or password.");
-    } finally {
-      setLoading(false);
     }
   }
 
   async function handleRegister() {
     setError(null);
-    setLoading(true);
     try {
-      await apiClient.auth.register(username, password);
+      await register.mutateAsync({ username, password });
       // Auto-login after register
-      const res = await apiClient.auth.login(username, password);
+      const res = await login.mutateAsync({ username, password });
       localStorage.setItem(LS_KEY_TOKEN, res.token);
       localStorage.setItem(LS_KEY_USERNAME, res.username);
       navigate("/projects");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg.includes("409") ? "Username already taken." : "Registration failed.");
-    } finally {
-      setLoading(false);
     }
   }
 

@@ -1,5 +1,6 @@
 """Layer 6: Influence — models how agent actions propagate to network neighbors.
 SPEC: docs/spec/01_AGENT_SPEC.md#layer-6-influencelayer
+SPEC: docs/spec/26_DIFFUSION_CALIBRATION_SPEC.md (Round 7-d calibration)
 """
 import random as stdlib_random
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from uuid import UUID
 
 from app.engine.agent.schema import AgentAction, AgentEmotion, AgentState
 from app.engine.agent.emotion import EmotionLayer
+from app.engine.diffusion.propagation_calibration import propagation_probability
 
 
 @dataclass
@@ -23,11 +25,43 @@ class MessageStrength:
 
     @property
     def score(self) -> float:
-        """Aggregate score. Returns mean of all dimensions. Range [0.0, 1.0].
+        """Aggregate score. Range [0.0, 1.0].
 
         SPEC: docs/spec/01_AGENT_SPEC.md#layer-6-influencelayer
+        SPEC: docs/spec/26_DIFFUSION_CALIBRATION_SPEC.md (Round 8-3)
+
+        Signed-weight formula with stronger coefficients so the campaign
+        design dimensions (novelty, utility, controversy) can actually
+        produce extreme adoption outcomes — "stuck at 12%" on one end
+        and "viral cascade" on the other.
+
+        Formula:
+            0.6·utility + 0.5·novelty − 0.7·controversy + 0.3
+
+        Properties:
+        - All-neutral  (0.5 / 0.5 / 0.5) → 0.50   (baseline)
+        - Best case    (util=1, nov=1, cont=0) → 1.40 → clamp 1.0
+        - Worst case   (util=0, nov=0, cont=1) → −0.40 → clamp 0.0
+        - Reframed     (0.5 / 0.8 / 0.2) → 0.86   (primes viral cascade)
+        - High-contro. (0.5 / 0.4 / 0.7) → 0.31   (primes stall/collapse)
+
+        History:
+        - Round 7 baseline used the naïve mean ``(n+c+u)/3`` which
+          rewarded controversy — verification pilot showed reframed
+          campaigns underperforming baseline. Bug.
+        - Round 7-d flipped the controversy sign with coefficients
+          ±0.4 and a +0.5 baseline. Spread was 0.94 vs 0.58 (1.62×) —
+          directionally correct but not expressive enough for the
+          README's "stuck at 12%" scenario: the worst possible input
+          still produced score=0.10, keeping diffusion alive.
+        - Round 8-3 increases coefficients to 0.6/0.5/−0.7 and lowers
+          the baseline to +0.3. Spread is now 0.86 vs 0.31 (2.77×) and
+          the worst case actually saturates at 0 — enough headroom to
+          reproduce stalled-adoption scenarios without touching the
+          other factors in the propagation product.
         """
-        return (self.novelty + self.controversy + self.utility) / 3.0
+        raw = 0.6 * self.utility + 0.5 * self.novelty - 0.7 * self.controversy + 0.3
+        return max(0.0, min(1.0, raw))
 
     def __post_init__(self):
         for f in ['novelty', 'controversy', 'utility']:
@@ -63,6 +97,8 @@ class PropagationEvent:
     probability: float
     packet: ContextualPacket
     step: int
+    action_type: str = "share"
+    generated_content: str | None = None
 
 
 # Actions that generate propagation events
@@ -154,7 +190,17 @@ class InfluenceLayer:
         events = []
         for target_id in scope:
             trust_ij = graph_edges.get((source_agent.agent_id, target_id), 0.0)
-            p = source_agent.influence_score * trust_ij * max(emotion_f, 0.0) * message_strength.score
+            # Round 7-d calibration — single source of truth in
+            # ``app.engine.diffusion.propagation_calibration``. The same
+            # formula was previously duplicated here and in
+            # ``propagation_model.py``; only one copy got the fix last time,
+            # and low-centrality agents stopped propagating for months.
+            p = propagation_probability(
+                influence_score=source_agent.influence_score,
+                trust=trust_ij,
+                emotion_factor=emotion_f,
+                message_strength=message_strength.score,
+            )
 
             if action == AgentAction.ADOPT:
                 p *= 0.5
@@ -171,6 +217,7 @@ class InfluenceLayer:
                     probability=p,
                     packet=packet,
                     step=source_agent.step,
+                    action_type=action.value,
                 ))
 
         return events

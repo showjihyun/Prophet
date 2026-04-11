@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Python 3.12)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    # Postgres service container. Must be the pgvector-flavored image
+    # because `app.main.lifespan` runs `CREATE EXTENSION IF NOT EXISTS
+    # vector` on startup, which is triggered by every API test that
+    # spins up `TestClient`. A vanilla `postgres:16` would fail with
+    # "could not open extension control file 'vector.control'".
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: prophet
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: prophet
+        ports:
+          - 5432:5432
+        # Health-gate the service so pytest doesn't race a half-initialised
+        # Postgres. `pg_isready` exits 0 only once the server is ready to
+        # accept connections.
+        options: >-
+          --health-cmd "pg_isready -U prophet -d prophet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Route the app at the service container. Port 5432 is what the
+      # service exposes on the runner host; the local dev compose uses
+      # 5433 on the host to avoid clashing with a developer's system
+      # Postgres, but CI has no such conflict.
+      DATABASE_URL: postgresql+asyncpg://prophet:secret@localhost:5432/prophet
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run pytest
+        run: uv run pytest tests/ -q
+
+  frontend:
+    name: Frontend (Node 20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        # Must be `tsc -b`, not `tsc --noEmit`. The root tsconfig.json is
+        # references-only with `files: []`, so `tsc --noEmit` compiles the
+        # empty project and falsely returns 0 errors (silent no-op).
+        # Use build mode to walk tsconfig.app.json and tsconfig.node.json.
+        run: npx tsc -b
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Unit tests (vitest)
+        run: npx vitest run
+
+      - name: Build
+        # Re-runs tsc -b internally plus vite build, catching any bundler
+        # regressions (chunk layout, asset imports) the earlier steps miss.
+        run: npm run build

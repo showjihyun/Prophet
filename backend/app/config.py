@@ -15,9 +15,22 @@ class Settings(BaseSettings):
 
     # ── LLM Providers ───────────────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
-    ollama_default_model: str = "llama3.1:8b"
-    slm_model: str = "llama3.1:8b"
-    ollama_embed_model: str = "llama3.1:8b"
+    # Default Ollama model: llama3.2:1b.
+    #
+    # History:
+    # - Round 7 briefly switched to gemma4:latest (9.6 GB, multimodal),
+    #   but 0.20.x Ollama has a regression that crashes the llama
+    #   runner on CPU inference.
+    # - Round 8 moved back toward llama3.1:8b, but 5.6 GiB of RAM is
+    #   too much for typical 8 GB VRAM WSL2 hosts when other Docker
+    #   services are running alongside. Round 8-5 drops to
+    #   llama3.2:1b (~1.3 GB on disk, ~2 GB in RAM) — small enough to
+    #   fit comfortably on modest laptops while still being a real
+    #   Meta-Llama completion model. Pairs with the pinned Ollama
+    #   0.11.10 image (see docker-compose.yml).
+    ollama_default_model: str = "llama3.2:1b"
+    slm_model: str = "llama3.2:1b"
+    ollama_embed_model: str = "llama3.2:1b"
     anthropic_api_key: str = ""
     anthropic_default_model: str = "claude-sonnet-4-6"
     openai_api_key: str = ""
@@ -87,15 +100,18 @@ class Settings(BaseSettings):
     sim_default_max_steps: int = 50
     sim_default_random_seed: int = 42
     sim_base_activation_rate: float = 0.10
-    monte_carlo_default_runs: int = 100
 
     # ── Agent ───────────────────────────────────────────────────────────────
     agent_max_memories: int = 1000
     agent_max_personality_drift: float = 0.3
     memory_fallback_alpha: float = 0.6
-    memory_fallback_beta: float = 0.0
+    memory_fallback_beta: float = 0.25
     memory_fallback_gamma: float = 0.3
     memory_fallback_delta: float = 0.1
+
+    # ── Orchestrator / Scalability ────────────────────────────────────────────
+    community_batch_size: int = 32
+    max_network_edges: int = 100_000
 
     # ── Cascade / Diffusion ─────────────────────────────────────────────────
     cascade_viral_threshold: float = 0.15

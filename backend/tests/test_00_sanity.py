@@ -20,7 +20,7 @@ class TestProjectStructure:
             Simulation, SimStep, SimulationEvent,
             Community, Agent, AgentState,
             Campaign, AgentMemory, NetworkEdge,
-            PropagationEvent, ExpertOpinion, EmergentEvent, MonteCarloRun, LLMCall,
+            PropagationEvent, ExpertOpinion, EmergentEvent, LLMCall,
         )
         assert Simulation.__tablename__ == "simulations"
         assert Agent.__tablename__ == "agents"

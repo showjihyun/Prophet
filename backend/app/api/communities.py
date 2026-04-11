@@ -8,15 +8,25 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.deps import get_orchestrator
+from app.api.deps import get_community_opinion_service, get_orchestrator, get_session
 from app.api.schemas import (
     CommunitiesListResponse,
+    CommunityOpinionResponse,
+    OverallOpinionResponse,
     ThreadDetailResponse,
     ThreadMessage,
     ThreadsListResponse,
     ThreadSummary,
 )
 from app.api.simulations import _get_state_or_404
+from app.services.community_opinion_service import (
+    OVERALL_COMMUNITY_ID,
+    CommunityOpinionService,
+    CommunityOpinionSnapshot,
+    OverallOpinionSnapshot,
+)
+from app.services.ports import SimulationNotFoundError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(
     prefix="/api/v1/simulations/{simulation_id}/communities",
@@ -136,7 +146,96 @@ def _generate_thread_messages(
     return msgs
 
 
+def _build_real_threads(
+    state: Any,
+    community_id: str,
+) -> list[tuple[ThreadSummary, list[ThreadMessage]]] | None:
+    """Build threads from real captured agent messages if available.
+    SPEC: docs/spec/22_CONVERSATION_THREAD_SPEC.md#CT-06
+    """
+    step_history = getattr(state, "step_history", [])
+    if not step_history:
+        return None
+
+    # Collect all thread messages for this community across steps
+    all_msgs = []
+    for sr in step_history:
+        for msg in getattr(sr, "thread_messages", []):
+            if str(getattr(msg, "community_id", "")) == community_id or str(msg.community_id) == community_id:
+                all_msgs.append(msg)
+
+    if not all_msgs:
+        return None
+
+    # Group messages into threads by step ranges (every 5 steps = 1 thread)
+    from collections import defaultdict
+    step_groups: dict[int, list] = defaultdict(list)
+    for msg in all_msgs:
+        group_key = msg.step // 5
+        step_groups[group_key].append(msg)
+
+    threads = []
+    for group_key in sorted(step_groups.keys()):
+        group = step_groups[group_key]
+        step_start = group_key * 5
+        step_end = step_start + 4
+
+        # Build ThreadMessage list
+        participants = set()
+        msgs = []
+        total_belief = 0.0
+        for m in group:
+            participants.add(str(m.agent_id))
+            total_belief += m.belief
+            msgs.append(ThreadMessage(
+                message_id=str(m.message_id),
+                agent_id=str(m.agent_id),
+                community_id=community_id,
+                stance=_stance_from_belief(m.belief),
+                content=m.content,
+                reactions={
+                    "agree": max(0, int(m.emotion_valence * 10)),
+                    "disagree": max(0, int((1 - m.emotion_valence) * 5)),
+                    "nuanced": 2,
+                },
+                is_reply=m.reply_to_id is not None,
+                reply_to_id=str(m.reply_to_id) if m.reply_to_id else None,
+            ))
+
+        avg_sentiment = total_belief / len(group) if group else 0.0
+        dominant = max(set(m.action for m in group), key=lambda a: sum(1 for x in group if x.action == a)) if group else "idle"
+        topic_tmpl = _TOPICS_BY_ACTION.get(dominant, _TOPICS_BY_ACTION["idle"])
+        topic = topic_tmpl.format(cid=community_id)
+
+        summary = ThreadSummary(
+            thread_id=f"{community_id}-thread-{group_key}",
+            topic=f"Steps {step_start}-{step_end}: {topic}",
+            participant_count=len(participants),
+            message_count=len(msgs),
+            avg_sentiment=round(avg_sentiment, 2),
+        )
+        threads.append((summary, msgs))
+
+    return threads if threads else None
+
+
 def _build_threads(
+    state: Any,
+    community_id: str,
+) -> list[tuple[ThreadSummary, list[ThreadMessage]]]:
+    """Build threads from real agent messages, falling back to synthetic.
+    SPEC: docs/spec/22_CONVERSATION_THREAD_SPEC.md#CT-06
+    """
+    # Try real threads first
+    real = _build_real_threads(state, community_id)
+    if real:
+        return real
+
+    # Fallback: synthetic threads from simulation state
+    return _build_synthetic_threads(state, community_id)
+
+
+def _build_synthetic_threads(
     state: Any,
     community_id: str,
 ) -> list[tuple[ThreadSummary, list[ThreadMessage]]]:
@@ -209,14 +308,13 @@ async def list_communities(
     """
     _get_state_or_404(orchestrator, simulation_id)
 
-    try:
-        result = orchestrator.list_communities(simulation_id)
-        if isinstance(result, dict):
-            return CommunitiesListResponse(**result)
-    except (NotImplementedError, AttributeError, TypeError, ValueError):
-        pass
-
-    return CommunitiesListResponse(communities=[])
+    # Real errors (TypeError, AttributeError from orchestrator bugs) MUST
+    # surface as 500. Only ValueError ("sim not found") is a clean path
+    # that returns empty — and _get_state_or_404 already handles that.
+    result = orchestrator.list_communities(simulation_id)
+    if not isinstance(result, dict):
+        return CommunitiesListResponse(communities=[])
+    return CommunitiesListResponse(**result)
 
 
 @router.get("/{community_id}/threads", response_model=ThreadsListResponse)
@@ -362,6 +460,108 @@ async def delete_community(
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post(
+    "/__overall__/opinion-summary",
+    response_model=OverallOpinionResponse,
+)
+async def synthesize_overall_opinion(
+    simulation_id: str,
+    service: CommunityOpinionService = Depends(get_community_opinion_service),
+    session: AsyncSession = Depends(get_session),
+) -> OverallOpinionResponse:
+    """Synthesize (or return cached) cross-community EliteLLM narrative.
+
+    SPEC: docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+
+    Semantics:
+      * Idempotent on ``(simulation_id, current_step)`` — once the
+        overall row exists for this step we return the cached copy.
+      * Synthesises any missing per-community opinions as a side-effect
+        so the aggregate prompt always has real briefs to chew on.
+      * Route is declared before ``/{community_id}/opinion-summary`` so
+        FastAPI matches ``__overall__`` as a literal path segment, not
+        a community_id.
+    """
+    from uuid import UUID
+
+    try:
+        sim_uuid = UUID(simulation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid simulation_id: {exc}")
+
+    try:
+        agg = await service.get_or_synthesize_overall(
+            sim_uuid, session=session,
+        )
+    except SimulationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return OverallOpinionResponse(
+        overall=_snapshot_to_response(agg.overall),
+        communities=[_snapshot_to_response(s) for s in agg.communities],
+    )
+
+
+def _snapshot_to_response(snap: CommunityOpinionSnapshot) -> CommunityOpinionResponse:
+    return CommunityOpinionResponse(
+        opinion_id=str(snap.opinion_id),
+        simulation_id=str(snap.simulation_id),
+        community_id=snap.community_id,
+        step=snap.step,
+        summary=snap.summary,
+        sentiment_trend=snap.sentiment_trend,
+        themes=snap.themes,
+        divisions=snap.divisions,
+        dominant_emotions=snap.dominant_emotions,
+        key_quotes=snap.key_quotes,
+        source_step_count=snap.source_step_count,
+        source_agent_count=snap.source_agent_count,
+        llm_provider=snap.llm_provider,
+        llm_model=snap.llm_model,
+        is_fallback_stub=snap.is_fallback_stub,
+    )
+
+
+@router.post(
+    "/{community_id}/opinion-summary",
+    response_model=CommunityOpinionResponse,
+)
+async def synthesize_community_opinion(
+    simulation_id: str,
+    community_id: str,
+    service: CommunityOpinionService = Depends(get_community_opinion_service),
+    session: AsyncSession = Depends(get_session),
+) -> CommunityOpinionResponse:
+    """Synthesize (or return cached) EliteLLM narrative for a community.
+
+    SPEC: docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
+
+    Idempotent on ``(simulation_id, community_id, current_step)``: two
+    calls at the same step return the same persisted row without paying
+    for a second LLM call.
+    """
+    from uuid import UUID
+
+    try:
+        sim_uuid = UUID(simulation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid simulation_id: {exc}")
+
+    try:
+        snap = await service.get_or_synthesize(
+            sim_uuid, community_id, session=session,
+        )
+    except SimulationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        # Community not found in this simulation's state
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return _snapshot_to_response(snap)
 
 
 @router.post("/{community_id}/reassign")

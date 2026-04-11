@@ -69,7 +69,7 @@ class TestDistributedRunner:
         config = ScaleBenchmark._make_config(20, 2)
         orch = SimulationOrchestrator()
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         # Should work with local fallback
         result = await orch.run_step(state.simulation_id)

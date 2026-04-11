@@ -2,11 +2,12 @@
  * ConversationThreadPage — Agent conversation thread with reactions (UI-15).
  * @spec docs/spec/ui/UI_15_CONVERSATION_THREAD.md
  */
-import { useMemo, useEffect, useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import { useSimulationStore } from "../store/simulationStore";
-import { apiClient, type ThreadDetail } from "../api/client";
+import { type ThreadDetail } from "../api/client";
+import { useCommunityThread } from "../api/queries";
 
 function useReactions() {
   const [reacted, setReacted] = useState<Record<string, string>>({});
@@ -39,90 +40,12 @@ interface ThreadMsg {
   reply_to_id: string | null;
 }
 
-const MOCK_THREAD = {
-  thread_id: "t1",
-  topic: "Debate on progressive taxation reform impact",
-  category_tag: "Election Reform",
-  participant_count: 8,
-  timespan: "2h 15m",
-  avg_sentiment: 0.2,
-  message_count: 24,
-};
+// MOCK_THREAD / MOCK_MESSAGES removed — the page renders only real
+// thread data (from the communityThread API) or real-step-derived messages.
+// When neither is available, an empty state is shown instead of a canned
+// taxation-reform debate.
 
-const MOCK_MESSAGES: ThreadMsg[] = [
-  {
-    message_id: "m1",
-    agent_id: "Agent-A042",
-    community_color: "var(--community-alpha)",
-    stance: "Progressive",
-    relative_time: "2h ago",
-    content:
-      "The progressive taxation reform would significantly reduce income inequality in our society. Studies from Nordic countries show that higher marginal tax rates on top earners, when paired with robust social programs, lead to better outcomes across all economic strata. We should be looking at comprehensive reform rather than incremental adjustments.",
-    reactions: { agree: 12, disagree: 3, nuanced: 5 },
-    is_reply: false,
-    reply_to_id: null,
-  },
-  {
-    message_id: "m2",
-    agent_id: "Agent-B091",
-    community_color: "var(--community-beta)",
-    stance: "Conservative",
-    relative_time: "1h 50m ago",
-    content:
-      "While I understand the intent behind progressive taxation, the economic impact on small businesses and entrepreneurship cannot be ignored. Higher tax rates discourage investment and innovation. We need to find a balance that supports growth while ensuring fairness. The Laffer curve suggests there's an optimal point beyond which higher rates actually reduce revenue.",
-    reactions: { agree: 8, disagree: 7, nuanced: 3 },
-    is_reply: false,
-    reply_to_id: null,
-  },
-  {
-    message_id: "m3",
-    agent_id: "Agent-A042",
-    community_color: "var(--community-alpha)",
-    stance: "Progressive",
-    relative_time: "1h 45m ago",
-    content:
-      "That's a valid concern, but consider the data from countries that have implemented these reforms. Small business growth rates in Scandinavian countries remain competitive with lower-tax jurisdictions. The key is in how the revenue is reinvested — education, infrastructure, and healthcare create a more productive workforce that benefits everyone.",
-    reactions: { agree: 6, disagree: 2, nuanced: 4 },
-    is_reply: true,
-    reply_to_id: "m2",
-  },
-  {
-    message_id: "m4",
-    agent_id: "Agent-G055",
-    community_color: "var(--community-gamma)",
-    stance: "Neutral",
-    relative_time: "1h 30m ago",
-    content:
-      "Both sides make valid points. The key question is whether we can design a tax system that captures the benefits of progressive taxation while minimizing disincentives for productive economic activity. Perhaps a consumption-based approach combined with targeted credits could bridge the gap between these perspectives.",
-    reactions: { agree: 15, disagree: 1, nuanced: 8 },
-    is_reply: false,
-    reply_to_id: null,
-  },
-  {
-    message_id: "m5",
-    agent_id: "Agent-D067",
-    community_color: "var(--community-delta)",
-    stance: "Conservative",
-    relative_time: "1h 15m ago",
-    content:
-      "The fundamental issue is government efficiency. Before we raise taxes, we should ensure existing revenue is being spent wisely. There's significant waste in current programs that could be redirected to social priorities without any tax increases. Let's focus on accountability first.",
-    reactions: { agree: 9, disagree: 5, nuanced: 6 },
-    is_reply: false,
-    reply_to_id: null,
-  },
-  {
-    message_id: "m6",
-    agent_id: "Agent-BR012",
-    community_color: "var(--community-bridge)",
-    stance: "Neutral",
-    relative_time: "58m ago",
-    content:
-      "I think we're approaching this too ideologically. Economic policy should be evidence-based. We have data from dozens of countries with different tax regimes. Rather than debating principles, let's look at what actually works for societies similar to ours and adapt accordingly.",
-    reactions: { agree: 11, disagree: 2, nuanced: 7 },
-    is_reply: false,
-    reply_to_id: null,
-  },
-];
+// (MOCK_MESSAGES previously lived here — removed in favour of real data.)
 
 /* ------------------------------------------------------------------ */
 /* Stance badge styling                                                */
@@ -154,23 +77,14 @@ export default function ConversationThreadPage() {
   const emergentEvents = useSimulationStore((st) => st.emergentEvents);
   const { reacted, toggle: toggleReaction } = useReactions();
 
-  // API-fetched thread detail
-  const [apiThread, setApiThread] = useState<ThreadDetail | null>(null);
-  const [apiLoading, setApiLoading] = useState(false);
-
-  useEffect(() => {
-    if (!simulation?.simulation_id || !communityId || !_threadId) return;
-    const controller = new AbortController();
-    Promise.resolve()
-      .then(() => {
-        setApiLoading(true);
-        return apiClient.communityThreads.get(simulation.simulation_id!, communityId, _threadId);
-      })
-      .then((data) => { if (!controller.signal.aborted) setApiThread(data); })
-      .catch(() => { if (!controller.signal.aborted) setApiThread(null); })
-      .finally(() => { if (!controller.signal.aborted) setApiLoading(false); });
-    return () => controller.abort();
-  }, [simulation?.simulation_id, communityId, _threadId]);
+  // TanStack Query — cached thread detail
+  const threadQuery = useCommunityThread(
+    simulation?.simulation_id ?? null,
+    communityId ?? null,
+    _threadId ?? null,
+  );
+  const apiThread = (threadQuery.data as ThreadDetail | undefined) ?? null;
+  const apiLoading = threadQuery.isLoading;
 
   // Derive thread header from store data (fallback when no API data)
   const derivedThread = useMemo(() => {
@@ -228,7 +142,7 @@ export default function ConversationThreadPage() {
     });
   }, [steps, emergentEvents]);
 
-  // Resolve display data: API → derived from store → mock
+  // Resolve display data: API → derived from store → null (no mock fallback).
   const t = apiThread
     ? {
         thread_id: apiThread.thread_id,
@@ -239,7 +153,7 @@ export default function ConversationThreadPage() {
         avg_sentiment: apiThread.avg_sentiment,
         message_count: apiThread.message_count,
       }
-    : derivedThread ?? MOCK_THREAD;
+    : derivedThread ?? null;
 
   const messages: ThreadMsg[] = apiThread
     ? apiThread.messages.map((m, idx) => {
@@ -256,9 +170,29 @@ export default function ConversationThreadPage() {
           reply_to_id: m.reply_to_id,
         };
       })
-    : derivedMessages.length > 0
-    ? derivedMessages
-    : MOCK_MESSAGES;
+    : derivedMessages;
+
+  if (!t) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[var(--background)]">
+        <div className="max-w-md text-center flex flex-col items-center gap-4 p-8">
+          <h2 className="text-xl font-semibold text-[var(--foreground)]">
+            No conversation data
+          </h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            This thread has no content yet. Run the simulation to generate
+            conversations, or pick a thread from the community opinion page.
+          </p>
+          <button
+            onClick={() => navigate("/opinions")}
+            className="h-9 px-4 text-sm font-medium rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
+          >
+            Back to opinions
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const sentColor = t.avg_sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : t.avg_sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";
 

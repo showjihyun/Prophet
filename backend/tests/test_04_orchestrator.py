@@ -91,7 +91,7 @@ class TestStartSimulation:
         """start() sets status to RUNNING."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         assert state.status == SimulationStatus.RUNNING.value
 
     async def test_start_completed_raises(self):
@@ -100,7 +100,7 @@ class TestStartSimulation:
         state = orch.create_simulation(_make_config())
         state.status = SimulationStatus.COMPLETED.value
         with pytest.raises(InvalidStateTransitionError):
-            orch.start(state.simulation_id)
+            await orch.start(state.simulation_id)
 
     async def test_start_failed_raises(self):
         """Starting a FAILED simulation raises."""
@@ -108,17 +108,17 @@ class TestStartSimulation:
         state = orch.create_simulation(_make_config())
         state.status = SimulationStatus.FAILED.value
         with pytest.raises(InvalidStateTransitionError):
-            orch.start(state.simulation_id)
+            await orch.start(state.simulation_id)
 
     async def test_max_concurrent_raises(self):
         """4th concurrent start raises SimulationCapacityError."""
         orch = SimulationOrchestrator()
         for _ in range(3):
             s = orch.create_simulation(_make_config())
-            orch.start(s.simulation_id)
+            await orch.start(s.simulation_id)
         s4 = orch.create_simulation(_make_config())
         with pytest.raises(SimulationCapacityError):
-            orch.start(s4.simulation_id)
+            await orch.start(s4.simulation_id)
 
 
 class TestRunStep:
@@ -130,7 +130,7 @@ class TestRunStep:
         from app.engine.simulation.schema import StepResult
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         result = await orch.run_step(state.simulation_id)
         assert isinstance(result, StepResult)
 
@@ -139,7 +139,7 @@ class TestRunStep:
         """current_step increments after run_step."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         await orch.run_step(state.simulation_id)
         assert state.current_step == 1
 
@@ -148,7 +148,7 @@ class TestRunStep:
         """step_history grows after each step."""
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         await orch.run_step(state.simulation_id)
         await orch.run_step(state.simulation_id)
         assert len(state.step_history) == 2
@@ -160,7 +160,7 @@ class TestRunStep:
         config = _make_config()
         config.max_steps = 3
         state = orch.create_simulation(config)
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         for _ in range(3):
             await orch.run_step(state.simulation_id)
         assert state.status == SimulationStatus.COMPLETED.value
@@ -173,7 +173,7 @@ class TestPauseResume:
     async def test_pause_sets_paused(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         await orch.run_step(state.simulation_id)
         await orch.pause(state.simulation_id)
         assert state.status == SimulationStatus.PAUSED.value
@@ -182,7 +182,7 @@ class TestPauseResume:
     async def test_resume_sets_running(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         await orch.pause(state.simulation_id)
         await orch.resume(state.simulation_id)
         assert state.status == SimulationStatus.RUNNING.value
@@ -202,7 +202,7 @@ class TestModifyAgent:
     async def test_modify_belief(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         await orch.pause(state.simulation_id)
         agent = state.agents[0]
         modified = await orch.modify_agent(state.simulation_id, agent.agent_id, belief=0.9)
@@ -212,7 +212,7 @@ class TestModifyAgent:
     async def test_modify_while_running_raises(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         with pytest.raises(InvalidStateError):
             await orch.modify_agent(state.simulation_id, uuid4(), belief=0.5)
 
@@ -220,7 +220,7 @@ class TestModifyAgent:
     async def test_modify_with_modifications_object(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         await orch.pause(state.simulation_id)
         agent = state.agents[0]
         mods = AgentModification(belief=0.75)
@@ -244,14 +244,14 @@ class TestInjectEvent:
     async def test_inject_valid_event_type(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.inject_event(state.simulation_id, event_type="negative_pr", payload={})
+        await orch.inject_event(state.simulation_id, event_type="negative_pr", payload={})
         assert len(state.injected_events) == 1
 
     async def test_inject_unknown_event_type_raises(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         with pytest.raises(ValueError, match="Unknown event type"):
-            orch.inject_event(state.simulation_id, event_type="UNKNOWN", payload={})
+            await orch.inject_event(state.simulation_id, event_type="UNKNOWN", payload={})
 
     async def test_inject_environment_event(self):
         from app.engine.agent.perception import EnvironmentEvent
@@ -265,8 +265,42 @@ class TestInjectEvent:
             channel="sns",
             timestamp=0,
         )
-        orch.inject_event(state.simulation_id, event=ev)
+        await orch.inject_event(state.simulation_id, event=ev)
         assert len(state.injected_events) == 1
+
+    async def test_inject_with_target_communities(self):
+        """target_communities should be stored on the injected EnvironmentEvent."""
+        orch = SimulationOrchestrator()
+        state = orch.create_simulation(_make_config())
+        await orch.inject_event(
+            state.simulation_id,
+            event_type="news_article",
+            payload={"content": "breaking news"},
+            target_communities=["Comm0"],
+        )
+        assert len(state.injected_events) == 1
+        ev = state.injected_events[0]
+        assert ev.target_communities == ["Comm0"]
+
+    async def test_inject_without_target_communities_defaults_empty(self):
+        """Without target_communities, event.target_communities should be empty list."""
+        orch = SimulationOrchestrator()
+        state = orch.create_simulation(_make_config())
+        await orch.inject_event(
+            state.simulation_id,
+            event_type="campaign_ad",
+            payload={"content": "ad"},
+        )
+        assert state.injected_events[0].target_communities == []
+
+    async def test_inject_bad_review_type(self):
+        """bad_review should be accepted as a valid event type."""
+        orch = SimulationOrchestrator()
+        state = orch.create_simulation(_make_config())
+        await orch.inject_event(state.simulation_id, event_type="bad_review", payload={})
+        assert len(state.injected_events) == 1
+        # bad_review maps to community_discussion
+        assert state.injected_events[0].event_type == "community_discussion"
 
 
 class TestReplayStep:
@@ -276,9 +310,9 @@ class TestReplayStep:
     async def test_replay_existing_step(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         original = await orch.run_step(state.simulation_id)
-        replayed = orch.replay_step(state.simulation_id, target_step=0)
+        replayed = await orch.replay_step(state.simulation_id, target_step=0)
         assert replayed["from_step"] == original.step
         assert "replay_id" in replayed
 
@@ -287,14 +321,14 @@ class TestReplayStep:
         state = orch.create_simulation(_make_config())
         state.current_step = 5
         with pytest.raises(ValueError):
-            orch.replay_step(state.simulation_id, target_step=10)
+            await orch.replay_step(state.simulation_id, target_step=10)
 
     async def test_replay_not_persisted_raises(self):
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
         state.current_step = 10
         with pytest.raises(StepNotFoundError):
-            orch.replay_step(state.simulation_id, target_step=3)
+            await orch.replay_step(state.simulation_id, target_step=3)
 
 
 class TestConcurrencyControl:
@@ -323,7 +357,7 @@ class TestConcurrencyControl:
 
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
 
         lock = orch._locks[state.simulation_id]
         # Lock should not be held before run_step
@@ -348,7 +382,7 @@ class TestAgentNodeMap:
 
         orch = SimulationOrchestrator()
         state = orch.create_simulation(_make_config())
-        orch.start(state.simulation_id)
+        await orch.start(state.simulation_id)
         result = await orch.run_step(state.simulation_id)
         assert isinstance(result, StepResult)
         # All agents should have been processed

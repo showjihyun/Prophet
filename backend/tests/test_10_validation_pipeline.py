@@ -272,53 +272,6 @@ class TestVal05EmergentF1:
 
 
 # ---------------------------------------------------------------------------
-# VAL-06: Monte Carlo reproducibility
-# ---------------------------------------------------------------------------
-
-class TestVal06MonteCarloReproducibility:
-    """SPEC: docs/spec/10_VALIDATION_SPEC.md#val-06
-
-    Uses mock StepResult lists to verify that a fixed seed produces low variance
-    in viral_probability across repeated runs.  A real MonteCarloRunner integration
-    test would require a running simulation environment; this validates the
-    statistical contract with synthetic data.
-    """
-
-    def _simulate_viral_probability(self, seed: int, n_steps: int = 20) -> float:
-        """Deterministically compute viral probability from a seed (mock run)."""
-        import random
-        rng = random.Random(seed)
-        steps = [
-            make_step(
-                i,
-                adoption_rate=rng.uniform(0.1, 0.9),
-                total_adoption=rng.randint(10, 100),
-                diffusion_rate=rng.uniform(0.0, 0.3),
-                emergent_events=[make_emergent("viral_cascade")] if rng.random() > 0.5 else [],
-            )
-            for i in range(n_steps)
-        ]
-        viral_count = sum(1 for s in steps if any(e.event_type == "viral_cascade" for e in s.emergent_events))
-        return viral_count / n_steps
-
-    def test_same_seed_produces_low_stddev(self):
-        """Repeating runs with same seed → StdDev of viral_probability < 0.05."""
-        base_seed = 42
-        viral_probs = [self._simulate_viral_probability(base_seed) for _ in range(5)]
-        stdev = statistics.stdev(viral_probs) if len(viral_probs) > 1 else 0.0
-        # Same seed → identical result → stdev == 0
-        assert stdev < 0.05, f"StdDev {stdev:.4f} exceeds 0.05 threshold"
-
-    def test_different_seeds_can_vary(self):
-        """Different seeds may produce varying viral_probability values."""
-        probs = [self._simulate_viral_probability(seed=i * 100) for i in range(5)]
-        # At least some variation is expected with different seeds
-        stdev = statistics.stdev(probs) if len(probs) > 1 else 0.0
-        # This is a sanity check — not a hard assertion — just verify it runs
-        assert isinstance(stdev, float)
-
-
-# ---------------------------------------------------------------------------
 # VAL-07/08: Twitter dataset fixture pipeline
 # ---------------------------------------------------------------------------
 

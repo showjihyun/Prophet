@@ -84,6 +84,7 @@ const MOCK_SIMULATION = {
   simulation_id: 'sim-test-001',
   project_id: 'proj-001',
   scenario_id: 'scen-001',
+  name: 'Simulation Main Test',
   status: 'running' as const,
   current_step: 5,
   max_steps: 365,
@@ -106,6 +107,7 @@ describe('SimulationMain (UI-01)', () => {
       status: 'running',
       currentStep: 5,
       steps: [],
+      latestStep: null,
       emergentEvents: [],
       isLLMDashboardOpen: false,
       speed: 2,
@@ -161,16 +163,44 @@ describe('SimulationMain (UI-01)', () => {
 
     it('renders communities title with count', () => {
       renderPage();
-      expect(screen.getByText('Communities')).toBeInTheDocument();
+      // Scope to the community panel — the graph overlay also has a
+      // "Communities" legend header.
+      const panel = screen.getByTestId('community-panel');
+      expect(panel.textContent).toMatch(/Communities/);
     });
 
-    it('renders 5 community items (Alpha, Beta, Gamma, Delta, Bridge)', () => {
+    it('renders multiple community rows', () => {
+      // CommunityPanel is real-data-only — seed latestStep with a
+      // community_metrics object so it has rows to render. Without this
+      // the panel correctly shows an empty state (no mock fallback).
+      useSimulationStore.setState({
+        status: 'paused',
+         
+        latestStep: {
+          step: 1,
+          adoption_rate: 0.4,
+          mean_sentiment: 0.2,
+          sentiment_variance: 0.1,
+          total_adoption: 400,
+          diffusion_rate: 0.05,
+          action_distribution: { share: 200 },
+          emergent_events: [],
+          llm_calls_this_step: 5,
+          step_duration_ms: 100,
+          community_metrics: {
+            alpha: { mean_belief: 0.5, adoption_rate: 0.4, size: 250, community_id: 'A' },
+            beta: { mean_belief: 0.3, adoption_rate: 0.3, size: 150, community_id: 'B' },
+            gamma: { mean_belief: -0.1, adoption_rate: 0.2, size: 100, community_id: 'C' },
+            delta: { mean_belief: 0.1, adoption_rate: 0.25, size: 120, community_id: 'D' },
+             
+          } as any,
+           
+        } as any,
+      });
       renderPage();
-      expect(screen.getAllByText('Alpha').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Beta').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Gamma').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Delta').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Bridge').length).toBeGreaterThanOrEqual(1);
+      const panel = screen.getByTestId('community-panel');
+      const rows = panel.querySelectorAll('div.cursor-pointer');
+      expect(rows.length).toBeGreaterThanOrEqual(3);
     });
 
     it('renders total agents count', () => {
@@ -179,38 +209,39 @@ describe('SimulationMain (UI-01)', () => {
     });
   });
 
-  /** @spec UI_01_SIMULATION_MAIN.md#zone-2-center-graph-engine */
-  describe('Zone 2: AI Social World Graph Engine', () => {
-    it('renders graph container with dark background', () => {
+  /** @spec 18_FRONTEND_PERFORMANCE_SPEC.md#5-graph-3d-rendering */
+  describe('Zone 2: AI Social World Graph Engine (3D)', () => {
+    // GraphPanel is lazy-loaded inside SimulationPage (perf — three.js
+    // chunk only fetched when a sim is active). Tests must `await
+    // findByTestId` so React Suspense has a chance to resolve.
+    it('renders graph container with dark background', async () => {
       renderPage();
-      expect(screen.getByTestId('graph-panel')).toBeInTheDocument();
+      expect(await screen.findByTestId('graph-panel')).toBeInTheDocument();
     });
 
-    it('renders graph title overlay', () => {
+    it('renders 3D graph title overlay', async () => {
       renderPage();
-      expect(screen.getByText('AI Social World')).toBeInTheDocument();
+      expect(await screen.findByText(/AI Social World — 3D/)).toBeInTheDocument();
     });
 
-    it('renders zoom controls (+/-/maximize)', () => {
+    it('exposes the WebGL container with stable test-id', async () => {
       renderPage();
-      expect(screen.getByTestId('zoom-in-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('zoom-out-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('zoom-maximize-btn')).toBeInTheDocument();
+      expect(await screen.findByTestId('graph-cytoscape-container')).toBeInTheDocument();
     });
 
-    it('renders network legend with community colors', () => {
+    it('shows the 3D controls hint (left-drag / scroll / right-drag)', async () => {
       renderPage();
-      expect(screen.getByTestId('network-legend')).toBeInTheDocument();
+      const hint = await screen.findByText(/Left-drag/i);
+      expect(hint).toBeInTheDocument();
+      expect(hint.textContent).toMatch(/rotate/i);
+      expect(hint.textContent).toMatch(/zoom/i);
+      expect(hint.textContent).toMatch(/pan/i);
     });
 
-    it('renders cascade badge', () => {
+    it('uses 3D aria label on the panel', async () => {
       renderPage();
-      expect(screen.getByTestId('cascade-badge')).toBeInTheDocument();
-    });
-
-    it('renders status overlay with FPS and node/edge counts', () => {
-      renderPage();
-      expect(screen.getByTestId('status-overlay')).toBeInTheDocument();
+      const panel = await screen.findByTestId('graph-panel');
+      expect(panel.getAttribute('aria-label')).toMatch(/3D/);
     });
   });
 

@@ -22,6 +22,8 @@ class ConnectionManager:
     def __init__(self) -> None:
         self._connections: dict[str, list[WebSocket]] = {}
         self._agent_subscriptions: dict[str, set[str]] = {}  # ws_id -> set of agent_ids
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#6.1
+        self._seq: dict[str, int] = {}  # sim_id -> monotonic sequence number
 
     async def connect(self, simulation_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -37,7 +39,13 @@ class ConnectionManager:
         logger.info("WebSocket disconnected for simulation %s", simulation_id)
 
     async def broadcast(self, simulation_id: str, message: dict[str, Any]) -> None:
-        """Send a message to all connections for a simulation."""
+        """Send a message to all connections for a simulation.
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#6.1
+        """
+        # Attach monotonic sequence number for gap detection
+        self._seq[simulation_id] = self._seq.get(simulation_id, 0) + 1
+        message["seq"] = self._seq[simulation_id]
+
         conns = self._connections.get(simulation_id, [])
         dead: list[WebSocket] = []
         for ws in list(conns):  # iterate over copy
@@ -165,7 +173,7 @@ async def simulation_ws(websocket: WebSocket, simulation_id: str) -> None:
                     orch = get_orchestrator()
                     event_type = data.get("event_type", "community_discussion")
                     payload = data.get("payload", {})
-                    orch.inject_event(
+                    await orch.inject_event(
                         UUID(simulation_id),
                         event_type=event_type,
                         payload=payload,
@@ -201,6 +209,11 @@ async def simulation_ws(websocket: WebSocket, simulation_id: str) -> None:
                     "type": "agent_update",
                     "data": {"agent_id": agent_id, "subscribed": False},
                 })
+
+            elif msg_type == "ping":
+                # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#6.2
+                import time as _time
+                await websocket.send_json({"type": "pong", "ts": _time.time()})
 
             else:
                 await websocket.send_json({

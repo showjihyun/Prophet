@@ -74,10 +74,13 @@ class VectorLLMCache:
     """
     SIMILARITY_THRESHOLD = _settings.llm_vector_similarity_threshold
 
+    _MAX_INMEMORY_ENTRIES = 10_000  # LRU eviction cap
+
     def __init__(self, session_factory: Any | None = None) -> None:
         self._session_factory = session_factory
         # In-memory fallback for tests / no-DB environments
         self._entries: list[dict] = []
+        self._entries_lock = asyncio.Lock()
 
     async def search(
         self, prompt_embedding: list[float], task_type: str, top_k: int = 3,
@@ -89,8 +92,9 @@ class VectorLLMCache:
         if self._session_factory is not None:
             return await self._search_pgvector(prompt_embedding, task_type, top_k)
 
-        # Fallback: in-memory brute-force
-        return self._search_inmemory(prompt_embedding, task_type)
+        # Fallback: in-memory brute-force (lock-protected)
+        async with self._entries_lock:
+            return self._search_inmemory(prompt_embedding, task_type)
 
     async def store(
         self, prompt: str, prompt_hash: str, prompt_embedding: list[float],
@@ -104,11 +108,15 @@ class VectorLLMCache:
             await self._store_pgvector(prompt, prompt_hash, prompt_embedding, response, task_type)
             return
 
-        # Fallback: in-memory
-        self._entries.append({
-            "prompt": prompt, "embedding": prompt_embedding,
-            "response": response, "task_type": task_type,
-        })
+        # Fallback: in-memory (with lock + LRU eviction)
+        async with self._entries_lock:
+            self._entries.append({
+                "prompt": prompt, "embedding": prompt_embedding,
+                "response": response, "task_type": task_type,
+            })
+            # LRU eviction: drop oldest entries when over cap
+            if len(self._entries) > self._MAX_INMEMORY_ENTRIES:
+                self._entries = self._entries[-self._MAX_INMEMORY_ENTRIES:]
 
     async def _search_pgvector(
         self, embedding: list[float], task_type: str, top_k: int,
@@ -122,7 +130,7 @@ class VectorLLMCache:
                                1 - (embedding <=> :emb::vector) AS similarity
                         FROM llm_vector_cache
                         WHERE task_type = :task_type
-                        ORDER BY embedding <=> :emb::vector
+                        ORDER BY embedding <=> :emb::vector, prompt_hash
                         LIMIT :top_k
                     """),
                     {"emb": embedding_str, "task_type": task_type, "top_k": top_k},
@@ -289,7 +297,16 @@ class LLMGateway:
             "total": 0, "inmemory_hits": 0, "valkey_hits": 0,
             "vector_hits": 0, "llm_calls": 0, "batched_calls": 0,
             "budget_downgrades": 0,
+            # Accumulated token counts across all real (non-cached) LLM calls
+            "total_tokens": 0,
         }
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md — concurrency safety
+        self._stats_lock = asyncio.Lock()
+        # Lightweight ring buffer: last 100 per-call records for the LLM dashboard.
+        # Each entry: {"step": int|None, "agent_id": str|None, "provider": str,
+        #              "latency_ms": float, "tokens": int, "cached": bool}
+        self._call_log: list[dict] = []
+        self._CALL_LOG_MAX = 100
         # Batch queue
         self._batch_queue: list[_BatchEntry] = []
         self._batch_flush_task: asyncio.Task | None = None
@@ -367,6 +384,24 @@ class LLMGateway:
         )
 
         response = await self._call_with_fallback(prompt, options, effective_tier)
+
+        # --- Accumulate token stats from real (non-stub) responses ---
+        tokens = response.prompt_tokens + response.completion_tokens
+        if tokens == 0 and not response.is_fallback_stub:
+            # Rough proxy: ~4 chars per token for response content
+            tokens = max(1, len(response.content) // 4)
+        self._stats["total_tokens"] = self._stats.get("total_tokens", 0) + tokens
+
+        # --- Record per-call entry in ring buffer ---
+        entry: dict = {
+            "provider": response.provider,
+            "latency_ms": response.latency_ms,
+            "tokens": tokens,
+            "cached": response.cached,
+        }
+        self._call_log.append(entry)
+        if len(self._call_log) > self._CALL_LOG_MAX:
+            self._call_log.pop(0)
 
         # --- Store in all cache tiers ---
         self._inmemory.set(prompt_hash, response)
@@ -486,7 +521,19 @@ class LLMGateway:
         except Exception as fallback_exc:
             logger.warning("Fallback LLM adapter failed: %s — using rule-engine", fallback_exc)
 
-        # Last resort: rule-engine stub
+        # Last resort: rule-engine stub. This path MUST be tracked so the
+        # operator can see when the 3-tier LLM promise was actually met vs
+        # silently downgraded. The response is flagged with
+        # `is_fallback_stub=True` so downstream code (and the UI) can
+        # distinguish it from a genuine LLM completion.
+        # SPEC: docs/spec/05_LLM_SPEC.md#fallback-transparency
+        self._stats["fallback_stub_count"] = (
+            self._stats.get("fallback_stub_count", 0) + 1
+        )
+        logger.error(
+            "LLM gateway using rule-engine stub for tier %d — all adapters failed",
+            tier,
+        )
         return LLMResponse(
             provider="fallback",
             model="rule-engine",
@@ -495,6 +542,7 @@ class LLMGateway:
             prompt_tokens=0,
             completion_tokens=0,
             latency_ms=0,
+            is_fallback_stub=True,
         )
 
     def _apply_budget_downgrade(
@@ -534,6 +582,35 @@ class LLMGateway:
         SPEC: docs/spec/platform/14_LLM_GATEWAY_SPEC.md#stats
         """
         return dict(self._stats)
+
+    def cache_health(self) -> dict[str, object]:
+        """Return health status of all cache layers for observability.
+
+        SPEC: docs/spec/platform/14_LLM_GATEWAY_SPEC.md#stats
+        """
+        health: dict[str, object] = {
+            "l1_inmemory": {
+                "entries": len(self._inmemory._cache),
+                "status": "ok",
+            },
+            "l2_valkey": {"status": "not_configured"},
+            "l3_pgvector": {
+                "status": "ok" if self._vector._session_factory is not None else "fallback_inmemory",
+                "inmemory_entries": len(self._vector._entries),
+            },
+        }
+        if self._valkey is not None and hasattr(self._valkey, "health_status"):
+            health["l2_valkey"] = self._valkey.health_status()
+        return health
+
+    def get_call_log(self) -> list[dict]:
+        """Return a copy of the per-call ring buffer (up to last 100 entries).
+
+        Each entry has keys: provider, latency_ms, tokens, cached.
+
+        SPEC: docs/spec/platform/14_LLM_GATEWAY_SPEC.md#stats
+        """
+        return list(self._call_log)
 
     def clear_cache(self, simulation_id: UUID | None = None) -> None:
         """Clear in-memory and (optionally) vector caches.

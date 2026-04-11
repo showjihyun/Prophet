@@ -2,9 +2,8 @@
  * LLM Dashboard — real-time LLM usage statistics.
  * @spec docs/spec/07_FRONTEND_SPEC.md#llm-dashboard
  */
-import { useEffect, useState, useCallback } from "react";
 import { useSimulationStore } from "../../store/simulationStore";
-import { apiClient } from "../../api/client";
+import { useLLMStats, useLLMImpact } from "../../api/queries";
 
 interface LLMStats {
   total_calls: number;
@@ -75,33 +74,16 @@ export default function LLMDashboard() {
   const stepsLength = useSimulationStore((s) => s.steps.length);
   const lastLLMCalls = useSimulationStore((s) => s.latestStep?.llm_calls_this_step ?? 0);
 
-  const [stats, setStats] = useState<LLMStats>(EMPTY_STATS);
-  const [impact, setImpact] = useState<LLMImpact | null>(null);
-  const [loading, setLoading] = useState(false);
+  // TanStack Query — `step` is part of the cache key so a new simulation
+  // step naturally invalidates the cache. No imperative refetch loop, no
+  // local state, no mount effect. Two components calling this hook get
+  // automatic request deduplication.
+  const statsQuery = useLLMStats(simulationId, stepsLength);
+  const impactQuery = useLLMImpact(simulationId, stepsLength);
 
-  const fetchData = useCallback(async () => {
-    if (!simulationId) return;
-    setLoading(true);
-    try {
-      const [rawStats, rawImpact] = await Promise.allSettled([
-        apiClient.llm.getStats(simulationId),
-        apiClient.llm.getImpact(simulationId),
-      ]);
-      if (rawStats.status === "fulfilled") {
-        setStats(rawStats.value as LLMStats);
-      }
-      if (rawImpact.status === "fulfilled") {
-        setImpact(rawImpact.value as LLMImpact);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [simulationId]);
-
-  // Refetch whenever a new step arrives
-  useEffect(() => {
-    if (simulationId) fetchData();
-  }, [simulationId, stepsLength, fetchData]);
+  const stats = (statsQuery.data as LLMStats | undefined) ?? EMPTY_STATS;
+  const impact = (impactQuery.data as LLMImpact | null | undefined) ?? null;
+  const loading = statsQuery.isLoading || impactQuery.isLoading;
 
   if (!simulationId) {
     return (

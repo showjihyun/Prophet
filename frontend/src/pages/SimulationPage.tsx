@@ -8,14 +8,20 @@
  * Zone 2: Community Panel (260px) | Graph Engine (fill) | Metrics Panel (280px)
  * Zone 3: Timeline (120px) + Conversations (fill remaining)
  */
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { LS_KEY_SIMULATION_ID, SIM_STATUS } from "@/config/constants";
 import { FolderOpen, Brain } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
+import WorkflowStepper from "../components/layout/WorkflowStepper";
+import EmergentEventsPanel from "../components/emergent/EmergentEventsPanel";
 import CommunityPanel from "../components/graph/CommunityPanel";
-import GraphPanel from "../components/graph/GraphPanel";
+// GraphPanel pulls three.js + react-force-graph-3d (~1 MB raw / 375 KB gzipped).
+// Lazy-load it so the empty state ("No Active Simulation") below renders
+// without paying the WebGL bundle cost. Once a simulation is active, the
+// chunk is fetched once and cached.
+const GraphPanel = lazy(() => import("../components/graph/GraphPanel"));
 import MetricsPanel from "../components/graph/MetricsPanel";
 import TimelinePanel from "../components/timeline/TimelinePanel";
 import ConversationPanel from "../components/control/ConversationPanel";
@@ -103,6 +109,7 @@ export default function SimulationPage() {
     return (
       <div className="h-screen w-screen flex flex-col bg-[var(--background)]">
         <ControlPanel />
+        <WorkflowStepper />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center flex flex-col items-center gap-4">
             <Brain className="w-16 h-16 text-[var(--muted-foreground)]" />
@@ -139,6 +146,9 @@ export default function SimulationPage() {
       {/* Zone 1: Simulation Control Bar — 56px */}
       <ControlPanel />
 
+      {/* Workflow Stepper — 6-stage progress indicator */}
+      <WorkflowStepper />
+
       {/* WebSocket retry exhausted banner */}
       {retryExhausted && (
         <div className="flex items-center justify-center gap-3 px-4 py-2 bg-amber-900/80 text-amber-200 text-sm">
@@ -159,7 +169,15 @@ export default function SimulationPage() {
 
         {/* Center: AI Social World Graph Engine — fill */}
         <div className="flex-1 min-w-0">
-          <GraphPanel />
+          <Suspense
+            fallback={
+              <div className="w-full h-full flex items-center justify-center text-sm text-[var(--muted-foreground)]">
+                Loading 3D graph engine…
+              </div>
+            }
+          >
+            <GraphPanel />
+          </Suspense>
         </div>
 
         {/* Right: Metrics Panel — 280px */}
@@ -167,12 +185,19 @@ export default function SimulationPage() {
       </div>
 
       {/* Zone 3: Bottom Area — 220px */}
-      <div className="shrink-0" style={{ height: "var(--bottom-area-height)" }}>
-        {/* Timeline + Diffusion Wave — 120px */}
+      <div className="shrink-0 flex flex-col" style={{ height: "var(--bottom-area-height)" }}>
+        {/* Timeline + Diffusion Wave — 120px (with emergent event markers) */}
         <TimelinePanel />
 
-        {/* Conversations / Expert Agent — remaining */}
-        <ConversationPanel />
+        {/* Conversations | Emergent Events — split horizontally */}
+        <div className="flex-1 min-h-0 flex">
+          <div className="flex-1 min-w-0">
+            <ConversationPanel />
+          </div>
+          <div className="w-[280px] shrink-0 hidden lg:flex">
+            <EmergentEventsPanel />
+          </div>
+        </div>
       </div>
 
       {/* LLM Dashboard — collapsible overlay at bottom */}

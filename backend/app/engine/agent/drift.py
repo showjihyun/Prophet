@@ -1,8 +1,12 @@
 """Personality Drift — optional personality evolution based on cumulative experience.
 SPEC: docs/spec/01_AGENT_SPEC.md#personality-drift
 """
-from app.config import settings as _settings
-from app.engine.agent.schema import AgentAction, AgentPersonality
+from __future__ import annotations
+
+from app.engine.agent.schema import AgentAction, AgentEmotion, AgentPersonality
+
+# Default max drift if not injected via constructor
+_DEFAULT_MAX_DRIFT = 0.3
 
 
 class PersonalityDrift:
@@ -26,7 +30,7 @@ class PersonalityDrift:
         AgentAction.MUTE:    {"skepticism": 0.01},
     }
 
-    MAX_DRIFT = _settings.agent_max_personality_drift
+    MAX_DRIFT = _DEFAULT_MAX_DRIFT
 
     def apply_drift(
         self,
@@ -34,16 +38,21 @@ class PersonalityDrift:
         action: AgentAction,
         cumulative_drift: dict[str, float],
         learning_rate: float = 1.0,
+        emotion: AgentEmotion | None = None,
     ) -> tuple[AgentPersonality, dict[str, float]]:
-        """Applies personality drift based on action taken.
+        """Applies personality drift based on action taken, modulated by emotion.
 
         SPEC: docs/spec/01_AGENT_SPEC.md#personality-drift
+        SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#4 — drift↔emotion coupling
 
         Args:
             personality: Current personality (frozen dataclass -- returns new instance).
             action: Action taken this step.
             cumulative_drift: Running total of drift per dimension.
             learning_rate: Multiplier for drift deltas. Default 1.0.
+            emotion: Optional current emotion — modulates drift speed.
+                     High excitement accelerates positive-action drift;
+                     high skepticism accelerates negative-action drift.
 
         Returns:
             (new_personality, updated_cumulative_drift)
@@ -54,6 +63,14 @@ class PersonalityDrift:
         """
         if action not in self.DRIFT_TABLE:
             return personality, cumulative_drift
+
+        # Emotion-modulated learning rate (B2 upgrade)
+        if emotion is not None:
+            positive_actions = {AgentAction.ADOPT, AgentAction.SHARE, AgentAction.COMMENT, AgentAction.FOLLOW}
+            if action in positive_actions:
+                learning_rate *= 1.0 + 0.5 * emotion.excitement
+            elif action == AgentAction.MUTE:
+                learning_rate *= 1.0 + 0.3 * emotion.skepticism
 
         deltas = self.DRIFT_TABLE[action]
         new_cumulative = dict(cumulative_drift)

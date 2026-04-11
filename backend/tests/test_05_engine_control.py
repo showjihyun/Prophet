@@ -144,3 +144,75 @@ class TestGetImpactAssessment:
         dist = ctrl.compute_tier_distribution(1000, 0.5)
         report = ctrl.get_impact_assessment(dist)
         assert report.prediction_type == "Hybrid"
+
+
+@pytest.mark.phase5
+class TestImpactAssessmentVelocityFormatting:
+    """Verify simulation_velocity string formatting across latency ranges."""
+
+    def test_low_latency_shows_ms(self):
+        """Latency <1000ms → '~Xms per step'."""
+        ctrl = EngineController()
+        dist = ctrl.compute_tier_distribution(1000, 0.0)
+        report = ctrl.get_impact_assessment(dist)
+        assert "ms per step" in report.simulation_velocity
+
+    def test_high_latency_shows_seconds(self):
+        """Latency >=1000ms → '~X.Xs per step'."""
+        ctrl = EngineController()
+        # ratio=1.0 with 1000 agents yields high latency
+        dist = ctrl.compute_tier_distribution(1000, 1.0)
+        report = ctrl.get_impact_assessment(dist)
+        assert "s per step" in report.simulation_velocity
+
+    def test_mid_latency_no_zero_seconds(self):
+        """Latency 50-999ms should NOT show '~0s per step'."""
+        ctrl = EngineController()
+        # ratio=0.25 yields moderate latency
+        dist = ctrl.compute_tier_distribution(1000, 0.25)
+        report = ctrl.get_impact_assessment(dist)
+        assert report.simulation_velocity != "~0s per step"
+
+
+@pytest.mark.phase5
+class TestImpactAssessmentLanguage:
+    """Verify all impact assessment fields use consistent English."""
+
+    def test_reasoning_depth_english_low(self):
+        ctrl = EngineController()
+        dist = ctrl.compute_tier_distribution(1000, 0.0)
+        report = ctrl.get_impact_assessment(dist)
+        assert report.reasoning_depth == "Quantitative Analysis"
+
+    def test_reasoning_depth_english_mid(self):
+        ctrl = EngineController()
+        dist = ctrl.compute_tier_distribution(1000, 0.5)
+        report = ctrl.get_impact_assessment(dist)
+        assert report.reasoning_depth == "Balanced"
+
+    def test_reasoning_depth_english_high(self):
+        ctrl = EngineController()
+        dist = ctrl.compute_tier_distribution(1000, 1.0)
+        report = ctrl.get_impact_assessment(dist)
+        assert report.reasoning_depth == "Qualitative Analysis"
+
+
+@pytest.mark.phase5
+class TestSlmModelPassthrough:
+    """Verify tier1_model parameter is respected."""
+
+    def test_custom_tier1_model(self):
+        ctrl = EngineController()
+        dist = ctrl.compute_tier_distribution(100, 0.5, tier1_model="gemma2:2b")
+        assert dist.tier1_model == "gemma2:2b"
+
+    def test_custom_tier3_model(self):
+        ctrl = EngineController()
+        dist = ctrl.compute_tier_distribution(100, 0.5, tier3_model="claude-sonnet-4-6-20250514")
+        assert dist.tier3_model == "claude-sonnet-4-6-20250514"
+
+    def test_default_models_are_strings(self):
+        ctrl = EngineController()
+        dist = ctrl.compute_tier_distribution(100, 0.5)
+        assert len(dist.tier1_model) > 0
+        assert len(dist.tier3_model) > 0

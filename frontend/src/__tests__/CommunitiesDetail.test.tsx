@@ -13,6 +13,29 @@ vi.mock('@/hooks/useSimulationSocket', () => ({
   useSimulationSocket: () => ({ lastMessage: null }),
 }));
 
+// CommunitiesDetailPage is real-data-only (mock COMMUNITIES array removed).
+// Seed the TanStack Query hook with 5 real-looking community records so the
+// community cards actually render. Without this, the page shows an empty
+// state and all "community cards grid" tests fail.
+const MOCK_COMMUNITY_LIST = [
+  { community_id: 'alpha', name: 'Alpha', size: 250, adoption_rate: 0.4, mean_belief: 0.5, dominant_action: 'share' },
+  { community_id: 'beta', name: 'Beta', size: 150, adoption_rate: 0.3, mean_belief: 0.3, dominant_action: 'comment' },
+  { community_id: 'gamma', name: 'Gamma', size: 100, adoption_rate: 0.2, mean_belief: -0.1, dominant_action: 'share' },
+  { community_id: 'delta', name: 'Delta', size: 120, adoption_rate: 0.5, mean_belief: 0.1, dominant_action: 'adopt' },
+  { community_id: 'bridge', name: 'Bridge', size: 80, adoption_rate: 0.1, mean_belief: 0.05, dominant_action: 'share' },
+];
+
+vi.mock('@/api/queries', () => ({
+  useCommunities: () => ({
+    data: { communities: MOCK_COMMUNITY_LIST },
+    isLoading: false,
+    error: null,
+  }),
+  useCreateCommunity: () => ({ mutateAsync: vi.fn() }),
+  useUpdateCommunity: () => ({ mutateAsync: vi.fn() }),
+  useDeleteCommunity: () => ({ mutateAsync: vi.fn() }),
+}));
+
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   LineChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

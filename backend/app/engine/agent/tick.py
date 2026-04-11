@@ -2,10 +2,10 @@
 SPEC: docs/spec/01_AGENT_SPEC.md#agent-tick
 """
 import random as stdlib_random
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from uuid import UUID
 
-from app.engine.agent.schema import AgentAction, AgentState
+from app.engine.agent.schema import AgentAction, AgentEmotion, AgentState, DiffusionState
 from app.engine.agent.perception import (
     PerceptionLayer, PerceptionResult, EnvironmentEvent, NeighborAction,
 )
@@ -16,6 +16,9 @@ from app.engine.agent.decision import DecisionLayer
 from app.engine.agent.influence import (
     InfluenceLayer, MessageStrength, PropagationEvent, build_contextual_packet,
 )
+from app.engine.agent.drift import PersonalityDrift
+from app.engine.agent.reflection import ReflectionEngine
+from app.engine.diffusion.opinion_dynamics import OpinionDynamicsModel
 
 
 @dataclass
@@ -37,11 +40,14 @@ class GraphContext:
     """Network topology context provided to AgentEngine.tick().
 
     SPEC: docs/spec/01_AGENT_SPEC.md#agent-tick
+    SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#2.1
     """
     edges: dict[tuple[UUID, UUID], float]
     trust_matrix: dict[tuple[UUID, UUID], float]
     neighbor_ids: dict[UUID, list[UUID]]
     community_beliefs: dict[UUID, float]
+    agent_beliefs: dict[UUID, float] = field(default_factory=dict)
+    agent_emotions: dict[UUID, AgentEmotion] = field(default_factory=dict)
 
     def get_community_mean_belief(self, community_id: UUID) -> float:
         """Returns mean belief for community. Default 0.0 if unknown.
@@ -68,14 +74,23 @@ class AgentTick:
         perception -> memory -> emotion -> cognition -> decision -> influence -> store memory
     """
 
-    def __init__(self, llm_adapter=None, gateway=None):
-        """SPEC: docs/spec/01_AGENT_SPEC.md#agent-tick"""
+    def __init__(self, llm_adapter=None, gateway=None, session_factory=None, simulation_id=None):
+        """SPEC: docs/spec/01_AGENT_SPEC.md#agent-tick
+        SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§3 MP-02
+        """
         self._perception = PerceptionLayer(feed_capacity=20)
-        self._memory = MemoryLayer(llm_adapter=llm_adapter)
+        self._memory = MemoryLayer(
+            llm_adapter=llm_adapter,
+            session_factory=session_factory,
+            simulation_id=simulation_id,
+        )
         self._emotion = EmotionLayer()
         self._cognition = CognitionLayer(llm_adapter=llm_adapter, gateway=gateway)
         self._decision = DecisionLayer()
         self._influence = InfluenceLayer()
+        self._drift = PersonalityDrift()
+        self._reflection = ReflectionEngine()
+        self._opinion = OpinionDynamicsModel(epsilon=0.3, mu=0.5)
         self._llm_adapter = llm_adapter
         self._gateway = gateway
 
@@ -87,6 +102,7 @@ class AgentTick:
         cognition_tier: int = 1,
         seed: int = 0,
         graph_context: GraphContext | None = None,
+        campaign_controversy: float = 0.0,
     ) -> AgentTickResult:
         """Full agent execution for one simulation step.
 
@@ -120,7 +136,14 @@ class AgentTick:
             )
 
         # Step 2: Perception
-        perception = self._perception.observe(agent, environment_events, neighbor_actions)
+        # Pass real edge weights so perception uses network topology (SQ-02)
+        _edge_weights = None
+        if graph_context is not None:
+            _edge_weights = {
+                nid: graph_context.edges.get((agent.agent_id, nid), 0.5)
+                for nid in graph_context.neighbor_ids.get(agent.agent_id, [])
+            }
+        perception = self._perception.observe(agent, environment_events, neighbor_actions, edge_weights=_edge_weights)
 
         # Step 3: Memory Retrieval
         context = ""
@@ -139,7 +162,20 @@ class AgentTick:
                 e.opinion_score * e.credibility for e in perception.expert_signals
             ) / len(perception.expert_signals)
 
-        emotion = self._emotion.update(agent.emotion, social_signal, media_signal, expert_signal)
+        # Build neighbor emotion list for contagion (EC-01~04)
+        neighbor_emotions_list = None
+        if graph_context is not None and graph_context.agent_emotions:
+            nids = graph_context.neighbor_ids.get(agent.agent_id, [])
+            neighbor_emotions_list = [
+                (graph_context.agent_emotions[nid],
+                 graph_context.edges.get((agent.agent_id, nid), 0.5))
+                for nid in nids
+                if nid in graph_context.agent_emotions
+            ] or None
+        emotion = self._emotion.update(
+            agent.emotion, social_signal, media_signal, expert_signal,
+            neighbor_emotions=neighbor_emotions_list,
+        )
 
         # Step 5: Cognition
         community_bias = 0.0
@@ -169,7 +205,8 @@ class AgentTick:
             agent.agent_id, neighbor_actions, trust_matrix
         )
         action = self._decision.choose_action(
-            cognition, social_pressure, agent.personality, agent_seed
+            cognition, social_pressure, agent.personality, agent_seed,
+            agent_type=agent.agent_type,
         )
 
         # Step 7: Influence Propagation
@@ -177,7 +214,7 @@ class AgentTick:
         if action in {AgentAction.COMMENT, AgentAction.SHARE, AgentAction.REPOST, AgentAction.ADOPT}:
             ms = MessageStrength(
                 novelty=min(media_signal, 1.0),
-                controversy=0.0,
+                controversy=campaign_controversy,
                 utility=max(0.0, min(1.0, cognition.evaluation_score / 2.0)),
             )
             neighbor_ids: list[UUID] = []
@@ -189,39 +226,90 @@ class AgentTick:
                 agent_with_emotion, action, neighbor_ids, edges, ms, agent_seed
             )
 
-        # Step 8: Memory Storage (with best-effort embedding)
+        # Step 8: Memory Storage
+        # Sync tick() does not generate embeddings — use async_tick() for Tier 3 with embeddings.
         step_summary = f"Step {agent.step}: took action {action.value}"
         emotion_mean = (emotion.interest + emotion.trust + emotion.excitement) / 3.0
 
-        # Try to compute embedding synchronously via run_until_complete
-        embedding: list[float] | None = None
-        if self._llm_adapter is not None and cognition_tier >= 2:
-            try:
-                import asyncio
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # Can't await in sync context — schedule and skip
-                    pass
-                else:
-                    embedding = loop.run_until_complete(self._memory.embed_text(step_summary))
-            except Exception:
-                pass  # best-effort: embedding is optional
-
         memory_stored = self._memory.store(
             agent.agent_id, "episodic", step_summary,
-            emotion_weight=emotion_mean, step=agent.step, embedding=embedding,
+            emotion_weight=emotion_mean, step=agent.step,
         )
 
-        # Step 9: State Update — Belief Update Formula
-        new_belief = max(-1.0, min(1.0, agent.belief + cognition.evaluation_score * 0.1))
+        # Step 9: Personality Drift — evolve personality based on action taken
+        new_personality, new_cumulative_drift = self._drift.apply_drift(
+            agent.personality, action, agent.cumulative_drift,
+            emotion=emotion,
+        )
+
+        # Step 9.5: Reflection — periodic belief revision from accumulated memories
+        # SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-01~05
+        reflection_belief_delta = 0.0
+        last_reflection_step = agent.last_reflection_step
+        memories_since = len(self._memory._store.get(agent.agent_id, [])) - (
+            agent.step - agent.last_reflection_step
+        ) if agent.last_reflection_step >= 0 else len(self._memory._store.get(agent.agent_id, []))
+        if self._reflection.should_reflect(max(0, memories_since), agent.step, agent.last_reflection_step):
+            refl_memories = self._memory.retrieve(agent.agent_id, "", top_k=10, current_step=agent.step)
+            refl_input = self._reflection.build_reflection_input(
+                recent_memories=refl_memories, current_belief=agent.belief, agent_id=agent.agent_id, step=agent.step,
+            )
+            refl_result = self._reflection.apply_reflection_heuristic(refl_input)
+            reflection_belief_delta = refl_result.belief_delta
+            last_reflection_step = agent.step
+            if refl_result.new_memories_generated > 0:
+                self._memory.store(
+                    agent.agent_id, "semantic", refl_result.insight,
+                    emotion_weight=abs(refl_result.belief_delta), step=agent.step,
+                )
+
+        # Step 10: State Update — Belief Update (Deffuant bounded confidence)
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#2.1
+        # External stimulus from cognition (halved to leave room for social dynamics)
+        stimulus_belief = max(-1.0, min(1.0, agent.belief + cognition.evaluation_score * 0.05 + reflection_belief_delta))
+        # Deffuant pairwise dynamics with neighbors
+        if graph_context is not None and graph_context.agent_beliefs:
+            nids = graph_context.neighbor_ids.get(agent.agent_id, [])
+            neighbor_beliefs = [
+                (graph_context.agent_beliefs.get(nid, 0.0),
+                 graph_context.edges.get((agent.agent_id, nid), 0.5))
+                for nid in nids
+                if nid in graph_context.agent_beliefs
+            ]
+            new_belief = self._opinion.batch_update(
+                stimulus_belief, neighbor_beliefs,
+                stubbornness=agent.personality.skepticism,
+            )
+        else:
+            new_belief = stimulus_belief
+
+        # DiffusionState transitions (SEIAR)
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#3.1
+        ds = agent.diffusion_state
+        if ds == DiffusionState.SUSCEPTIBLE and agent.exposure_count > 0:
+            ds = DiffusionState.EXPOSED
+        if ds == DiffusionState.EXPOSED:
+            if agent.personality.skepticism > 0.8 and action == AgentAction.IGNORE:
+                ds = DiffusionState.RESISTANT
+            elif emotion.interest > 0.5:
+                ds = DiffusionState.INTERESTED
+        if ds == DiffusionState.INTERESTED and action == AgentAction.ADOPT:
+            ds = DiffusionState.ADOPTED
+        if ds == DiffusionState.ADOPTED and new_belief < -0.3:
+            ds = DiffusionState.RECOVERED
+        is_adopted = ds == DiffusionState.ADOPTED or agent.adopted or (action == AgentAction.ADOPT)
 
         updated_state = replace(
             agent,
+            personality=new_personality,
             emotion=emotion,
             action=action,
             belief=new_belief,
-            adopted=agent.adopted or (action == AgentAction.ADOPT),
+            adopted=is_adopted,
+            diffusion_state=ds,
             llm_tier_used=cognition.tier_used,
+            cumulative_drift=new_cumulative_drift,
+            last_reflection_step=last_reflection_step,
         )
 
         return AgentTickResult(
@@ -242,6 +330,7 @@ class AgentTick:
         seed: int = 0,
         graph_context: GraphContext | None = None,
         campaign: object | None = None,
+        campaign_controversy: float = 0.0,
     ) -> AgentTickResult:
         """Async agent execution for Tier 3 agents using embedding-based memory and real LLM.
 
@@ -271,7 +360,14 @@ class AgentTick:
             )
 
         # Step 2: Perception
-        perception = self._perception.observe(agent, environment_events, neighbor_actions)
+        # Pass real edge weights so perception uses network topology (SQ-02)
+        _edge_weights = None
+        if graph_context is not None:
+            _edge_weights = {
+                nid: graph_context.edges.get((agent.agent_id, nid), 0.5)
+                for nid in graph_context.neighbor_ids.get(agent.agent_id, [])
+            }
+        perception = self._perception.observe(agent, environment_events, neighbor_actions, edge_weights=_edge_weights)
 
         # Step 3: Memory Retrieval — use async path with embedding similarity
         query_text: str | None = None
@@ -297,7 +393,20 @@ class AgentTick:
                 e.opinion_score * e.credibility for e in perception.expert_signals
             ) / len(perception.expert_signals)
 
-        emotion = self._emotion.update(agent.emotion, social_signal, media_signal, expert_signal)
+        # Build neighbor emotion list for contagion (EC-01~04)
+        neighbor_emotions_list = None
+        if graph_context is not None and graph_context.agent_emotions:
+            nids = graph_context.neighbor_ids.get(agent.agent_id, [])
+            neighbor_emotions_list = [
+                (graph_context.agent_emotions[nid],
+                 graph_context.edges.get((agent.agent_id, nid), 0.5))
+                for nid in nids
+                if nid in graph_context.agent_emotions
+            ] or None
+        emotion = self._emotion.update(
+            agent.emotion, social_signal, media_signal, expert_signal,
+            neighbor_emotions=neighbor_emotions_list,
+        )
 
         # Step 5: Cognition — async path uses real LLM for Tier 3
         community_bias = 0.0
@@ -319,7 +428,8 @@ class AgentTick:
             agent.agent_id, neighbor_actions, trust_matrix
         )
         action = self._decision.choose_action(
-            cognition, social_pressure, agent.personality, agent_seed
+            cognition, social_pressure, agent.personality, agent_seed,
+            agent_type=agent.agent_type,
         )
 
         # Step 7: Influence Propagation
@@ -327,7 +437,7 @@ class AgentTick:
         if action in {AgentAction.COMMENT, AgentAction.SHARE, AgentAction.REPOST, AgentAction.ADOPT}:
             ms = MessageStrength(
                 novelty=min(media_signal, 1.0),
-                controversy=0.0,
+                controversy=campaign_controversy,
                 utility=max(0.0, min(1.0, cognition.evaluation_score / 2.0)),
             )
             neighbor_ids: list[UUID] = []
@@ -348,22 +458,86 @@ class AgentTick:
         except Exception:
             embedding = None  # graceful fallback: store without embedding
 
-        memory_stored = self._memory.store(
+        memory_stored = await self._memory.store_async(
             agent.agent_id, "episodic", step_summary,
             emotion_weight=emotion_mean, step=agent.step,
             embedding=embedding,
         )
 
-        # Step 9: State Update — Belief Update Formula
-        new_belief = max(-1.0, min(1.0, agent.belief + cognition.evaluation_score * 0.1))
+        # Step 9: Personality Drift — evolve personality based on action taken
+        new_personality, new_cumulative_drift = self._drift.apply_drift(
+            agent.personality, action, agent.cumulative_drift,
+            emotion=emotion,
+        )
+
+        # Step 9.5: Reflection — periodic belief revision from accumulated memories
+        # SPEC: docs/spec/21_SIMULATION_QUALITY_SPEC.md#§1 RF-01~05
+        reflection_belief_delta = 0.0
+        last_reflection_step = agent.last_reflection_step
+        memories_since = len(self._memory._store.get(agent.agent_id, [])) - (
+            agent.step - agent.last_reflection_step
+        ) if agent.last_reflection_step >= 0 else len(self._memory._store.get(agent.agent_id, []))
+        if self._reflection.should_reflect(max(0, memories_since), agent.step, agent.last_reflection_step):
+            refl_memories = self._memory.retrieve(agent.agent_id, "", top_k=10, current_step=agent.step)
+            refl_input = self._reflection.build_reflection_input(
+                recent_memories=refl_memories, current_belief=agent.belief, agent_id=agent.agent_id, step=agent.step,
+            )
+            refl_result = self._reflection.apply_reflection_heuristic(refl_input)
+            reflection_belief_delta = refl_result.belief_delta
+            last_reflection_step = agent.step
+            if refl_result.new_memories_generated > 0:
+                await self._memory.store_async(
+                    agent.agent_id, "semantic", refl_result.insight,
+                    emotion_weight=abs(refl_result.belief_delta), step=agent.step,
+                )
+
+        # Step 10: State Update — Belief Update (Deffuant bounded confidence)
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#2.1
+        # External stimulus from cognition (halved to leave room for social dynamics)
+        stimulus_belief = max(-1.0, min(1.0, agent.belief + cognition.evaluation_score * 0.05 + reflection_belief_delta))
+        # Deffuant pairwise dynamics with neighbors
+        if graph_context is not None and graph_context.agent_beliefs:
+            nids = graph_context.neighbor_ids.get(agent.agent_id, [])
+            neighbor_beliefs = [
+                (graph_context.agent_beliefs.get(nid, 0.0),
+                 graph_context.edges.get((agent.agent_id, nid), 0.5))
+                for nid in nids
+                if nid in graph_context.agent_beliefs
+            ]
+            new_belief = self._opinion.batch_update(
+                stimulus_belief, neighbor_beliefs,
+                stubbornness=agent.personality.skepticism,
+            )
+        else:
+            new_belief = stimulus_belief
+
+        # DiffusionState transitions (SEIAR)
+        # SPEC: docs/spec/19_SIMULATION_INTEGRITY_SPEC.md#3.1
+        ds = agent.diffusion_state
+        if ds == DiffusionState.SUSCEPTIBLE and agent.exposure_count > 0:
+            ds = DiffusionState.EXPOSED
+        if ds == DiffusionState.EXPOSED:
+            if agent.personality.skepticism > 0.8 and action == AgentAction.IGNORE:
+                ds = DiffusionState.RESISTANT
+            elif emotion.interest > 0.5:
+                ds = DiffusionState.INTERESTED
+        if ds == DiffusionState.INTERESTED and action == AgentAction.ADOPT:
+            ds = DiffusionState.ADOPTED
+        if ds == DiffusionState.ADOPTED and new_belief < -0.3:
+            ds = DiffusionState.RECOVERED
+        is_adopted = ds == DiffusionState.ADOPTED or agent.adopted or (action == AgentAction.ADOPT)
 
         updated_state = replace(
             agent,
+            personality=new_personality,
             emotion=emotion,
             action=action,
             belief=new_belief,
-            adopted=agent.adopted or (action == AgentAction.ADOPT),
+            adopted=is_adopted,
+            diffusion_state=ds,
             llm_tier_used=cognition.tier_used,
+            cumulative_drift=new_cumulative_drift,
+            last_reflection_step=last_reflection_step,
         )
 
         return AgentTickResult(

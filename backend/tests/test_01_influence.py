@@ -128,6 +128,68 @@ class TestInfluenceLayerPropagate:
         assert len(e1) == len(e2)
         assert [e.target_agent_id for e in e1] == [e.target_agent_id for e in e2]
 
+    def test_round_7d_low_influence_agents_still_propagate(self):
+        """Regression: the ``propagation_probability`` floor + sigmoid smoothing.
+
+        Typical Prophet agents derive influence from centrality on small
+        graphs — real values cluster around 0.04–0.1 and emotion factor is
+        frequently near zero. The pre-Round-7-d formula collapsed such
+        agents' probability to ~0 and ``propagation_pairs`` was an empty
+        list every step — the frontend animation never drew a particle.
+
+        The floor (``max(0.1, influence_score)``) and sigmoid smoothing
+        together guarantee these agents still occasionally share. Across
+        many seeds and a handful of neighbours we must see at least one
+        event. If this test fails, the calibration in
+        ``app.engine.diffusion.propagation_calibration`` regressed.
+        """
+        from app.engine.agent.influence import InfluenceLayer
+        from app.engine.agent.schema import AgentAction
+        layer = InfluenceLayer()
+        # Near-minimum influence, balanced emotion (excitement ≈ skepticism)
+        agent = _make_agent(influence=0.05, excitement=0.5, skepticism_e=0.5)
+        targets = [uuid4() for _ in range(8)]
+        edges = {(agent.agent_id, t): 0.7 for t in targets}
+        ms = _make_message_strength(novelty=0.7, controversy=0.3, utility=0.6)
+
+        total_events = sum(
+            len(layer.propagate(agent, AgentAction.SHARE, targets, edges, ms, s))
+            for s in range(300)
+        )
+        # Lower bound is intentionally loose — we're guarding against the
+        # "exactly zero" regression, not asserting a precise rate.
+        assert total_events > 0, (
+            "Low-centrality agents with balanced emotion should still "
+            "occasionally propagate. Floor/sigmoid in "
+            "propagation_calibration.py may have regressed."
+        )
+
+    def test_round_7d_negative_emotion_factor_still_propagates(self):
+        """Agents with slightly-negative emotion factor must not be gated to 0.
+
+        The old formula used ``max(emotion_factor, 0)`` which forced every
+        skeptic-leaning agent (``excitement < skepticism``) to probability 0.
+        Sigmoid smoothing replaces that gate so such agents still contribute
+        a small non-zero share rate.
+        """
+        from app.engine.agent.influence import InfluenceLayer
+        from app.engine.agent.schema import AgentAction
+        layer = InfluenceLayer()
+        # excitement 0.4, skepticism 0.5 → emotion_factor = -0.1 (was zero pre-R7d)
+        agent = _make_agent(influence=0.5, excitement=0.4, skepticism_e=0.5)
+        targets = [uuid4() for _ in range(8)]
+        edges = {(agent.agent_id, t): 0.8 for t in targets}
+        ms = _make_message_strength()
+
+        total_events = sum(
+            len(layer.propagate(agent, AgentAction.SHARE, targets, edges, ms, s))
+            for s in range(300)
+        )
+        assert total_events > 0, (
+            "Slightly-negative emotion factor should not fully gate "
+            "propagation — sigmoid smoothing regression."
+        )
+
 
 @pytest.mark.phase2
 class TestContextualPacket:

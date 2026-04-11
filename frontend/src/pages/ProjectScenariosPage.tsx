@@ -14,7 +14,14 @@ import {
   Trash2,
 } from "lucide-react";
 import { apiClient } from "../api/client";
-import type { ProjectDetail, ScenarioInfo } from "../api/client";
+import type { ScenarioInfo } from "../api/client";
+import {
+  useProject,
+  useRunScenario,
+  useCreateScenario,
+  useDeleteScenario,
+  useStopSimulation,
+} from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 
 /* ------------------------------------------------------------------ */
@@ -59,22 +66,23 @@ export default function ProjectScenariosPage() {
   const setSimulation = useSimulationStore((s) => s.setSimulation);
   const setCurrentProject = useSimulationStore((s) => s.setCurrentProject);
 
-  const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
-  const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const addToast = useSimulationStore((s) => s.addToast);
 
+  // TanStack Query — project detail cached per id; auto-invalidated by the
+  // create/delete/run scenario mutations below.
+  const projectQuery = useProject(projectId ?? null);
+  const project = projectQuery.data ?? null;
+  const scenarios: ScenarioInfo[] = project?.scenarios ?? [];
+  const loading = projectQuery.isLoading;
+
+  const runScenario = useRunScenario();
+  const createScenario = useCreateScenario();
+  const deleteScenario = useDeleteScenario();
+  const stopSimulation = useStopSimulation();
+
   useEffect(() => {
-    if (!projectId) return;
-    setCurrentProject(projectId);
-    apiClient.projects.get(projectId)
-      .then((detail) => {
-        setProject(detail);
-        setScenarios(detail.scenarios ?? []);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    if (projectId) setCurrentProject(projectId);
   }, [projectId, setCurrentProject]);
 
   const handleNewScenario = () => {
@@ -85,12 +93,14 @@ export default function ProjectScenariosPage() {
   const handleRun = async (scenario: ScenarioInfo) => {
     if (!projectId) return;
     try {
-      const res = await apiClient.projects.runScenario(projectId, scenario.scenario_id);
+      const res = await runScenario.mutateAsync({ projectId, scenarioId: scenario.scenario_id });
       if (res && res.simulation_id) {
         try {
           const sim = await apiClient.simulations.get(res.simulation_id);
           useSimulationStore.getState().setSimulation(sim);
         } catch { /* ignore */ }
+        navigate(`/simulation/${res.simulation_id}`);
+        return;
       }
       navigate("/simulation");
     } catch { /* ignore */ }
@@ -102,6 +112,8 @@ export default function ProjectScenariosPage() {
         const sim = await apiClient.simulations.get(scenario.simulation_id);
         setSimulation(sim);
       } catch { /* ignore */ }
+      navigate(`/simulation/${scenario.simulation_id}`);
+      return;
     }
     navigate("/simulation");
   };
@@ -109,10 +121,7 @@ export default function ProjectScenariosPage() {
   const handleStop = async (scenario: ScenarioInfo) => {
     if (!scenario.simulation_id) return;
     try {
-      await apiClient.simulations.stop(scenario.simulation_id);
-      setScenarios((prev) =>
-        prev.map((s) => s.scenario_id === scenario.scenario_id ? { ...s, status: "completed" } : s),
-      );
+      await stopSimulation.mutateAsync(scenario.simulation_id);
       addToast({ type: "info", message: `Scenario "${scenario.name}" stopped.` });
     } catch {
       addToast({ type: "error", message: "Failed to stop scenario." });
@@ -122,12 +131,14 @@ export default function ProjectScenariosPage() {
   const handleDuplicate = async (scenario: ScenarioInfo) => {
     if (!projectId) return;
     try {
-      const dup = await apiClient.projects.createScenario(projectId, {
-        name: `${scenario.name} (copy)`,
-        description: scenario.description,
-        config: scenario.config ?? {},
+      await createScenario.mutateAsync({
+        projectId,
+        data: {
+          name: `${scenario.name} (copy)`,
+          description: scenario.description,
+          config: scenario.config ?? {},
+        },
       });
-      setScenarios((prev) => [...prev, dup]);
       setMenuOpen(null);
       addToast({ type: "info", message: `Scenario duplicated.` });
     } catch {
@@ -139,8 +150,7 @@ export default function ProjectScenariosPage() {
     if (!projectId) return;
     if (!window.confirm(`Delete scenario "${scenario.name}"?`)) return;
     try {
-      await apiClient.projects.deleteScenario(projectId, scenario.scenario_id);
-      setScenarios((prev) => prev.filter((s) => s.scenario_id !== scenario.scenario_id));
+      await deleteScenario.mutateAsync({ projectId, scenarioId: scenario.scenario_id });
     } catch { /* ignore */ }
   };
 
