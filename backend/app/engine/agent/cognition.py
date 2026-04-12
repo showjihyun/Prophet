@@ -132,9 +132,9 @@ class CognitionLayer:
         # Map to [-2, 2] by scaling factor
         evaluation = raw_evaluation * 4.0
 
-        # Round 8-6: campaign framing bonus.
+        # Round 8-6/7: campaign framing bonus.
         #
-        # Before this round the rule engine ignored the campaign entirely —
+        # Before Round 8-6 the rule engine ignored the campaign entirely —
         # evaluation_score was driven only by the agent's internal state
         # (emotion + memory + personality) which meant radically different
         # campaign framings produced bit-identical adoption curves. See
@@ -145,11 +145,21 @@ class CognitionLayer:
         # preserved for legacy tests / fixtures that leave the fields
         # at their defaults. Utility weighs slightly more than novelty
         # because people adopt based on value first, novelty second.
+        #
+        # Round 8-7 bumped coefficients 0.3/0.2 → 0.5/0.4 and the scale
+        # 2.0 → 3.0. Round 8-6's weaker coefficients produced only a
+        # ±0.12 delta on evaluation_score for realistic framings, which
+        # wasn't enough to tip 80%-adopter-leaning populations (UC1/UC2
+        # default mix) into a stall. The new weights give ±0.30-0.45
+        # on the realistic framings and up to ±1.35 at the extremes
+        # (util=0, nov=0 vs util=1, nov=1), which is enough to move the
+        # decision threshold meaningfully without overwhelming the
+        # agent's internal state drivers.
         campaign_bonus = (
-            0.3 * (campaign_utility - 0.5)
-            + 0.2 * (campaign_novelty - 0.5)
+            0.5 * (campaign_utility - 0.5)
+            + 0.4 * (campaign_novelty - 0.5)
         )
-        evaluation += campaign_bonus * 2.0
+        evaluation += campaign_bonus * 3.0
         evaluation = max(-2.0, min(2.0, evaluation))
 
         tier_used = 1

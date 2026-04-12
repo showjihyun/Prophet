@@ -124,9 +124,10 @@ const PAGES_APICLIENT_BASELINE = new Set([
  *  was introduced. Follow-up: migrate to ``COMMUNITY_PALETTE`` import. */
 const COMMUNITY_HEX_BASELINE = new Set([
   "components/campaign/types.ts",
+  "components/graph/CommunityPanel.tsx", // fallback palette mirrors GraphPanel
   "components/graph/FactionMapView.tsx",
   "components/graph/GraphLegend.tsx", // legend intentionally mirrors palette
-  "components/graph/GraphPanel.tsx", // ADOPTED_GLOW_COLOR
+  "components/graph/GraphPanel.tsx", // ADOPTED_GLOW_COLOR + fallback palette
   "components/graph/MetricsPanel.tsx",
   "components/graph/propagationAnimationUtils.ts",
   "components/shared/AgentInterveneModal.tsx",

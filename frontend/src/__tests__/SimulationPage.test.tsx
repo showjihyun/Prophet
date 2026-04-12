@@ -4,8 +4,8 @@
  * Tests the main simulation page renders all 4 zones.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { useSimulationStore } from '../store/simulationStore';
 
 // Mock WebSocket hook
@@ -73,6 +73,7 @@ describe('SimulationPage', () => {
       steps: [],
       emergentEvents: [],
       isLLMDashboardOpen: false,
+      focusedStep: null,
     });
   });
 
@@ -113,5 +114,74 @@ describe('SimulationPage', () => {
       </MemoryRouter>,
     );
     expect(screen.getByTestId('metrics-panel')).toBeInTheDocument();
+  });
+
+  /**
+   * @spec 26_ANALYTICS_SPEC.md#analytics-emergent-events (v0.3.0)
+   *
+   * Round-trip contract: when SimulationPage receives `?step=N`, it must
+   * pin `focusedStep` in the store and render a dismissable banner.
+   */
+  describe('Step focus from Analytics deep-link (v0.3.0)', () => {
+    /** Render helper that uses a real Route so useSearchParams works. */
+    function renderWithStep(stepParam?: string) {
+      const initialPath = stepParam
+        ? `/simulation/sim-test-001?step=${stepParam}`
+        : '/simulation/sim-test-001';
+      return render(
+        <MemoryRouter initialEntries={[initialPath]}>
+          <Routes>
+            <Route path="/simulation/:simulationId" element={<SimulationPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    }
+
+    it('arriving with ?step=47 pins focusedStep=47 in the store', async () => {
+      renderWithStep('47');
+      await waitFor(() =>
+        expect(useSimulationStore.getState().focusedStep).toBe(47),
+      );
+    });
+
+    it('arriving without ?step= leaves focusedStep null', async () => {
+      renderWithStep();
+      // Give effects time to run — any setFocusedStep(N) would have fired by now
+      await screen.findByTestId('simulation-page');
+      expect(useSimulationStore.getState().focusedStep).toBeNull();
+    });
+
+    it('renders a banner announcing the focused step', async () => {
+      renderWithStep('47');
+      const banner = await screen.findByTestId('step-focus-banner');
+      // Banner carries the specific step number. The "47" is wrapped in a
+      // <strong> for emphasis, so assert against the flattened textContent
+      // rather than using getByText (which only matches single text nodes).
+      expect(banner.textContent).toMatch(/viewing step 47/i);
+    });
+
+    it('does NOT render the banner when there is no focus', async () => {
+      renderWithStep();
+      await screen.findByTestId('simulation-page');
+      expect(screen.queryByTestId('step-focus-banner')).not.toBeInTheDocument();
+    });
+
+    it('banner "Return to live" button clears focusedStep', async () => {
+      renderWithStep('47');
+      const returnBtn = await screen.findByRole('button', {
+        name: /return to live/i,
+      });
+      fireEvent.click(returnBtn);
+      await waitFor(() =>
+        expect(useSimulationStore.getState().focusedStep).toBeNull(),
+      );
+    });
+
+    it('invalid ?step= values are ignored (no pin, no banner)', async () => {
+      renderWithStep('not-a-number');
+      await screen.findByTestId('simulation-page');
+      expect(useSimulationStore.getState().focusedStep).toBeNull();
+      expect(screen.queryByTestId('step-focus-banner')).not.toBeInTheDocument();
+    });
   });
 });

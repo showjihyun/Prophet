@@ -28,6 +28,14 @@ interface SimulationStore {
   latestStep: StepResult | null;
   emergentEvents: EmergentEvent[];
 
+  /**
+   * SPEC 26 §4.5.2 (v0.3.0) — Analytics deep-link step focus.
+   * `null` = follow live; a number = user pinned a specific step (typically
+   * from Analytics event-row deep-link). Orthogonal to `currentStep` —
+   * `appendStep` must NOT mutate this field.
+   */
+  focusedStep: number | null;
+
   // WebSocket
   wsConnected: boolean;
   lastStepReceived: number;
@@ -78,6 +86,7 @@ interface SimulationStore {
   setSpeed: (speed: number) => void;
   toggleLLMDashboard: () => void;
   setHighlightedCommunity: (communityId: string | null) => void;
+  setFocusedStep: (step: number | null) => void;
 
   // Propagation animation (GAP-7)
   propagationAnimationsEnabled: boolean;
@@ -91,6 +100,7 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   steps: [],
   latestStep: null,
   emergentEvents: [],
+  focusedStep: null,
   wsConnected: false,
   lastStepReceived: 0,
   selectedAgentId: null,
@@ -186,6 +196,8 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   setSpeed: (speed) => set({ speed }),
   toggleLLMDashboard: () => set((state) => ({ isLLMDashboardOpen: !state.isLLMDashboardOpen })),
   setHighlightedCommunity: (communityId) => set({ highlightedCommunity: communityId }),
+  // SPEC 26 §4.5.2 (v0.3.0) — pin/unpin a specific step from Analytics.
+  setFocusedStep: (step) => set({ focusedStep: step }),
   propagationAnimationsEnabled: true,
   togglePropagationAnimations: () => set((state) => ({ propagationAnimationsEnabled: !state.propagationAnimationsEnabled })),
 }));

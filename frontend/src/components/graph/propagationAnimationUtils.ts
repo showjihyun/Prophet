@@ -18,11 +18,22 @@ export function getAnimationTier(zoom: number): AnimationTier {
   return "overview";
 }
 
-/** Max simultaneous animated propagation pairs per tier. */
+/** Max simultaneous animated propagation pairs per tier.
+ *
+ * Bumped from the original 50/30/5 after live testing showed the
+ * `overview` tier looked dead on real simulations: a typical sim
+ * produces 2-10 propagation events per step, the effect samples
+ * the top-N by probability, and capping at 5 hid nearly every event.
+ * Users read "5 particles across a 5000-edge graph" as "nothing is
+ * happening". The new numbers prioritise perceived liveness over
+ * raw CPU headroom — particles are cheap relative to the physics
+ * solver they ride on top of, and force-graph's InstancedMesh
+ * renderer batches them into a single draw call anyway.
+ */
 export const TIER_LIMITS: Record<AnimationTier, number> = {
-  closeup: 50,
-  midrange: 30,
-  overview: 5,
+  closeup: 100,
+  midrange: 60,
+  overview: 30,
 };
 
 /** Action → particle color mapping. "ignore" is intentionally excluded. */

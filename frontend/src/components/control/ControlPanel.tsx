@@ -150,7 +150,7 @@ export default function ControlPanel() {
               : status === SIM_STATUS.COMPLETED
                 ? "Completed"
                 : "Ready"}
-          <span className="text-[var(--muted-foreground)]"> Day {currentStep}/365</span>
+          <span className="text-[var(--muted-foreground)]"> Step {currentStep}/{simulation?.max_steps ?? 0}</span>
         </span>
       </div>
 

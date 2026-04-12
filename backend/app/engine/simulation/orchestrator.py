@@ -7,7 +7,7 @@ import random as stdlib_random
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, replace
 from typing import Awaitable, Callable
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 import networkx as nx
 
@@ -256,9 +256,18 @@ class SimulationOrchestrator:
             # Store the UUID on the node for later lookup
             network.graph.nodes[node_id]["community_uuid"] = community_uuid
 
-            agent_id = uuid4() if seed is None else UUID(
-                int=(hash(node_id) + (seed or 0) * 9999) % (2**128)
-            )
+            # Agent UUID is deterministic (for seed-repeatability) but
+            # **scoped per simulation_id** so two sims with the same seed
+            # don't collide on the ``agents_pkey`` primary key. Before
+            # Round 8-7 this was ``UUID(int=(hash(node_id) + seed*9999))``
+            # which ignored ``sim_id`` entirely and produced identical
+            # counter-UUIDs across every simulation — bulk-loading a
+            # second sim into Postgres failed with ``unique_violation``.
+            # SPEC: docs/spec/04_SIMULATION_SPEC.md#agent-id-generation
+            if seed is None:
+                agent_id = uuid4()
+            else:
+                agent_id = uuid5(sim_id, f"node={node_id}:seed={seed}")
             network.graph.nodes[node_id]["agent_id"] = agent_id
 
             # Determine agent type from community config

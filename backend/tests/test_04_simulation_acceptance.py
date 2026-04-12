@@ -250,13 +250,25 @@ class TestSIM06_ReplayDeterministic:
 
     @pytest.mark.asyncio
     async def test_deterministic_with_same_seed(self):
-        """SIM-06: Two runs with same seed should produce same results."""
+        """SIM-06: Two runs with same seed + same simulation_id should
+        produce identical results.
+
+        Round 8-7: agent UUIDs are now scoped per simulation_id (via
+        ``uuid5(sim_id, node=N:seed=S)``) so the "same seed" contract
+        requires the sim_id to be held constant too. Previously the
+        test implicitly relied on agent UUIDs being stable across
+        different sim_ids, which masked a PK-collision bug on the
+        live ``agents`` table. See
+        docs/spec/04_SIMULATION_SPEC.md#agent-id-generation.
+        """
         results_a: list[float] = []
         results_b: list[float] = []
+        shared_sim_id = uuid4()
 
         for results_list in [results_a, results_b]:
             orch = SimulationOrchestrator()
             config = _make_config(max_steps=5, seed=12345)
+            config.simulation_id = shared_sim_id
             state = orch.create_simulation(config)
             await orch.start(state.simulation_id)
 

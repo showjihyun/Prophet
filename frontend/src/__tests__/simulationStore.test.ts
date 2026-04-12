@@ -28,6 +28,7 @@ describe('simulationStore', () => {
       currentProjectId: null,
       projects: [],
       scenarios: [],
+      focusedStep: null,
     });
   });
 
@@ -138,4 +139,50 @@ describe('simulationStore', () => {
     expect(useSimulationStore.getState().scenarios).toHaveLength(1);
     expect(useSimulationStore.getState().scenarios[0].scenario_id).toBe('s1');
   });
+
+  /** @spec 26_ANALYTICS_SPEC.md#analytics-emergent-events (v0.3.0) */
+  describe('focusedStep (SPEC 26 v0.3.0)', () => {
+    it('defaults to null', () => {
+      expect(useSimulationStore.getState().focusedStep).toBeNull();
+    });
+
+    it('setFocusedStep(47) pins the focus', () => {
+      useSimulationStore.getState().setFocusedStep(47);
+      expect(useSimulationStore.getState().focusedStep).toBe(47);
+    });
+
+    it('setFocusedStep(null) clears the focus', () => {
+      useSimulationStore.getState().setFocusedStep(47);
+      useSimulationStore.getState().setFocusedStep(null);
+      expect(useSimulationStore.getState().focusedStep).toBeNull();
+    });
+
+    it('appendStep does NOT clobber focusedStep', () => {
+      // User pinned step 47 from Analytics. Live WS appends step 50.
+      // currentStep moves to 50 but focusedStep stays at 47.
+      useSimulationStore.getState().setFocusedStep(47);
+      const liveStep: StepResult = {
+        simulation_id: 'test',
+        step: 50,
+        total_adoption: 500,
+        adoption_rate: 0.5,
+        diffusion_rate: 0.1,
+        mean_sentiment: 0.2,
+        sentiment_variance: 0.05,
+        community_metrics: {},
+        emergent_events: [],
+        action_distribution: {},
+        llm_calls_this_step: 0,
+        step_duration_ms: 100,
+      };
+      useSimulationStore.getState().appendStep(liveStep);
+      expect(useSimulationStore.getState().currentStep).toBe(50);
+      expect(isStep47StillFocused()).toBe(true);
+    });
+  });
 });
+
+// Helper — narrow read for the regression test above.
+function isStep47StillFocused(): boolean {
+  return useSimulationStore.getState().focusedStep === 47;
+}

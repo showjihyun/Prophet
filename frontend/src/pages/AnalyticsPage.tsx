@@ -1,8 +1,9 @@
 /**
  * AnalyticsPage — Post-run analytics for a completed simulation.
- * @spec docs/spec/07_FRONTEND_SPEC.md#simulationsidanalytics
+ * @spec docs/spec/26_ANALYTICS_SPEC.md
+ * @spec-legacy docs/spec/07_FRONTEND_SPEC.md#simulationsidanalytics (IP-protected, superseded by 26)
  */
-import { useMemo } from "react";
+import { useMemo, useState, useCallback, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   LineChart,
@@ -17,7 +18,13 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { ArrowLeft, TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
+import {
+  ArrowLeft,
+  TrendingUp,
+  AlertTriangle,
+  BarChart3,
+  GitBranch,
+} from "lucide-react";
 import { useSimulationStore } from "../store/simulationStore";
 import { useSimulationSteps } from "../api/queries";
 import type { StepResult, EmergentEvent } from "../types/simulation";
@@ -70,6 +77,71 @@ function buildCommunityAdoption(steps: StepResult[]) {
 function getCommunityKeys(steps: StepResult[]): string[] {
   if (steps.length === 0) return [];
   return Object.keys(steps[0].community_metrics ?? {});
+}
+
+/**
+ * Cascade Analytics derivation (SPEC 26 §4.6).
+ * Pure, module-scoped, returns formatted strings ready for rendering.
+ *
+ * Mirrors GlobalMetricsPage's cascadeStats derivation so the live and
+ * post-hoc views stay consistent.
+ */
+function buildCascadeStats(steps: StepResult[]): {
+  depth: string;
+  width: string;
+  paths: string;
+  decay: string;
+} {
+  if (steps.length === 0) {
+    return { depth: "0", width: "0", paths: "0", decay: "0.00/step" };
+  }
+
+  // Longest consecutive run of steps with non-zero diffusion
+  let longestRun = 0;
+  let currentRun = 0;
+  for (const s of steps) {
+    if ((s.diffusion_rate ?? 0) > 0) {
+      currentRun += 1;
+      if (currentRun > longestRun) longestRun = currentRun;
+    } else {
+      currentRun = 0;
+    }
+  }
+
+  // Widest single-step delta in total_adoption (peak adoption delta)
+  let peakDelta = 0;
+  let prevAdopt = 0;
+  for (const s of steps) {
+    const delta = (s.total_adoption ?? 0) - prevAdopt;
+    if (delta > peakDelta) peakDelta = delta;
+    prevAdopt = s.total_adoption ?? 0;
+  }
+
+  // Viral / cascade event count
+  const cascadeEvents = steps.reduce((sum, s) => {
+    const events = s.emergent_events ?? [];
+    return (
+      sum +
+      events.filter((e) => {
+        const t = (e.event_type ?? "").toLowerCase();
+        return t.includes("cascade") || t.includes("viral");
+      }).length
+    );
+  }, 0);
+
+  // Decay: peak diffusion rate vs latest
+  const diffRates = steps.map((s) => s.diffusion_rate ?? 0);
+  const peakRate = Math.max(...diffRates, 0);
+  const latestRate = diffRates[diffRates.length - 1] ?? 0;
+  const decay =
+    peakRate > 0 ? ((peakRate - latestRate) / peakRate).toFixed(2) : "0.00";
+
+  return {
+    depth: String(longestRun),
+    width: String(peakDelta),
+    paths: String(cascadeEvents),
+    decay: `${decay}/step`,
+  };
 }
 
 /** All emergent events across steps. */
@@ -133,6 +205,10 @@ export default function AnalyticsPage() {
   const storeStepsLength = useSimulationStore((s) => s.steps.length);
   const latestStep = useSimulationStore((s) => s.latestStep);
 
+  // Event timeline filter state (SPEC 26 §4.5.1, v0.2.0).
+  // `null` = show all; otherwise filter to the matching `event_type`.
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+
   // TanStack Query — only fetches when the live store is empty.
   // Cached across navigations, so reopening Analytics is instant.
   const stepsQuery = useSimulationSteps(
@@ -160,8 +236,45 @@ export default function AnalyticsPage() {
   const communityKeys = useMemo(() => getCommunityKeys(steps), [steps]);
   const emergentEvents = useMemo(() => collectEmergentEvents(steps), [steps]);
 
-  // Steps where emergent events occurred (for ReferenceLine markers)
+  // SPEC 26 §4.6 — Cascade Analytics
+  const cascadeStats = useMemo(() => buildCascadeStats(steps), [steps]);
+
+  // SPEC 26 §4.5.1 — distinct event types present, for filter chips
+  const availableEventTypes = useMemo(() => {
+    const seen = new Set<string>();
+    for (const e of emergentEvents) seen.add(e.event_type);
+    return [...seen];
+  }, [emergentEvents]);
+
+  // SPEC 26 §4.5.1 — filter narrows the timeline list only. Summary cards
+  // and chart markers still use `emergentEvents` (unfiltered).
+  const filteredEvents = useMemo(() => {
+    if (activeFilter == null) return emergentEvents;
+    return emergentEvents.filter((e) => e.event_type === activeFilter);
+  }, [emergentEvents, activeFilter]);
+
+  // Steps where emergent events occurred (for ReferenceLine markers) —
+  // based on UNFILTERED events per SPEC §4.5.1.
   const eventSteps = [...new Set(emergentEvents.map((e) => e.step))];
+
+  // SPEC 26 §4.5.2 — deep-link navigator (closed-over simulation id)
+  const openEventInSimulation = useCallback(
+    (e: EmergentEvent) => {
+      if (!simulation?.simulation_id) return;
+      navigate(`/simulation/${simulation.simulation_id}?step=${e.step}`);
+    },
+    [navigate, simulation?.simulation_id],
+  );
+
+  const handleEventRowKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLDivElement>, event: EmergentEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openEventInSimulation(event);
+      }
+    },
+    [openEventInSimulation],
+  );
 
   return (
     <div
@@ -264,7 +377,11 @@ export default function AnalyticsPage() {
             title="Adoption Rate Over Time"
             icon={<TrendingUp className="w-4 h-4 text-[var(--primary)]" />}
           >
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+            <div
+              className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
+              role="img"
+              aria-label="Adoption rate over time, line chart"
+            >
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={adoptionData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -336,7 +453,11 @@ export default function AnalyticsPage() {
             title="Mean Sentiment Over Time"
             icon={<BarChart3 className="w-4 h-4 text-[var(--community-alpha)]" />}
           >
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+            <div
+              className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
+              role="img"
+              aria-label="Mean sentiment over time, line chart"
+            >
               <ResponsiveContainer width="100%" height={180}>
                 <LineChart data={sentimentData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -384,7 +505,11 @@ export default function AnalyticsPage() {
             title="Community Adoption Comparison (Final Step)"
             icon={<BarChart3 className="w-4 h-4 text-[var(--community-delta)]" />}
           >
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+            <div
+              className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
+              role="img"
+              aria-label="Community adoption comparison at final step, bar chart"
+            >
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart
                   data={communityAdoption}
@@ -448,6 +573,35 @@ export default function AnalyticsPage() {
             </div>
           </Section>
 
+          {/* Cascade Analytics (SPEC 26 §4.6, v0.2.0) */}
+          <Section
+            title="Cascade Analytics"
+            icon={<GitBranch className="w-4 h-4 text-[var(--community-gamma)]" />}
+          >
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <CascadeStatCard
+                testId="cascade-depth"
+                label="Longest Cascade Run"
+                value={cascadeStats.depth}
+              />
+              <CascadeStatCard
+                testId="cascade-width"
+                label="Peak Adoption Delta"
+                value={cascadeStats.width}
+              />
+              <CascadeStatCard
+                testId="cascade-paths"
+                label="Viral / Cascade Events"
+                value={cascadeStats.paths}
+              />
+              <CascadeStatCard
+                testId="cascade-decay"
+                label="Decay Rate"
+                value={cascadeStats.decay}
+              />
+            </div>
+          </Section>
+
           {/* Emergent Event Timeline */}
           <Section
             title="Emergent Event Timeline"
@@ -460,36 +614,73 @@ export default function AnalyticsPage() {
                 </p>
               </div>
             ) : (
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] divide-y divide-[var(--border)] overflow-hidden">
-                {emergentEvents.map((e, i) => (
-                  <div key={i} className="flex items-start gap-4 px-4 py-3">
-                    <span className="shrink-0 font-mono text-xs text-[var(--muted-foreground)] w-14">
-                      Step {e.step}
-                    </span>
-                    <span className="shrink-0 text-base" title={e.event_type}>
-                      {EVENT_ICONS[e.event_type] ?? "📌"}
-                    </span>
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-[var(--foreground)] capitalize">
-                          {(e.event_type ?? "event").replace(/_/g, " ")}
-                        </span>
-                        {e.community_id && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)]">
-                            {e.community_id}
-                          </span>
-                        )}
-                        <span className={`text-[10px] font-mono ${severityColor(e.severity)}`}>
-                          sev {e.severity.toFixed(2)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[var(--muted-foreground)] line-clamp-2">
-                        {e.description}
-                      </p>
-                    </div>
+              <>
+                {/* Filter toolbar — SPEC 26 §4.5.1 (v0.2.0) */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <FilterChip
+                    testId="event-filter-all"
+                    label="All"
+                    pressed={activeFilter === null}
+                    onClick={() => setActiveFilter(null)}
+                  />
+                  {availableEventTypes.map((t) => (
+                    <FilterChip
+                      key={t}
+                      testId={`event-filter-${t}`}
+                      label={t.replace(/_/g, " ")}
+                      pressed={activeFilter === t}
+                      onClick={() => setActiveFilter(t)}
+                    />
+                  ))}
+                </div>
+
+                {filteredEvents.length === 0 ? (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-6 text-center">
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      No events match the current filter.
+                    </p>
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] divide-y divide-[var(--border)] overflow-hidden">
+                    {filteredEvents.map((e, i) => (
+                      <div
+                        key={i}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`View step ${e.step} in simulation`}
+                        onClick={() => openEventInSimulation(e)}
+                        onKeyDown={(ev) => handleEventRowKeyDown(ev, e)}
+                        className="flex items-start gap-4 px-4 py-3 cursor-pointer hover:bg-[var(--secondary)]/50 focus:outline-none focus:bg-[var(--secondary)]/70 transition-colors"
+                      >
+                        <span className="shrink-0 font-mono text-xs text-[var(--muted-foreground)] w-14">
+                          Step {e.step}
+                        </span>
+                        <span className="shrink-0 text-base" title={e.event_type}>
+                          {EVENT_ICONS[e.event_type] ?? "📌"}
+                        </span>
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-[var(--foreground)] capitalize">
+                              {(e.event_type ?? "event").replace(/_/g, " ")}
+                            </span>
+                            {e.community_id && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--secondary)] text-[var(--muted-foreground)]">
+                                {e.community_id}
+                              </span>
+                            )}
+                            <span className={`text-[10px] font-mono ${severityColor(e.severity)}`}>
+                              sev {e.severity.toFixed(2)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[var(--muted-foreground)] line-clamp-2">
+                            {e.description}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </Section>
 
@@ -524,6 +715,67 @@ function SummaryCard({
       </p>
       <p className={`text-xl font-bold ${valueClass}`}>{value}</p>
     </div>
+  );
+}
+
+/**
+ * CascadeStatCard — SPEC 26 §4.6.
+ * Like SummaryCard but wraps with a data-testid so the test contract can
+ * scope value assertions to an individual card. No accent variants; cascade
+ * stats are neutral.
+ */
+function CascadeStatCard({
+  testId,
+  label,
+  value,
+}: {
+  testId: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div
+      data-testid={testId}
+      className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3 flex flex-col gap-1"
+    >
+      <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+        {label}
+      </p>
+      <p className="text-xl font-bold text-[var(--foreground)] font-mono">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * FilterChip — SPEC 26 §4.5.1.
+ * Single-select filter toggle for the event timeline. aria-pressed reflects
+ * state; Enter/Space activates via the native button semantics of <button>.
+ */
+function FilterChip({
+  testId,
+  label,
+  pressed,
+  onClick,
+}: {
+  testId: string;
+  label: string;
+  pressed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={`text-xs px-2.5 py-1 rounded-full border transition-colors capitalize ${
+        pressed
+          ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
+          : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/50"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

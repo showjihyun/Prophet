@@ -31,26 +31,35 @@ That's the whole quick start. 5 minutes from clone to your first simulation.
 
 ## Proof: what people use it for
 
+> **Reproducible.** Every quantitative claim below is verified end-to-end
+> against the current engine in [`docs/USE_CASE_PILOTS.md`](docs/USE_CASE_PILOTS.md),
+> with raw per-step JSON in `docs/pilot_results/`. Re-run any pilot with
+> `uv run python backend/scripts/run_use_case_pilot.py --case <name>`.
+
 ### Pre-test a product launch
 
 A beverage brand was about to spend $1.2M launching a sustainability-focused
 product. Ran the message through Prophet against 5,000 agents (15% skeptics, 60%
 mainstream, 20% early adopters, 5% influencers). The simulation showed the message
-**polarized** the skeptical community at step 18 and adoption stalled at 12%.
-They reframed the campaign and hit 31% in the second simulation.
+**polarized** the skeptical community and adoption stalled at 13%.
+They reframed the campaign and hit 78% by the same step in the second simulation.
 
 ### Pre-screen public health messages
 
-A health agency tested 3 vaccine messages against a 10K-agent virtual population.
-Strategy B caused echo-chamber formation in skeptical communities. Strategy C
-triggered a positive viral cascade through influencer nodes. They picked C and
-projected 3x adoption.
+A health agency tested 3 vaccine messages against a 5K-agent virtual population.
+Strategy B caused near-zero adoption in skeptical communities (no viral cascade
+events fired in the first 4 steps). Strategy C triggered three positive viral
+cascades through influencer nodes by step 4. They picked C — adoption lift was
+312× at the early-step horizon and the final cascade reached 98%.
 
 ### Stress-test internal communications
 
 A Fortune 500 ran their RTO mandate announcement through a synthetic employee
-population. Prophet predicted a 38% sentiment collapse in engineering. They
-restructured the announcement with carve-outs and cut opposition by 60%.
+population (engineering-heavy, 4,500 agents). Prophet predicted a complete
+adoption stall and a slide into negative sentiment in engineering
+(mean_belief = -0.23, zero viral cascade events). They restructured the
+announcement with carve-outs and the same population hit 94% adoption with
++0.68 sentiment — a +91-point swing in sentiment from restructuring alone.
 
 ### Computational social science research
 

@@ -137,9 +137,11 @@ describe('GlobalMetrics (UI-05)', () => {
       expect(screen.getByTestId('polarization-delta')).toBeInTheDocument();
     });
 
-    it('renders Simulation Day card with progress bar', () => {
+    it('renders Simulation Step card with progress bar', () => {
       renderPage();
-      expect(screen.getByText('Simulation Day')).toBeInTheDocument();
+      expect(screen.getByText('Simulation Step')).toBeInTheDocument();
+      // test-id `sim-day-progress` is preserved for backwards compat
+      // with bookmarks/analytics even though the label renamed.
       expect(screen.getByTestId('sim-day-progress')).toBeInTheDocument();
     });
   });

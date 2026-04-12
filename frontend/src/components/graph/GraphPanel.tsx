@@ -137,6 +137,44 @@ function fallbackColorFor(communityId: string): string {
 const DEFAULT_NODE_COLOR = "#64748b";
 
 /**
+ * Bright amber used to "flash" agents that actively processed data in
+ * the current step (source or target of a propagation pair). Picked
+ * for maximum contrast against every community hue in the palette so
+ * the highlight reads as "this agent is doing something right now"
+ * regardless of which community it belongs to. `#fcd34d` = amber-300,
+ * one shade brighter than the previous amber-400 so the strobe phase
+ * pops against dark backgrounds.
+ */
+const ACTIVE_AGENT_GLOW_COLOR = "#fcd34d";
+
+/**
+ * Total duration (ms) that an agent strobes after acting. At 150ms
+ * per phase (≈6.6 Hz) this gives 10 flashes before the highlight
+ * clears and the node settles back to its normal community color.
+ * 1.5 s is long enough to catch the eye but short enough that
+ * consecutive steps stay visually distinct.
+ */
+const ACTIVE_AGENT_GLOW_MS = 1_500;
+
+/**
+ * Strobe phase length (ms) — how long the "on" state stays visible
+ * before flipping to "off". 150 ms ≈ 6.6 Hz, which reads as a clean
+ * flash/blink without looking like a glitch. Going below ~100 ms
+ * starts to feel like flicker and can cross accessibility thresholds
+ * for photosensitive users.
+ */
+const ACTIVE_AGENT_STROBE_PHASE_MS = 150;
+
+/**
+ * Size multiplier for active agents during the "on" strobe phase.
+ * The instanced-sphere renderer reads `nodeVal` for each node on
+ * every frame, so bumping this is nearly free. 2.2× reads as
+ * "noticeably larger" without dominating the scene or colliding
+ * with neighbours on dense graphs.
+ */
+const ACTIVE_AGENT_SIZE_MULTIPLIER = 2.2;
+
+/**
  * Vertical offset applied to the left-side overlays (community legend and
  * the full graph legend) so they don't crowd the middle of the viewport.
  * One constant keeps the two stacked overlays moving together — if you
@@ -233,6 +271,25 @@ export default function GraphPanel() {
   const activePropLinksRef = useRef<Map<string, string>>(new Map());
   const propTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Node IDs of agents that actively processed data in the current step
+  // (union of propagation_pairs source + target, after UUID→node_id
+  // translation). Drives the `ACTIVE_AGENT_GLOW_COLOR` + size boost
+  // in the node-render callbacks so the user sees a pulse on every
+  // agent that's "doing something right now" — the node-level
+  // complement to the edge-level particle effect.
+  const activeAgentsRef = useRef<Set<string>>(new Set());
+  // Strobe phase — flips true/false every `ACTIVE_AGENT_STROBE_PHASE_MS`
+  // while agents are highlighted. Node callbacks only apply the glow
+  // color + size boost when this is true, producing the on/off
+  // flash/blink effect the user asked for.
+  const activeAgentsPhaseRef = useRef<boolean>(false);
+  const activeAgentsStrobeRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
+  const activeAgentsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
   // ---- Load graph data on simulation change ------------------------------- //
   // TanStack Query — cached network graph, instant on revisit
   const networkQuery = useNetwork(simulationId);
@@ -288,8 +345,17 @@ export default function GraphPanel() {
 
   // ---- GAP-7: Propagation animation effect -------------------------------- //
   useEffect(() => {
-    if (!propagationAnimEnabled || !latestStep?.propagation_pairs?.length) {
+    // Disabling the animation entirely → flush immediately.
+    if (!propagationAnimEnabled) {
       activePropLinksRef.current.clear();
+      fgRef.current?.refresh();
+      return;
+    }
+    // Step with zero pairs → PRESERVE existing particles. Letting this
+    // path clear would cause a visual flash-on/flash-off whenever the
+    // backend probability happens to be quiet for a step. The 8s
+    // CASCADE_TTL timer below still fades particles naturally.
+    if (!latestStep?.propagation_pairs?.length) {
       return;
     }
 
@@ -310,11 +376,27 @@ export default function GraphPanel() {
     // Delegate filter + UUID→node_id translation + LOD cap to the shared
     // utility. GraphPanel and its regression tests both exercise the same
     // code path, so a behaviour drift here fails loudly in CI.
+    const pairs = latestStep.propagation_pairs as PropagationPair[];
     activePropLinksRef.current = buildActivePropLinks(
-      latestStep.propagation_pairs as PropagationPair[],
+      pairs,
       agentIdToNodeId,
       limit,
     );
+
+    // Active-agent set — every source and target of a propagation pair
+    // is "currently processing data". Used by nodeColorFn / nodeValFn
+    // to strobe the node during its glow window.
+    const newActiveAgents = new Set<string>();
+    for (const p of pairs) {
+      const src = agentIdToNodeId.get(p.source);
+      const tgt = agentIdToNodeId.get(p.target);
+      if (src) newActiveAgents.add(src);
+      if (tgt) newActiveAgents.add(tgt);
+    }
+    // Merge with existing so consecutive steps' active agents visually
+    // overlap while the timer counts down.
+    for (const id of newActiveAgents) activeAgentsRef.current.add(id);
+
     fgRef.current?.refresh();
 
     // Clear particles after CASCADE_TTL_MS (fade out)
@@ -324,8 +406,46 @@ export default function GraphPanel() {
       fgRef.current?.refresh();
     }, 8_000);
 
+    // Strobe the node highlight on/off at `ACTIVE_AGENT_STROBE_PHASE_MS`
+    // intervals for the full `ACTIVE_AGENT_GLOW_MS` window. Each tick
+    // flips the phase and asks force-graph to repaint — the
+    // instanced-sphere renderer re-reads nodeColor + nodeVal, so the
+    // visible change is free after the first flip.
+    if (activeAgentsStrobeRef.current) {
+      clearInterval(activeAgentsStrobeRef.current);
+    }
+    // Start the strobe in the "on" phase so the user sees a flash
+    // immediately on every new step instead of waiting a cycle.
+    activeAgentsPhaseRef.current = true;
+    activeAgentsStrobeRef.current = setInterval(() => {
+      activeAgentsPhaseRef.current = !activeAgentsPhaseRef.current;
+      fgRef.current?.refresh();
+    }, ACTIVE_AGENT_STROBE_PHASE_MS);
+
+    // After the full glow window, stop strobing, clear the set, and
+    // do one last refresh so the nodes settle back to their community
+    // color cleanly.
+    if (activeAgentsTimerRef.current) {
+      clearTimeout(activeAgentsTimerRef.current);
+    }
+    activeAgentsTimerRef.current = setTimeout(() => {
+      if (activeAgentsStrobeRef.current) {
+        clearInterval(activeAgentsStrobeRef.current);
+        activeAgentsStrobeRef.current = null;
+      }
+      activeAgentsRef.current.clear();
+      activeAgentsPhaseRef.current = false;
+      fgRef.current?.refresh();
+    }, ACTIVE_AGENT_GLOW_MS);
+
     return () => {
       if (propTimerRef.current) clearTimeout(propTimerRef.current);
+      if (activeAgentsTimerRef.current) {
+        clearTimeout(activeAgentsTimerRef.current);
+      }
+      if (activeAgentsStrobeRef.current) {
+        clearInterval(activeAgentsStrobeRef.current);
+      }
     };
   }, [propagationAnimEnabled, latestStep, agentIdToNodeId]);
 
@@ -380,12 +500,30 @@ export default function GraphPanel() {
   }, [graphCommunities]);
 
   // ---- Color + size callbacks (built-in InstancedMesh path) --------------- //
+  //
+  // Precedence (highest wins):
+  //   1. Dimmed (community filter active, not in the highlighted one)
+  //   2. Active agent ON-phase (strobing amber + bigger)
+  //   3. Adopted (converted to the target belief) — green glow
+  //   4. Default community color
+  //
+  // The strobe is realised by consulting `activeAgentsPhaseRef` — it
+  // flips true/false every ~150 ms while an agent is in its glow
+  // window. During the OFF phase the agent renders with its normal
+  // community color and size, which produces the flash/blink feel
+  // the user asked for (and which a steady glow could not).
   const nodeColorFn = useCallback(
     (node: object): string => {
       const n = node as GraphNode;
       const dimmed =
         highlightedCommunity !== null && n.community !== highlightedCommunity;
       if (dimmed) return HIGHLIGHT_DIM_COLOR;
+      if (
+        activeAgentsPhaseRef.current &&
+        activeAgentsRef.current.has(n.id)
+      ) {
+        return ACTIVE_AGENT_GLOW_COLOR;
+      }
       if (adoptedSetRef.current.has(n.id)) return ADOPTED_GLOW_COLOR;
       return communityColorMap[n.community] ?? DEFAULT_NODE_COLOR;
     },
@@ -394,7 +532,15 @@ export default function GraphPanel() {
 
   const nodeValFn = useCallback((node: object): number => {
     const n = node as GraphNode;
-    return 1 + Math.min(6, (n.influence_score ?? 0.2) * 8.0);
+    const base = 1 + Math.min(6, (n.influence_score ?? 0.2) * 8.0);
+    // Size boost only during the ON phase of the strobe — pairs with
+    // the color change in `nodeColorFn` so each flash is both a color
+    // AND size change, which reads as a clear "pop" even on dense
+    // graphs where a pure color change would be hard to pick out.
+    if (activeAgentsPhaseRef.current && activeAgentsRef.current.has(n.id)) {
+      return base * ACTIVE_AGENT_SIZE_MULTIPLIER;
+    }
+    return base;
   }, []);
 
   /**
@@ -463,15 +609,33 @@ export default function GraphPanel() {
   );
 
   // ---- GAP-7: Propagation particle callbacks ------------------------------ //
+  //
+  // Particle count tiers:
+  //   - Active propagation link (in `activePropLinksRef`): 6 particles,
+  //     colored by action, thick. These are the "something is happening
+  //     between these two agents right now" moments the user actually
+  //     wants to see.
+  //   - Baseline intra-community link on small/medium graphs
+  //     (`linkCount < LARGE_GRAPH_EDGE_THRESHOLD`): 1 dim white particle
+  //     so the graph feels alive even when no fresh cascades are firing.
+  //     Bumped from `< 200` → `< 2000` because real sims sit in the
+  //     200-2000 edge range and the old threshold left them looking dead.
+  //   - Huge graph (2000+ edges): no baseline — particles only on active
+  //     propagation, otherwise the per-frame GPU cost from ~39k edges
+  //     with 1 particle each kills frame rate.
+  const LARGE_GRAPH_EDGE_THRESHOLD = 2000;
+
   const linkParticlesFn = useCallback(
     (link: object): number => {
-      if (!propagationAnimEnabled) return linkCount < 200 ? 1 : 0;
+      if (!propagationAnimEnabled) {
+        return linkCount < LARGE_GRAPH_EDGE_THRESHOLD ? 1 : 0;
+      }
       const l = link as GraphLink;
       const srcId = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
       const tgtId = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
       const key = `${srcId}__${tgtId}`;
-      if (activePropLinksRef.current.has(key)) return 4;
-      return linkCount < 200 ? 1 : 0;
+      if (activePropLinksRef.current.has(key)) return 6;
+      return linkCount < LARGE_GRAPH_EDGE_THRESHOLD ? 1 : 0;
     },
     [propagationAnimEnabled, linkCount],
   );
@@ -482,7 +646,11 @@ export default function GraphPanel() {
       const srcId = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
       const tgtId = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
       const key = `${srcId}__${tgtId}`;
-      return activePropLinksRef.current.get(key) ?? "rgba(255,255,255,0.6)";
+      // Active propagation links get their action color (share=green,
+      // comment=blue, like=yellow, adopt=purple). Idle links get a dim
+      // white so the baseline flow reads as connective tissue, not a
+      // cascade signal.
+      return activePropLinksRef.current.get(key) ?? "rgba(255,255,255,0.35)";
     },
     [],
   );
@@ -493,7 +661,10 @@ export default function GraphPanel() {
       const srcId = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
       const tgtId = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
       const key = `${srcId}__${tgtId}`;
-      return activePropLinksRef.current.has(key) ? 2.0 : 0.8;
+      // Active links get a chunky 3.5px width — visible on 1080p at
+      // typical zoom without overwhelming the node rendering. Baseline
+      // idle particles stay thin (0.6px) so they read as ambient.
+      return activePropLinksRef.current.has(key) ? 3.5 : 0.6;
     },
     [],
   );
@@ -533,7 +704,11 @@ export default function GraphPanel() {
             linkDirectionalParticles={linkParticlesFn}
             linkDirectionalParticleColor={linkParticleColorFn}
             linkDirectionalParticleWidth={linkParticleWidthFn}
-            linkDirectionalParticleSpeed={0.005}
+            // Slower particle travel (0.002 vs original 0.005) so the
+            // eye can follow a cascade from source → target instead of
+            // seeing a brief flash. On a 2s edge traversal at 60fps the
+            // particle is clearly visible for its entire lifetime.
+            linkDirectionalParticleSpeed={0.002}
             cooldownTicks={isHuge ? 40 : isLarge ? 80 : 150}
             warmupTicks={isHuge ? 5 : 10}
             d3AlphaDecay={0.04}
@@ -573,9 +748,6 @@ export default function GraphPanel() {
 
       <div className="absolute top-4 left-4 z-10 pointer-events-none">
         <h2 className="text-lg font-bold text-white">AI Social World — 3D</h2>
-        <p className="text-xs text-white/60">
-          MiroFish Engine · three.js WebGL
-        </p>
       </div>
 
       {/* Node / Edge count badge — top-right */}

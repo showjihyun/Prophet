@@ -9,10 +9,10 @@
  * Zone 3: Timeline (120px) + Conversations (fill remaining)
  */
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { LS_KEY_SIMULATION_ID, SIM_STATUS } from "@/config/constants";
-import { FolderOpen, Brain } from "lucide-react";
+import { FolderOpen, Brain, X } from "lucide-react";
 import ControlPanel from "../components/control/ControlPanel";
 import WorkflowStepper from "../components/layout/WorkflowStepper";
 import EmergentEventsPanel from "../components/emergent/EmergentEventsPanel";
@@ -36,6 +36,8 @@ import type { StepResult, EmergentEvent, SimulationStatus } from "../types/simul
 export default function SimulationPage() {
   const navigate = useNavigate();
   const { simulationId: urlSimId } = useParams<{ simulationId: string }>();
+  // SPEC 26 §4.5.2 (v0.3.0) — read ?step= query param for Analytics deep-link.
+  const [searchParams, setSearchParams] = useSearchParams();
   const simulation = useSimulationStore((s) => s.simulation);
   const appendStep = useSimulationStore((s) => s.appendStep);
   const appendEmergentEvent = useSimulationStore((s) => s.appendEmergentEvent);
@@ -48,6 +50,8 @@ export default function SimulationPage() {
   const selectedAgentId = useSimulationStore((s) => s.selectedAgentId);
   const isAgentInspectorOpen = useSimulationStore((s) => s.isAgentInspectorOpen);
   const setSimulation = useSimulationStore((s) => s.setSimulation);
+  const focusedStep = useSimulationStore((s) => s.focusedStep);
+  const setFocusedStep = useSimulationStore((s) => s.setFocusedStep);
 
   const [reportOpen, setReportOpen] = useState(false);
   // Dedup: track last toast event_type and the timestamp it was shown
@@ -105,6 +109,31 @@ export default function SimulationPage() {
     }
   }, [status, stepsLength]);
 
+  /**
+   * SPEC 26 §4.5.2 (v0.3.0) — round-trip from Analytics event-row deep-link.
+   *
+   * On mount (or whenever the query string changes), parse `?step=N`. A valid
+   * non-negative integer pins `focusedStep`. Anything else is silently ignored
+   * so malformed URLs don't break live behavior.
+   */
+  useEffect(() => {
+    const raw = searchParams.get("step");
+    if (raw == null) return;
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed >= 0 && String(parsed) === raw) {
+      setFocusedStep(parsed);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  /** Dismiss the focus banner: clear store field and strip ?step from URL. */
+  const clearStepFocus = () => {
+    setFocusedStep(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("step");
+    setSearchParams(next, { replace: true });
+  };
+
   if (!simulation) {
     return (
       <div className="h-screen w-screen flex flex-col bg-[var(--background)]">
@@ -148,6 +177,30 @@ export default function SimulationPage() {
 
       {/* Workflow Stepper — 6-stage progress indicator */}
       <WorkflowStepper />
+
+      {/* Step focus banner — SPEC 26 §4.5.2 (v0.3.0).
+          Shown when Analytics deep-linked to a specific step.
+          NOTE: v0.3.0 announces the focus only. Graph / metrics state replay
+          at the focused step is deferred to v0.4.0 (see SPEC §9). */}
+      {focusedStep !== null && (
+        <div
+          data-testid="step-focus-banner"
+          className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-500/10 border-y border-amber-500/30 text-amber-600 text-sm"
+        >
+          <span>
+            Viewing step <strong>{focusedStep}</strong> from Analytics. Live
+            updates continue in the background.
+          </span>
+          <button
+            type="button"
+            onClick={clearStepFocus}
+            className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border border-amber-500/40 hover:bg-amber-500/20 transition-colors"
+          >
+            <X className="w-3 h-3" />
+            Return to live
+          </button>
+        </div>
+      )}
 
       {/* WebSocket retry exhausted banner */}
       {retryExhausted && (
