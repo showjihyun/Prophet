@@ -116,10 +116,42 @@ def _sim_id_to_uuid(simulation_id: str) -> UUID:
 
 
 def _get_state_or_404(orchestrator: Any, simulation_id: str) -> Any:
-    """Retrieve SimulationState from orchestrator or raise 404."""
+    """Retrieve SimulationState from orchestrator or raise 404.
+
+    Used by agents.py, communities.py, llm_dashboard.py, network.py
+    for read-only GET endpoints that don't go through the service layer.
+    Simulation-mutating POST routes should use ``_svc_state_or_404``
+    instead so they depend only on ``SimulationService``.
+    """
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
         return orchestrator.get_state(sim_uuid)
+    except (ValueError, KeyError):
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                type="https://prophet.io/errors/not-found",
+                title="Simulation Not Found",
+                status=404,
+                detail=f"Simulation uuid={simulation_id} does not exist",
+                instance=f"/api/v1/simulations/{simulation_id}",
+            ).model_dump(),
+        )
+
+
+def _svc_state_or_404(service: SimulationService, simulation_id: str) -> Any:
+    """Retrieve SimulationState via the service layer or raise 404.
+
+    SPEC: docs/spec/20_CLEAN_ARCHITECTURE_SPEC.md#3.1
+
+    Clean Architecture version of ``_get_state_or_404``: the caller
+    depends on ``SimulationService`` only, never on the raw
+    ``SimulationOrchestrator``. Used by the 5 mutation routes
+    (start/step/pause/resume/stop) after the Round 8-8 refactor.
+    """
+    sim_uuid = _sim_id_to_uuid(simulation_id)
+    try:
+        return service.get_state(sim_uuid)
     except (ValueError, KeyError):
         raise HTTPException(
             status_code=404,
@@ -293,14 +325,13 @@ async def get_simulation(
 @router.post("/{simulation_id}/start", response_model=StatusResponse)
 async def start_simulation(
     simulation_id: str,
-    orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
     service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Start the simulation.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstart
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    state = _svc_state_or_404(service, simulation_id)
     _require_status(state, SimulationStatus.CONFIGURED, SimulationStatus.PAUSED)
     now = datetime.now(timezone.utc)
     await service.start(_sim_id_to_uuid(simulation_id), session=session)
@@ -310,14 +341,13 @@ async def start_simulation(
 @router.post("/{simulation_id}/step", response_model=StepResultResponse)
 async def step_simulation(
     simulation_id: str,
-    orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
     service: SimulationService = Depends(get_simulation_service),
 ) -> StepResultResponse:
     """Execute exactly one step.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idstep
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    state = _svc_state_or_404(service, simulation_id)
     _require_status(state, SimulationStatus.RUNNING, SimulationStatus.PAUSED)
 
     sim_uuid = _sim_id_to_uuid(simulation_id)
@@ -424,14 +454,13 @@ async def run_all_simulation(
 @router.post("/{simulation_id}/pause", response_model=StatusResponse)
 async def pause_simulation(
     simulation_id: str,
-    orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
     service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Pause after current step completes.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idpause
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    state = _svc_state_or_404(service, simulation_id)
     _require_status(state, SimulationStatus.RUNNING)
     await service.pause(_sim_id_to_uuid(simulation_id), session=session)
     return StatusResponse(
@@ -442,14 +471,13 @@ async def pause_simulation(
 @router.post("/{simulation_id}/resume", response_model=StatusResponse)
 async def resume_simulation(
     simulation_id: str,
-    orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
     service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
     """Resume from paused state.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idresume
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    state = _svc_state_or_404(service, simulation_id)
     _require_status(state, SimulationStatus.PAUSED)
     await service.resume(_sim_id_to_uuid(simulation_id), session=session)
     return StatusResponse(status=SimulationStatus.RUNNING)
@@ -458,7 +486,6 @@ async def resume_simulation(
 @router.post("/{simulation_id}/stop", response_model=StatusResponse)
 async def stop_simulation(
     simulation_id: str,
-    orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
     service: SimulationService = Depends(get_simulation_service),
 ) -> StatusResponse:
@@ -470,10 +497,8 @@ async def stop_simulation(
     # Validate status transition if sim is in memory — preserve 409 behavior
     # for unexpected states. DB-only sims skip this check.
     try:
-        state = _get_state_or_404(orchestrator, simulation_id)
-    except HTTPException as e:
-        if e.status_code != 404:
-            raise
+        state = service.get_state(sim_uuid)
+    except (ValueError, KeyError):
         state = None
 
     if state is not None:
