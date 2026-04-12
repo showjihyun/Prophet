@@ -2,7 +2,7 @@
   "case": "uc3_rto_raw",
   "readme_section": "### Stress-test internal communications",
   "readme_claim": "38% sentiment collapse in engineering",
-  "simulation_id": "6c539263-fa5e-40ce-9fd2-c9c44e2226e7",
+  "simulation_id": "38f10f88-1e15-4da3-ae76-a39a113511f2",
   "payload": {
     "name": "UC3 RTO \u2014 Raw mandate",
     "description": "README use-case 3: Fortune 500 RTO mandate. Engineering-heavy population with raw 5-days-on-site announcement.",
@@ -53,102 +53,109 @@
         "agent_type": "expert"
       }
     ],
-    "max_steps": 12,
+    "max_steps": 18,
     "default_llm_provider": "ollama",
     "slm_llm_ratio": 0.98,
     "slm_model": "llama3.1:8b",
     "budget_usd": 1.0,
     "random_seed": 42
   },
-  "started_at": "2026-04-11T18:32:31.376714+00:00",
-  "finished_at": "2026-04-11T18:34:59.703561+00:00",
-  "steps_run": 12,
+  "started_at": "2026-04-12T03:55:59.637086+00:00",
+  "finished_at": "2026-04-12T03:59:33.087411+00:00",
+  "steps_run": 18,
   "final_metrics": {
-    "adoption_rate": 0.0017777777777777779,
-    "mean_sentiment": -0.2340651171127919,
-    "sentiment_variance": 0.05108833606031109,
+    "adoption_rate": 0.0015555555555555555,
+    "mean_sentiment": -0.31945230878718717,
+    "sentiment_variance": 0.05621944795543515,
     "diffusion_rate": 0.0
   },
   "per_community_final": {
-    "20a96e9e-e408-7491-7918-713a5a2e9a2d": {
-      "community_id": "20a96e9e-e408-7491-7918-713a5a2e9a2d",
-      "adoption_count": 2,
-      "adoption_rate": 0.001,
-      "mean_belief": -0.24467697354813767,
-      "dominant_action": "view",
+    "88970688-a372-b586-092a-47f9da1539b8": {
+      "community_id": "88970688-a372-b586-092a-47f9da1539b8",
+      "adoption_count": 1,
+      "adoption_rate": 0.0005,
+      "mean_belief": -0.3347450025860578,
+      "dominant_action": "ignore",
       "new_propagation_count": 0
     },
-    "61ffafd9-80bb-62cc-8b3f-21885051f6d6": {
-      "community_id": "61ffafd9-80bb-62cc-8b3f-21885051f6d6",
-      "adoption_count": 2,
-      "adoption_rate": 0.002,
-      "mean_belief": -0.21587605567318469,
-      "dominant_action": "view",
-      "new_propagation_count": 0
-    },
-    "af9e47b0-d53e-c239-b198-7c23f6a3963a": {
-      "community_id": "af9e47b0-d53e-c239-b198-7c23f6a3963a",
+    "8a0deb48-f775-60ba-8ef7-ff2b5f526236": {
+      "community_id": "8a0deb48-f775-60ba-8ef7-ff2b5f526236",
       "adoption_count": 0,
       "adoption_rate": 0.0,
-      "mean_belief": -0.24510050318442594,
-      "dominant_action": "view",
+      "mean_belief": -0.32937777326641715,
+      "dominant_action": "ignore",
       "new_propagation_count": 0
     },
-    "87f52e18-c740-32c5-3ccd-a65e71cdb5b1": {
-      "community_id": "87f52e18-c740-32c5-3ccd-a65e71cdb5b1",
-      "adoption_count": 2,
-      "adoption_rate": 0.01,
-      "mean_belief": -0.21149029219505622,
-      "dominant_action": "view",
-      "new_propagation_count": 0
-    },
-    "25f99428-e124-215e-117b-882445f1c4c4": {
-      "community_id": "25f99428-e124-215e-117b-882445f1c4c4",
+    "4dc1876c-9d10-651e-d905-a8ad0524be2d": {
+      "community_id": "4dc1876c-9d10-651e-d905-a8ad0524be2d",
       "adoption_count": 2,
       "adoption_rate": 0.002,
-      "mean_belief": -0.23223481484376454,
-      "dominant_action": "view",
+      "mean_belief": -0.298285499632617,
+      "dominant_action": "ignore",
+      "new_propagation_count": 0
+    },
+    "ef643f0e-c87f-422d-2241-6b83bcc7aff7": {
+      "community_id": "ef643f0e-c87f-422d-2241-6b83bcc7aff7",
+      "adoption_count": 1,
+      "adoption_rate": 0.005,
+      "mean_belief": -0.29435930709244496,
+      "dominant_action": "ignore",
+      "new_propagation_count": 0
+    },
+    "3a060f8d-4749-07ea-8b48-67bc375ce47d": {
+      "community_id": "3a060f8d-4749-07ea-8b48-67bc375ce47d",
+      "adoption_count": 3,
+      "adoption_rate": 0.003,
+      "mean_belief": -0.3120746913391954,
+      "dominant_action": "ignore",
       "new_propagation_count": 0
     }
   },
   "emergent_events_total_by_type": {},
   "opinion_overall": {
     "overall": {
-      "opinion_id": "1bf6b950-cd69-4f4e-b2a5-34038a4d366e",
-      "simulation_id": "6c539263-fa5e-40ce-9fd2-c9c44e2226e7",
+      "opinion_id": "e306b5c0-1ef4-4f69-b16f-9abdca4b009f",
+      "simulation_id": "38f10f88-1e15-4da3-ae76-a39a113511f2",
       "community_id": "__overall__",
-      "step": 12,
-      "summary": "The campaign saw limited adoption across all communities, with a mean sentiment of -0.23 and polarising trends in three out of five communities.",
-      "sentiment_trend": "polarising",
+      "step": 18,
+      "summary": "The campaign saw a low overall adoption rate of 0.16%, with two communities showing some interest while the others remained largely unchanged.",
+      "sentiment_trend": "collapsing",
       "themes": [
         {
-          "theme": "Limited adoption and polarisation",
-          "weight": 1.0,
-          "evidence_step": 11
+          "theme": "stalled diffusion",
+          "weight": 0.8,
+          "evidence_step": 10
+        },
+        {
+          "theme": "skeptic resistance",
+          "weight": 0.4,
+          "evidence_step": 15
         }
       ],
       "divisions": [
         {
-          "share": 0.2,
+          "share": 0.42,
           "faction": "early_adopters",
           "concerns": [
-            "adoption rate remains stagnant"
+            "rapid change",
+            "new idea"
           ]
         },
         {
-          "share": 0.8,
+          "share": 0.58,
           "faction": "skeptics",
           "concerns": [
-            "dominant sentiment of skepticism and apathy"
+            "uncertainty",
+            "lack of evidence"
           ]
         }
       ],
       "dominant_emotions": [
-        "skepticism",
-        "apathy"
+        "ignoring",
+        "skepticism"
       ],
       "key_quotes": [],
-      "source_step_count": 12,
+      "source_step_count": 18,
       "source_agent_count": 4500,
       "llm_provider": "ollama",
       "llm_model": "llama3.1:8b",
@@ -156,75 +163,35 @@
     },
     "communities": [
       {
-        "opinion_id": "d302b7be-4bcf-459d-8a46-c1e121af8dd7",
-        "simulation_id": "6c539263-fa5e-40ce-9fd2-c9c44e2226e7",
-        "community_id": "20a96e9e-e408-7491-7918-713a5a2e9a2d",
-        "step": 12,
-        "summary": "The community remains largely unchanged, with a dominant sentiment of skepticism and a trend towards polarisation.",
-        "sentiment_trend": "polarising",
+        "opinion_id": "f0276855-baa9-4cf9-908b-7e3062c1243d",
+        "simulation_id": "38f10f88-1e15-4da3-ae76-a39a113511f2",
+        "community_id": "3a060f8d-4749-07ea-8b48-67bc375ce47d",
+        "step": 18,
+        "summary": "The community remains largely unchanged, with a slight increase in the adoption rate and a shift towards ignoring content. The dominant action is still 'ignore', but there's a growing trend of consumers viewing content.",
+        "sentiment_trend": "stable",
         "themes": [
           {
-            "theme": "skepticism",
-            "weight": 0.9,
-            "evidence_step": 10
-          },
-          {
-            "theme": "ignorance",
-            "weight": 0.1,
-            "evidence_step": 7
-          }
-        ],
-        "divisions": [
-          {
-            "share": 0.95,
-            "faction": "skeptics",
-            "concerns": [
-              "adoption",
-              "belief"
-            ]
-          }
-        ],
-        "dominant_emotions": [
-          "skepticism"
-        ],
-        "key_quotes": [],
-        "source_step_count": 5,
-        "source_agent_count": 2000,
-        "llm_provider": "ollama",
-        "llm_model": "llama3.1:8b",
-        "is_fallback_stub": false
-      },
-      {
-        "opinion_id": "e5e6407f-e08e-4696-8327-3d154b3073e5",
-        "simulation_id": "6c539263-fa5e-40ce-9fd2-c9c44e2226e7",
-        "community_id": "25f99428-e124-215e-117b-882445f1c4c4",
-        "step": 12,
-        "summary": "The community remains largely unchanged, with a dominant sentiment of apathy and skepticism.",
-        "sentiment_trend": "collapsing",
-        "themes": [
-          {
-            "theme": "skepticism",
+            "theme": "Content Ignorance",
             "weight": 0.8,
-            "evidence_step": 10
+            "evidence_step": 16
           },
           {
-            "theme": "apathy",
-            "weight": 0.7,
-            "evidence_step": 9
+            "theme": "Decreased Engagement",
+            "weight": 0.2,
+            "evidence_step": 13
           }
         ],
         "divisions": [
           {
             "share": 1.0,
-            "faction": "consumers",
+            "faction": "Consumers",
             "concerns": [
-              "ignoring the topic",
-              "viewing but not engaging"
+              "ignoring content",
+              "low engagement"
             ]
           }
         ],
         "dominant_emotions": [
-          "disinterest",
           "indifference"
         ],
         "key_quotes": [],
@@ -235,30 +202,39 @@
         "is_fallback_stub": false
       },
       {
-        "opinion_id": "f0c7e464-5e85-4ef7-9e68-faf18d6d974d",
-        "simulation_id": "6c539263-fa5e-40ce-9fd2-c9c44e2226e7",
-        "community_id": "61ffafd9-80bb-62cc-8b3f-21885051f6d6",
-        "step": 12,
-        "summary": "The community's adoption rate remains stagnant, while the dominant sentiment is polarizing with a slight decrease in belief scores.",
-        "sentiment_trend": "polarising",
+        "opinion_id": "1fe52165-8919-46ff-9997-305f192a9b66",
+        "simulation_id": "38f10f88-1e15-4da3-ae76-a39a113511f2",
+        "community_id": "4dc1876c-9d10-651e-d905-a8ad0524be2d",
+        "step": 18,
+        "summary": "The community's adoption of the new idea remains stagnant, while their sentiment continues to decline. Dominant actions are shifting from viewing to ignoring.",
+        "sentiment_trend": "collapsing",
         "themes": [
           {
-            "theme": "Adoption Stagnation",
+            "theme": "Adoption stagnation",
             "weight": 0.8,
-            "evidence_step": 10
+            "evidence_step": 16
           },
           {
-            "theme": "Polarized Sentiment",
-            "weight": 0.7,
-            "evidence_step": 11
+            "theme": "Sentiment decline",
+            "weight": 0.9,
+            "evidence_step": 13
           }
         ],
         "divisions": [
           {
             "share": 0.1,
-            "faction": "Early Adopters",
+            "faction": "Early adopters",
             "concerns": [
-              "Belief scores decreasing"
+              "Belief in the new idea is low",
+              "Most early adopters have not adopted"
+            ]
+          },
+          {
+            "share": 0.9,
+            "faction": "Non-adopters",
+            "concerns": [
+              "Sentiment towards the new idea is negative",
+              "Dominant actions are ignoring or viewing"
             ]
           }
         ],
@@ -273,22 +249,101 @@
         "is_fallback_stub": false
       },
       {
-        "opinion_id": "4460b8f7-f831-4360-aaee-d1c3dcec8675",
-        "simulation_id": "6c539263-fa5e-40ce-9fd2-c9c44e2226e7",
-        "community_id": "87f52e18-c740-32c5-3ccd-a65e71cdb5b1",
-        "step": 12,
-        "summary": "The community remains largely unchanged, with a dominant sentiment of scepticism and a lack of adoption or engagement.",
+        "opinion_id": "442b90d6-9b00-4551-87a4-6703e5fdb0f1",
+        "simulation_id": "38f10f88-1e15-4da3-ae76-a39a113511f2",
+        "community_id": "88970688-a372-b586-092a-47f9da1539b8",
+        "step": 18,
+        "summary": "The community remains largely unchanged, with a dominant sentiment of skepticism and a trend towards ignoring the topic.",
+        "sentiment_trend": "stable",
+        "themes": [
+          {
+            "theme": "skepticism",
+            "weight": 1.0,
+            "evidence_step": 13
+          },
+          {
+            "theme": "ignorance",
+            "weight": 0.8,
+            "evidence_step": 14
+          }
+        ],
+        "divisions": [
+          {
+            "share": 0.9,
+            "faction": "skeptics",
+            "concerns": [
+              "-0.40",
+              "-0.08",
+              "-0.23"
+            ]
+          }
+        ],
+        "dominant_emotions": [
+          "ignorance"
+        ],
+        "key_quotes": [],
+        "source_step_count": 5,
+        "source_agent_count": 2000,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.1:8b",
+        "is_fallback_stub": false
+      },
+      {
+        "opinion_id": "7354a95f-e0f2-4d23-879c-698e36d8de41",
+        "simulation_id": "38f10f88-1e15-4da3-ae76-a39a113511f2",
+        "community_id": "8a0deb48-f775-60ba-8ef7-ff2b5f526236",
+        "step": 18,
+        "summary": "The community remains largely unchanged, with a slight increase in negative sentiment and a dominant action of ignoring the topic.",
         "sentiment_trend": "collapsing",
         "themes": [
           {
-            "theme": "scepticism",
-            "weight": 0.9,
-            "evidence_step": 11
+            "theme": "skepticism",
+            "weight": 0.8,
+            "evidence_step": 15
           },
           {
-            "theme": "disengagement",
+            "theme": "indifference",
+            "weight": 0.2,
+            "evidence_step": 13
+          }
+        ],
+        "divisions": [
+          {
+            "share": 0.3,
+            "faction": "influencers",
+            "concerns": [
+              "adoption",
+              "belief"
+            ]
+          }
+        ],
+        "dominant_emotions": [
+          "disinterest"
+        ],
+        "key_quotes": [],
+        "source_step_count": 5,
+        "source_agent_count": 300,
+        "llm_provider": "ollama",
+        "llm_model": "llama3.1:8b",
+        "is_fallback_stub": false
+      },
+      {
+        "opinion_id": "8580c242-39fa-4131-87ce-67bcb6608fd8",
+        "simulation_id": "38f10f88-1e15-4da3-ae76-a39a113511f2",
+        "community_id": "ef643f0e-c87f-422d-2241-6b83bcc7aff7",
+        "step": 18,
+        "summary": "The community remains largely unchanged, with a slight shift towards ignoring the topic. Experts dominate the conversation.",
+        "sentiment_trend": "collapsing",
+        "themes": [
+          {
+            "theme": "skepticism",
             "weight": 0.8,
-            "evidence_step": 10
+            "evidence_step": 16
+          },
+          {
+            "theme": "disinterest",
+            "weight": 0.2,
+            "evidence_step": 17
           }
         ],
         "divisions": [
@@ -296,54 +351,16 @@
             "share": 1.0,
             "faction": "experts",
             "concerns": [
-              "ignoring the issue"
+              "ignoring the topic"
             ]
           }
         ],
         "dominant_emotions": [
-          "negativity"
+          "disinterest"
         ],
         "key_quotes": [],
         "source_step_count": 5,
         "source_agent_count": 200,
-        "llm_provider": "ollama",
-        "llm_model": "llama3.1:8b",
-        "is_fallback_stub": false
-      },
-      {
-        "opinion_id": "04f7fe8b-fa20-4675-9c43-9f1ed2638022",
-        "simulation_id": "6c539263-fa5e-40ce-9fd2-c9c44e2226e7",
-        "community_id": "af9e47b0-d53e-c239-b198-7c23f6a3963a",
-        "step": 12,
-        "summary": "The community remains largely unchanged, with a dominant sentiment of collapsing and a lack of adoption or belief change.",
-        "sentiment_trend": "collapsing",
-        "themes": [
-          {
-            "theme": "Lack of Adoption",
-            "weight": 1.0,
-            "evidence_step": 11
-          },
-          {
-            "theme": "Negative Beliefs",
-            "weight": 0.9,
-            "evidence_step": 10
-          }
-        ],
-        "divisions": [
-          {
-            "share": 0.3,
-            "faction": "Influencers",
-            "concerns": [
-              "Negative beliefs among influencers"
-            ]
-          }
-        ],
-        "dominant_emotions": [
-          "negativity"
-        ],
-        "key_quotes": [],
-        "source_step_count": 5,
-        "source_agent_count": 300,
         "llm_provider": "ollama",
         "llm_model": "llama3.1:8b",
         "is_fallback_stub": false
@@ -354,73 +371,109 @@
     {
       "step": 0,
       "adoption_rate": 0.0,
-      "mean_sentiment": -0.007793521196566756,
+      "mean_sentiment": -0.007715561241970827,
       "n_emergent": 0
     },
     {
       "step": 1,
       "adoption_rate": 0.0,
-      "mean_sentiment": -0.013689564606731094,
+      "mean_sentiment": -0.013650560259262463,
       "n_emergent": 0
     },
     {
       "step": 2,
       "adoption_rate": 0.0,
-      "mean_sentiment": -0.01942127471801278,
+      "mean_sentiment": -0.019473240538766777,
       "n_emergent": 0
     },
     {
       "step": 3,
-      "adoption_rate": 0.0,
-      "mean_sentiment": -0.02530753537862816,
+      "adoption_rate": 0.00022222222222222223,
+      "mean_sentiment": -0.025192315583528812,
       "n_emergent": 0
     },
     {
       "step": 4,
-      "adoption_rate": 0.00022222222222222223,
-      "mean_sentiment": -0.031117352343665364,
+      "adoption_rate": 0.0006666666666666666,
+      "mean_sentiment": -0.030747276490759146,
       "n_emergent": 0
     },
     {
       "step": 5,
-      "adoption_rate": 0.0011111111111111111,
-      "mean_sentiment": -0.03674330159070993,
+      "adoption_rate": 0.0006666666666666666,
+      "mean_sentiment": -0.036396945564109814,
       "n_emergent": 0
     },
     {
       "step": 6,
-      "adoption_rate": 0.0013333333333333333,
-      "mean_sentiment": -0.04259419254861597,
+      "adoption_rate": 0.0006666666666666666,
+      "mean_sentiment": -0.042132935811276376,
       "n_emergent": 0
     },
     {
       "step": 7,
-      "adoption_rate": 0.0015555555555555555,
-      "mean_sentiment": -0.04870236880172953,
+      "adoption_rate": 0.0006666666666666666,
+      "mean_sentiment": -0.04811766517278395,
       "n_emergent": 0
     },
     {
       "step": 8,
-      "adoption_rate": 0.0017777777777777779,
-      "mean_sentiment": -0.054843915694853945,
+      "adoption_rate": 0.0006666666666666666,
+      "mean_sentiment": -0.05406539239894773,
       "n_emergent": 0
     },
     {
       "step": 9,
-      "adoption_rate": 0.0017777777777777779,
-      "mean_sentiment": -0.14908841174905943,
+      "adoption_rate": 0.0008888888888888889,
+      "mean_sentiment": -0.1487533483141666,
       "n_emergent": 0
     },
     {
       "step": 10,
-      "adoption_rate": 0.0017777777777777779,
-      "mean_sentiment": -0.20367869180897993,
+      "adoption_rate": 0.0008888888888888889,
+      "mean_sentiment": -0.20080997073646886,
       "n_emergent": 0
     },
     {
       "step": 11,
-      "adoption_rate": 0.0017777777777777779,
-      "mean_sentiment": -0.2340651171127919,
+      "adoption_rate": 0.0011111111111111111,
+      "mean_sentiment": -0.23349351030993384,
+      "n_emergent": 0
+    },
+    {
+      "step": 12,
+      "adoption_rate": 0.0011111111111111111,
+      "mean_sentiment": -0.25366713153580167,
+      "n_emergent": 0
+    },
+    {
+      "step": 13,
+      "adoption_rate": 0.0013333333333333333,
+      "mean_sentiment": -0.268917956246068,
+      "n_emergent": 0
+    },
+    {
+      "step": 14,
+      "adoption_rate": 0.0013333333333333333,
+      "mean_sentiment": -0.2818780876377754,
+      "n_emergent": 0
+    },
+    {
+      "step": 15,
+      "adoption_rate": 0.0015555555555555555,
+      "mean_sentiment": -0.2944396116412148,
+      "n_emergent": 0
+    },
+    {
+      "step": 16,
+      "adoption_rate": 0.0015555555555555555,
+      "mean_sentiment": -0.30679670659622793,
+      "n_emergent": 0
+    },
+    {
+      "step": 17,
+      "adoption_rate": 0.0015555555555555555,
+      "mean_sentiment": -0.31945230878718717,
       "n_emergent": 0
     }
   ]

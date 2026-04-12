@@ -201,6 +201,12 @@ class SimulationOrchestrator:
         if not config.communities:
             raise ValueError("communities list must not be empty")
 
+        # Reset per-simulation cascade-detector state (e.g. the
+        # ``_slow_adoption_fired`` one-shot guard). Without this, a
+        # slow_adoption event from the prior simulation would silently
+        # suppress the detector for the new one. Round 8-8 fix.
+        self._step_runner._cascade_detector.reset()
+
         sim_id = config.simulation_id
         seed = config.random_seed
 
