@@ -244,7 +244,7 @@ export default function ScenarioOpinionsPage() {
   }, [steps]);
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
+    <div className="h-full w-full flex flex-col overflow-hidden bg-[var(--background)]">
       {/* Nav */}
       <PageNav
         breadcrumbs={[

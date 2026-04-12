@@ -175,7 +175,7 @@ export default function ConversationThreadPage() {
 
   if (!t) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-[var(--background)]">
+      <div className="h-full w-full flex items-center justify-center bg-[var(--background)]">
         <div className="max-w-md text-center flex flex-col items-center gap-4 p-8">
           <h2 className="text-xl font-semibold text-[var(--foreground)]">
             No conversation data
@@ -202,7 +202,7 @@ export default function ConversationThreadPage() {
   const breadcrumbCommunityLabel = communityId ?? "community";
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
+    <div className="h-full w-full flex flex-col overflow-hidden bg-[var(--background)]">
       {/* Nav */}
       <PageNav
         breadcrumbs={[

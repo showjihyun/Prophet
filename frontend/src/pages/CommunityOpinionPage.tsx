@@ -193,7 +193,7 @@ export default function CommunityOpinionPage() {
   const sentColor = sentimentTextClass(meta.sentiment);
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
+    <div className="h-full w-full flex flex-col overflow-hidden bg-[var(--background)]">
       {/* Nav */}
       <PageNav
         breadcrumbs={[
