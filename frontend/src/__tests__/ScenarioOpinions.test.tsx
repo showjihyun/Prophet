@@ -1,12 +1,17 @@
 /**
- * Auto-generated from SPEC: docs/spec/ui/UI_13_SCENARIO_OPINIONS.md
- * SPEC Version: 0.1.0
- * Generated BEFORE implementation — tests define the contract.
+ * ScenarioOpinionsPage contract tests.
  *
- * @spec docs/spec/ui/UI_13_SCENARIO_OPINIONS.md
+ * @spec docs/spec/27_OPINIONS_SPEC.md#opinions-l1
+ * SPEC Version: 0.1.0
+ *
+ * Originally auto-generated from the (IP-protected, off-disk)
+ * docs/spec/ui/UI_13_SCENARIO_OPINIONS.md before implementation.
+ * Now tracked under the on-disk SPEC 27.
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { MemoryRouter } from 'react-router-dom';
 import { useSimulationStore } from '@/store/simulationStore';
 import ScenarioOpinionsPage from '@/pages/ScenarioOpinionsPage';
@@ -141,7 +146,7 @@ describe('ScenarioOpinionsPage (UI-13)', () => {
     });
   });
 
-  /** @spec UI_13_SCENARIO_OPINIONS.md#community-opinion-cards */
+  /** @spec 27_OPINIONS_SPEC.md#opinions-l1 */
   describe('Community Opinion Cards', () => {
     it('renders 5 community opinion cards', () => {
       renderPage();
@@ -168,6 +173,82 @@ describe('ScenarioOpinionsPage (UI-13)', () => {
     it('renders section title "Community Opinion Breakdown"', () => {
       renderPage();
       expect(screen.getByText('Community Opinion Breakdown')).toBeInTheDocument();
+    });
+  });
+
+  /** @spec 27_OPINIONS_SPEC.md#opinions-l1-stat — AC-L1-02 / AC-L1-03 */
+  describe('Stat card delta contract', () => {
+    it('AC-L1-02: with only one step in store, change line is absent on every stat card', () => {
+      renderPage();
+      // None of the hard-coded demo deltas should appear.
+      expect(screen.queryByText(/from yesterday/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/124 today/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/12 new/)).not.toBeInTheDocument();
+      // The literal "High" Polarization tag is also a hard-coded leftover.
+      expect(screen.queryByText(/^High$/)).not.toBeInTheDocument();
+    });
+
+    it('AC-L1-02: with two steps in store, change line is computed from prev step', () => {
+      const prevStep = {
+        ...MOCK_STEP,
+        step: 0,
+        mean_sentiment: 0.1,           // 0.2 - 0.1 = +0.10
+        sentiment_variance: 0.2,       // 0.1 - 0.2 = -0.10  (lower polarization is good → "positive")
+        adoption_rate: 0.3,            // *1000 → 300; latest 400; diff = +100
+        community_metrics: {
+          ...MOCK_STEP.community_metrics,
+          alpha: { ...MOCK_STEP.community_metrics.alpha, new_propagation_count: 10 },
+        },
+      };
+      useSimulationStore.setState({
+        simulation: MOCK_SIMULATION as never,
+        steps: [prevStep as never, MOCK_STEP as never],
+        latestStep: MOCK_STEP as never,
+        status: 'completed',
+      });
+      renderPage();
+      // Avg sentiment delta: +0.10 from prev step
+      expect(screen.getByText(/\+0\.10 from prev step/)).toBeInTheDocument();
+      // Active cascades delta: scaled adoption_rate diff = +100 (from prev step)
+      expect(screen.getByText(/\+100 from prev step/)).toBeInTheDocument();
+    });
+
+    it('AC-L1-03: Polarization uses inverted changeType (a decrease is rendered as positive)', () => {
+      const prevStep = {
+        ...MOCK_STEP,
+        step: 0,
+        sentiment_variance: 0.2, // latest 0.1 → diff = -0.10, inverted = positive tone
+      };
+      useSimulationStore.setState({
+        simulation: MOCK_SIMULATION as never,
+        steps: [prevStep as never, MOCK_STEP as never],
+        latestStep: MOCK_STEP as never,
+        status: 'completed',
+      });
+      renderPage();
+      const polLabel = screen.getByText('Polarization');
+      // The card root holds the StatCard. Walk up to the card and look for the
+      // sentiment-positive class on the change pill (inverted: decrease == good).
+      const card = polLabel.closest('[data-testid="stat-card"]');
+      expect(card).not.toBeNull();
+      const pill = within(card as HTMLElement).getByText(/-0\.10 from prev step/);
+      expect(pill.className).toContain('text-[var(--sentiment-positive)]');
+    });
+  });
+
+  /** @spec 27_OPINIONS_SPEC.md#opinions-sentiment-color — AC-L1-04 */
+  describe('Shared sentiment colour utility', () => {
+    it('AC-L1-04: file imports sentimentTextClass from utils/sentiment', () => {
+      const filePath = path.resolve(
+        __dirname,
+        '../pages/ScenarioOpinionsPage.tsx',
+      );
+      const src = readFileSync(filePath, 'utf-8');
+      expect(src).toMatch(/from\s+["']\.\.\/utils\/sentiment["']/);
+      expect(src).toContain('sentimentTextClass');
+      // Inline ternaries on the threshold are forbidden.
+      expect(src).not.toMatch(/avg_sentiment\s*>\s*0\.1/);
+      expect(src).not.toMatch(/c\.avg_sentiment\s*<\s*-0\.1/);
     });
   });
 });

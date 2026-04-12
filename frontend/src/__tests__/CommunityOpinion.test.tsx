@@ -1,18 +1,30 @@
 /**
- * Auto-generated from SPEC: docs/spec/ui/UI_14_COMMUNITY_OPINION.md
- * SPEC Version: 0.1.0
- * Generated BEFORE implementation — tests define the contract.
+ * CommunityOpinionPage contract tests.
  *
- * @spec docs/spec/ui/UI_14_COMMUNITY_OPINION.md
+ * @spec docs/spec/27_OPINIONS_SPEC.md#opinions-l2
+ * SPEC Version: 0.1.0
+ *
+ * Originally auto-generated from the (IP-protected, off-disk)
+ * docs/spec/ui/UI_14_COMMUNITY_OPINION.md before implementation.
+ * Now tracked under the on-disk SPEC 27.
  */
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { useSimulationStore } from '@/store/simulationStore';
 import CommunityOpinionPage from '@/pages/CommunityOpinionPage';
 
+// `useCommunityThreads` returns this — tests override per-case via mockReturnValue.
+const useCommunityThreadsMock = vi.fn(() => ({
+  data: undefined as undefined | { threads: unknown[] },
+  isLoading: false,
+}));
+
 vi.mock('@/api/queries', () => ({
   useSimulationSteps: () => ({ data: undefined, isLoading: false }),
+  useCommunityThreads: (...args: unknown[]) => useCommunityThreadsMock(...args as []),
   useCommunityOpinionSynthesis: () => ({
     mutate: vi.fn(),
     data: undefined,
@@ -89,6 +101,10 @@ describe('CommunityOpinionPage (UI-14)', () => {
       latestStep: MOCK_STEP as never,
       status: 'completed',
     });
+    useCommunityThreadsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    });
   });
 
   /** @spec UI_14_COMMUNITY_OPINION.md#navigation-bar */
@@ -139,7 +155,7 @@ describe('CommunityOpinionPage (UI-14)', () => {
     });
   });
 
-  /** @spec UI_14_COMMUNITY_OPINION.md#recent-conversations */
+  /** @spec 27_OPINIONS_SPEC.md#opinions-l2-threads */
   describe('Recent Conversations', () => {
     it('renders "Recent Conversations" section', () => {
       renderPage();
@@ -150,6 +166,52 @@ describe('CommunityOpinionPage (UI-14)', () => {
       renderPage();
       const items = screen.getAllByText(/messages/);
       expect(items.length).toBeGreaterThanOrEqual(1);
+    });
+
+    /** AC-L2-02 */
+    it('AC-L2-02: prefers API thread data over step-derived synthetic when API non-empty', () => {
+      useCommunityThreadsMock.mockReturnValue({
+        data: {
+          threads: [
+            {
+              thread_id: 'thr-real-1',
+              topic: 'Tax reform debate',
+              participant_count: 7,
+              message_count: 42,
+              avg_sentiment: 0.3,
+            },
+            {
+              thread_id: 'thr-real-2',
+              topic: 'Climate accord',
+              participant_count: 4,
+              message_count: 11,
+              avg_sentiment: -0.2,
+            },
+          ],
+        },
+        isLoading: false,
+      });
+      renderPage();
+      expect(screen.getByText('Tax reform debate')).toBeInTheDocument();
+      expect(screen.getByText('Climate accord')).toBeInTheDocument();
+      // Real API message counts should win over the step-derived ones.
+      expect(screen.getByText(/42 messages/)).toBeInTheDocument();
+      expect(screen.getByText(/11 messages/)).toBeInTheDocument();
+    });
+  });
+
+  /** @spec 27_OPINIONS_SPEC.md#opinions-sentiment-color — AC-L2-03 */
+  describe('Shared sentiment colour utility', () => {
+    it('AC-L2-03: file imports sentimentTextClass from utils/sentiment', () => {
+      const filePath = path.resolve(
+        __dirname,
+        '../pages/CommunityOpinionPage.tsx',
+      );
+      const src = readFileSync(filePath, 'utf-8');
+      expect(src).toMatch(/from\s+["']\.\.\/utils\/sentiment["']/);
+      expect(src).toContain('sentimentTextClass');
+      expect(src).not.toMatch(/meta\.sentiment\s*>\s*0\.1/);
+      expect(src).not.toMatch(/meta\.sentiment\s*<\s*-0\.1/);
     });
   });
 });

@@ -1,19 +1,29 @@
 /**
- * Auto-generated from SPEC: docs/spec/ui/UI_15_CONVERSATION_THREAD.md
- * SPEC Version: 0.1.0
- * Generated BEFORE implementation — tests define the contract.
+ * ConversationThreadPage contract tests.
  *
- * @spec docs/spec/ui/UI_15_CONVERSATION_THREAD.md
+ * @spec docs/spec/27_OPINIONS_SPEC.md#opinions-l3
+ * SPEC Version: 0.1.0
+ *
+ * Originally auto-generated from the (IP-protected, off-disk)
+ * docs/spec/ui/UI_15_CONVERSATION_THREAD.md before implementation.
+ * Now tracked under the on-disk SPEC 27.
  */
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { useSimulationStore } from '@/store/simulationStore';
 import ConversationThreadPage from '@/pages/ConversationThreadPage';
 
+const useCommunityThreadMock = vi.fn(() => ({
+  data: undefined as undefined | unknown,
+  isLoading: false,
+}));
+
 vi.mock('@/api/queries', () => ({
   useSimulationSteps: () => ({ data: undefined, isLoading: false }),
-  useCommunityThread: () => ({ data: undefined, isLoading: false }),
+  useCommunityThread: (...args: unknown[]) => useCommunityThreadMock(...args as []),
 }));
 
 const makeStep = (step: number, sentiment: number) => ({
@@ -82,6 +92,10 @@ describe('ConversationThreadPage (UI-15)', () => {
       steps: MOCK_STEPS as never[],
       latestStep: MOCK_STEPS[MOCK_STEPS.length - 1] as never,
       status: 'completed',
+    });
+    useCommunityThreadMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
     });
   });
 
@@ -152,6 +166,76 @@ describe('ConversationThreadPage (UI-15)', () => {
       // idx > 0 → is_reply=true → data-testid="thread-reply"
       const replies = document.querySelectorAll('[data-testid="thread-reply"]');
       expect(replies.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  /** @spec 27_OPINIONS_SPEC.md#opinions-l3 — AC-L3-01 */
+  describe('API thread priority', () => {
+    it('AC-L3-01: when API returns a thread, renders API topic + messages over derived', () => {
+      useCommunityThreadMock.mockReturnValue({
+        data: {
+          thread_id: 't-api-1',
+          topic: 'Universal basic income debate',
+          participant_count: 5,
+          message_count: 9,
+          avg_sentiment: 0.42,
+          messages: [
+            {
+              message_id: 'm-1',
+              agent_id: 'agent-001',
+              community_id: 'alpha',
+              stance: 'Progressive',
+              content: 'UBI would lift millions out of poverty.',
+              reactions: { agree: 7, disagree: 1, nuanced: 2 },
+              is_reply: false,
+              reply_to_id: null,
+            },
+            {
+              message_id: 'm-2',
+              agent_id: 'agent-002',
+              community_id: 'alpha',
+              stance: 'Conservative',
+              content: 'It would distort labour markets.',
+              reactions: { agree: 4, disagree: 6, nuanced: 1 },
+              is_reply: true,
+              reply_to_id: 'm-1',
+            },
+          ],
+        },
+        isLoading: false,
+      });
+      renderPage();
+      expect(screen.getByText('Universal basic income debate')).toBeInTheDocument();
+      expect(screen.getByText('UBI would lift millions out of poverty.')).toBeInTheDocument();
+      expect(screen.getByText('It would distort labour markets.')).toBeInTheDocument();
+      // The synthetic step-derived "Step-1" / "Step-2" agent IDs MUST NOT appear.
+      expect(screen.queryByText('Step-1')).not.toBeInTheDocument();
+      expect(screen.queryByText('Step-2')).not.toBeInTheDocument();
+    });
+  });
+
+  /** @spec 27_OPINIONS_SPEC.md#opinions-l3 — AC-L3-02 */
+  describe('Breadcrumb derived from routed communityId', () => {
+    it('AC-L3-02: middle breadcrumb entry contains the routed communityId, not a hard-coded label', () => {
+      renderPage('gamma', 'thr-1');
+      const nav = screen.getByTestId('page-nav');
+      expect(nav.textContent).toContain('gamma');
+      expect(nav.textContent).not.toContain('Alpha');
+    });
+  });
+
+  /** @spec 27_OPINIONS_SPEC.md#opinions-sentiment-color — AC-L3-03 */
+  describe('Shared sentiment colour utility', () => {
+    it('AC-L3-03: file imports sentimentTextClass from utils/sentiment', () => {
+      const filePath = path.resolve(
+        __dirname,
+        '../pages/ConversationThreadPage.tsx',
+      );
+      const src = readFileSync(filePath, 'utf-8');
+      expect(src).toMatch(/from\s+["']\.\.\/utils\/sentiment["']/);
+      expect(src).toContain('sentimentTextClass');
+      expect(src).not.toMatch(/t\.avg_sentiment\s*>\s*0\.1/);
+      expect(src).not.toMatch(/t\.avg_sentiment\s*<\s*-0\.1/);
     });
   });
 });

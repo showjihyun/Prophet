@@ -2030,5 +2030,23 @@
     "default_size": 99,
     "description": "",
     "personality_profile": {}
+  },
+  "a2ea9e3e-527e-483d-a582-6d44b2368940": {
+    "template_id": "a2ea9e3e-527e-483d-a582-6d44b2368940",
+    "name": "Test Community",
+    "agent_type": "test_type",
+    "default_size": 50,
+    "description": "Test description",
+    "personality_profile": {
+      "openness": 0.5
+    }
+  },
+  "6ac2ec2d-2786-4343-879f-7793d160b73c": {
+    "template_id": "6ac2ec2d-2786-4343-879f-7793d160b73c",
+    "name": "Updated Name",
+    "agent_type": "updated_type",
+    "default_size": 99,
+    "description": "",
+    "personality_profile": {}
   }
 }

@@ -1,13 +1,14 @@
 /**
- * CommunityOpinionPage — Community-level opinion clusters + conversations (UI-14).
- * @spec docs/spec/ui/UI_14_COMMUNITY_OPINION.md
+ * CommunityOpinionPage — Community-level opinion clusters + conversations (Level 2).
+ * @spec docs/spec/27_OPINIONS_SPEC.md#opinions-l2
  */
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import EliteLLMNarrativePanel from "../components/community/EliteLLMNarrativePanel";
-import { useSimulationSteps } from "../api/queries";
+import { useSimulationSteps, useCommunityThreads } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
+import { sentimentTextClass } from "../utils/sentiment";
 
 /* ------------------------------------------------------------------ */
 /* Mock Data                                                           */
@@ -86,6 +87,14 @@ export default function CommunityOpinionPage() {
     }
   }, [stepsQuery.data, steps.length]);
 
+  // Real recent-conversation threads from the backend (preferred over the
+  // synthetic step-derived list). SPEC 27 §5.2 — opinions-l2-threads.
+  const threadsQuery = useCommunityThreads(simId, communityId ?? null);
+  const apiThreads = useMemo(
+    () => threadsQuery.data?.threads ?? [],
+    [threadsQuery.data],
+  );
+
   // Derive community meta from store steps
   const derivedMeta = useMemo(() => {
     if (!communityId || steps.length === 0) return null;
@@ -113,7 +122,7 @@ export default function CommunityOpinionPage() {
       const cm = step.community_metrics?.[communityId];
       const adoptRate = cm?.adoption_rate ?? 0;
       const support = Math.round(adoptRate * 100);
-      const oppose = Math.round(Math.max(0, (cm?.mean_belief ?? 0) < 0 ? -cm!.mean_belief * 100 : 0));
+      const oppose = cm && cm.mean_belief < 0 ? Math.round(-cm.mean_belief * 100) : 0;
       return {
         cluster_id: `step-${step.step}`,
         topic_name: `Step ${step.step} Activity`,
@@ -127,14 +136,17 @@ export default function CommunityOpinionPage() {
   // Build conversations from action_distribution in steps
   const derivedConversations = useMemo<ConversationData[]>(() => {
     if (steps.length === 0) return [];
-    return steps.slice(-4).reverse().map((step, idx) => ({
-      thread_id: `step-thread-${step.step}`,
-      topic_title: `Step ${step.step}: ${Object.entries(step.action_distribution ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "activity"} dominant (${Math.round(step.adoption_rate * 100)}% adoption)`,
-      participant_ids: Object.keys(step.community_metrics ?? {}).slice(0, 4),
-      message_count: step.llm_calls_this_step,
-      relative_time: `${idx + 1} step${idx > 0 ? "s" : ""} ago`,
-    }));
-  }, [steps]);
+    return steps.slice(-4).reverse().map((step, idx) => {
+      const cm = communityId ? step.community_metrics?.[communityId] : null;
+      return {
+        thread_id: `step-thread-${step.step}`,
+        topic_title: `Step ${step.step}: ${Object.entries(step.action_distribution ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "activity"} dominant (${Math.round(step.adoption_rate * 100)}% adoption)`,
+        participant_ids: Object.keys(step.community_metrics ?? {}).slice(0, 4),
+        message_count: cm?.new_propagation_count ?? step.llm_calls_this_step,
+        relative_time: `${idx + 1} step${idx > 0 ? "s" : ""} ago`,
+      };
+    });
+  }, [steps, communityId]);
 
   // Real-data-only: derive meta from store, or fall back to a minimal
   // placeholder keyed on the URL communityId (name + color only, counts = 0).
@@ -155,12 +167,30 @@ export default function CommunityOpinionPage() {
     return copy;
   }, [derivedClusters, sortMode]);
   const clusters = sortedClusters;
-  const conversations = derivedConversations;
-  // "Demo" no longer means "mock data" — it means "no step data has arrived,
-  // so the opinion page is showing an empty state."
-  const isDemo = derivedClusters.length === 0;
 
-  const sentColor = meta.sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : meta.sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";
+  // SPEC 27 §5.2 — prefer real API threads; fall back to step-derived only
+  // when the API list is empty (older sims with no persisted threads).
+  const conversations: ConversationData[] = useMemo(() => {
+    if (apiThreads.length > 0) {
+      return apiThreads.map((t) => ({
+        thread_id: t.thread_id,
+        topic_title: t.topic,
+        // Synthesize anonymous participant slugs (the API only returns count).
+        participant_ids: Array.from({ length: Math.min(4, t.participant_count) }, (_, i) => `p${i + 1}`),
+        message_count: t.message_count,
+        // Sentiment summary instead of timestamp — the API doesn't expose
+        // a created_at, and avg_sentiment is the most useful at-a-glance signal.
+        relative_time: `${t.avg_sentiment >= 0 ? "+" : ""}${t.avg_sentiment.toFixed(2)} avg`,
+      }));
+    }
+    return derivedConversations;
+  }, [apiThreads, derivedConversations]);
+
+  // "Demo" no longer means "mock data" — it means "no step data has arrived
+  // AND no real threads exist, so the opinion page is showing an empty state."
+  const isDemo = derivedClusters.length === 0 && apiThreads.length === 0;
+
+  const sentColor = sentimentTextClass(meta.sentiment);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
