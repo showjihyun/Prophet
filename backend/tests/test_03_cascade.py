@@ -141,14 +141,69 @@ class TestPolarizationDetection:
         cid = uuid4()
         detector = CascadeDetector()
 
+        # Round 8-8: default threshold lowered from 0.4 → 0.05 to
+        # match realistic belief-variance ranges in Prophet pilots.
+        # A 0.01 variance is below the new threshold and must not fire.
         current = _make_step_result(
             step=1,
-            community_variances={cid: 0.2},
+            community_variances={cid: 0.01},
         )
 
         events = detector.detect(current, [])
         polar_events = [e for e in events if e.event_type == "polarization"]
         assert len(polar_events) == 0
+
+    def test_realistic_pilot_variance_fires_polarization(self):
+        """Round 8-8 regression: the pilots in docs/USE_CASE_PILOTS.md
+        show community belief variances in the 0.05-0.07 range for
+        hostile-framing scenarios. The old 0.4 threshold meant none of
+        those pilots ever fired polarization, which contradicted the
+        README's "polarization auto-detection" claim. The 0.05 default
+        now fires cleanly on realistic pilot data.
+        """
+        cid = uuid4()
+        detector = CascadeDetector()
+
+        current = _make_step_result(
+            step=3,
+            community_variances={cid: 0.065},  # typical UC1 baseline variance
+        )
+
+        events = detector.detect(current, [])
+        polar_events = [e for e in events if e.event_type == "polarization"]
+        assert len(polar_events) == 1
+        assert polar_events[0].community_id == cid
+
+    def test_reset_clears_slow_adoption_guard(self):
+        """Round 8-8 regression: the ``_slow_adoption_fired`` one-shot
+        guard used to leak across simulations because the orchestrator
+        held a single StepRunner (and therefore a single CascadeDetector)
+        for its entire lifetime. After firing slow_adoption on
+        simulation A, simulation B would never fire it until adoption
+        recovered above the threshold first. ``reset()`` clears the
+        guard explicitly on simulation creation.
+        """
+        detector = CascadeDetector()
+        # Simulate slow adoption: 5 steps with per-step delta < 0.02
+        # Using total_agents=1000 so integer adopted_counts map to
+        # clean percentages; deltas of 5 agents = 0.005 per step.
+        history: list = []
+        for step in range(1, 6):
+            adopted = 5 * step  # 5, 10, 15, 20, 25 agents
+            current = _make_step_result(
+                step=step, total_agents=1000, adopted_count=adopted,
+            )
+            detector.detect(current, history)
+            history.append(current)
+
+        assert detector._slow_adoption_fired is True, (
+            "slow_adoption one-shot guard should be set after a stall episode"
+        )
+
+        detector.reset()
+        assert detector._slow_adoption_fired is False, (
+            "reset() must clear the one-shot guard"
+        )
 
 
 @pytest.mark.phase4

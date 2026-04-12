@@ -48,6 +48,22 @@ class CascadeDetector:
         self._config = config or CascadeConfig()
         self._slow_adoption_fired: bool = False
 
+    def reset(self) -> None:
+        """Reset any one-shot per-simulation state.
+
+        The orchestrator holds one ``StepRunner`` (and therefore one
+        ``CascadeDetector``) across the lifetime of the process, but
+        emergent-event guards like ``_slow_adoption_fired`` are
+        semantically per-simulation. Without an explicit reset, a
+        slow_adoption event that fired in simulation A would silently
+        suppress the detector for simulation B — unless B happened to
+        recover above the threshold first, which toggles the guard
+        back to False on its own.
+
+        SPEC: docs/spec/03_DIFFUSION_SPEC.md#cascadedetector
+        """
+        self._slow_adoption_fired = False
+
     def detect(
         self,
         step_results: StepResult,

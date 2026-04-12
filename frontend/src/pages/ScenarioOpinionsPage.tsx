@@ -1,6 +1,6 @@
 /**
- * ScenarioOpinionsPage — Scenario-wide opinion landscape (UI-13).
- * @spec docs/spec/ui/UI_13_SCENARIO_OPINIONS.md
+ * ScenarioOpinionsPage — Scenario-wide opinion landscape (Level 1).
+ * @spec docs/spec/27_OPINIONS_SPEC.md#opinions-l1
  */
 import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +9,11 @@ import StatCard from "../components/shared/StatCard";
 import OverallOpinionPanel from "../components/community/OverallOpinionPanel";
 import { useSimulationSteps } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
+import {
+  sentimentTextClass,
+  formatDelta,
+  deltaChangeType,
+} from "../utils/sentiment";
 
 const FactionMapView = lazy(() => import("../components/graph/FactionMapView"));
 
@@ -61,12 +66,7 @@ function SentimentBar({ dist }: { dist: { positive: number; neutral: number; neg
 /* ------------------------------------------------------------------ */
 
 function CommunityOpinionCard({ c, onView }: { c: CommunityOpinion; onView: () => void }) {
-  const sentimentColor =
-    c.avg_sentiment > 0.1
-      ? "text-[var(--sentiment-positive)]"
-      : c.avg_sentiment < -0.1
-        ? "text-[var(--destructive)]"
-        : "text-[var(--muted-foreground)]";
+  const sentimentColor = sentimentTextClass(c.avg_sentiment);
 
   const stanceLabel =
     c.dominant_stance === "positive"
@@ -150,17 +150,17 @@ export default function ScenarioOpinionsPage() {
     const latestStep = steps.length > 0 ? steps[steps.length - 1] : null;
     if (!latestStep || !latestStep.community_metrics) return [];
     return Object.entries(latestStep.community_metrics).map(([cid, metrics], idx) => {
-      const beliefScore = metrics.mean_belief;
-      const positivePct = Math.round(Math.max(0, beliefScore) * 100);
-      const negativePct = Math.round(Math.max(0, -beliefScore) * 100);
+      const clamped = Math.max(-1, Math.min(1, metrics.mean_belief));
+      const positivePct = Math.round(Math.max(0, clamped) * 100);
+      const negativePct = Math.round(Math.max(0, -clamped) * 100);
       const neutralPct = 100 - positivePct - negativePct;
       const dominant: CommunityOpinion["dominant_stance"] =
-        beliefScore > 0.1 ? "positive" : beliefScore < -0.1 ? "negative" : "mixed";
+        clamped > 0.1 ? "positive" : clamped < -0.1 ? "negative" : "mixed";
       return {
         community_id: cid,
         community_name: `Community ${cid}`,
         agent_count: metrics.adoption_count > 0 ? Math.round(metrics.adoption_count / Math.max(0.001, metrics.adoption_rate)) : 0,
-        avg_sentiment: beliefScore,
+        avg_sentiment: clamped,
         conversation_count: metrics.new_propagation_count,
         dominant_stance: dominant,
         dominant_pct: dominant === "positive" ? positivePct : dominant === "negative" ? negativePct : neutralPct,
@@ -203,6 +203,45 @@ export default function ScenarioOpinionsPage() {
     community_count: 0,
   };
   const isDemo = derivedCommunities.length === 0;
+
+  // Real prev-vs-current deltas for the 4 stat cards.
+  // SPEC: 27_OPINIONS_SPEC.md#opinions-l1-stat (AC-L1-02 / AC-L1-03)
+  // When fewer than 2 steps exist, deltas are undefined and the change line
+  // is not rendered (StatCard suppresses an absent `change` prop).
+  const statDeltas = useMemo(() => {
+    if (steps.length < 2) {
+      return {
+        sentiment: undefined as string | undefined,
+        sentimentType: "neutral" as const,
+        polarization: undefined as string | undefined,
+        polarizationType: "neutral" as const,
+        conversations: undefined as string | undefined,
+        conversationsType: "neutral" as const,
+        cascades: undefined as string | undefined,
+        cascadesType: "neutral" as const,
+      };
+    }
+    const prev = steps[steps.length - 2];
+    const cur = steps[steps.length - 1];
+    const sumProp = (m: typeof prev.community_metrics) =>
+      Object.values(m ?? {}).reduce((a, x) => a + x.new_propagation_count, 0);
+    const sentDiff = cur.mean_sentiment - prev.mean_sentiment;
+    const polDiff = cur.sentiment_variance - prev.sentiment_variance;
+    const convDiff = sumProp(cur.community_metrics) - sumProp(prev.community_metrics);
+    const casDiff =
+      Math.round(cur.adoption_rate * 1000) - Math.round(prev.adoption_rate * 1000);
+    return {
+      sentiment: formatDelta(sentDiff, "from prev step"),
+      sentimentType: deltaChangeType(sentDiff),
+      polarization: formatDelta(polDiff, "from prev step"),
+      // Inverted: higher polarization is bad news.
+      polarizationType: deltaChangeType(polDiff, true),
+      conversations: formatDelta(convDiff, "from prev step"),
+      conversationsType: deltaChangeType(convDiff),
+      cascades: formatDelta(casDiff, "from prev step"),
+      cascadesType: deltaChangeType(casDiff),
+    };
+  }, [steps]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
@@ -258,31 +297,31 @@ export default function ScenarioOpinionsPage() {
           <OverallOpinionPanel simulationId={simId} />
         </div>
 
-        {/* 4 Stat cards */}
+        {/* 4 Stat cards — real prev-vs-current deltas (SPEC 27 §4.2) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard
             label="Avg Sentiment"
-            value={`+${s.avg_sentiment.toFixed(2)}`}
-            change="+0.08 from yesterday"
-            changeType="positive"
+            value={`${s.avg_sentiment >= 0 ? "+" : ""}${s.avg_sentiment.toFixed(2)}`}
+            change={statDeltas.sentiment}
+            changeType={statDeltas.sentimentType}
           />
           <StatCard
             label="Polarization"
             value={s.polarization.toFixed(2)}
-            change="High"
-            changeType="negative"
+            change={statDeltas.polarization}
+            changeType={statDeltas.polarizationType}
           />
           <StatCard
             label="Total Conversations"
             value={s.total_conversations.toLocaleString()}
-            change="+124 today"
-            changeType="positive"
+            change={statDeltas.conversations}
+            changeType={statDeltas.conversationsType}
           />
           <StatCard
             label="Active Cascades"
             value={s.active_cascades.toLocaleString()}
-            change="12 new"
-            changeType="neutral"
+            change={statDeltas.cascades}
+            changeType={statDeltas.cascadesType}
           />
         </div>
 

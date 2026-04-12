@@ -128,11 +128,32 @@ class CascadeConfig:
 
     Invariant: all thresholds > 0.
     Violation: raise ValueError.
+
+    Round 8-8 calibration (2026-04-12):
+    - ``polarization_variance_threshold``: lowered 0.4 → 0.05. The old
+      threshold assumed belief variance on [-1, 1] would routinely
+      reach 0.4 (which implies half the community at +1 and half at
+      -1). Realistic pilot data shows community belief variance sits
+      in the 0.03-0.07 range — the belief update dynamics don't push
+      communities to full bimodality. With the old threshold, the
+      polarization detector never fired in any pilot. 0.05 is
+      ~1 standard deviation above the neutral baseline (0.03) and
+      fires cleanly on hostile-framing pilots where real splits form.
+    - ``echo_chamber_ratio``: left at 10.0 but documented as not
+      currently firing on Prophet's default network topology. The
+      default NetworkGenerator (Watts-Strogatz + Barabasi-Albert
+      with ``cross_community_prob=0.02``) produces communities with
+      internal/external edge ratios of ~0.4-0.6 — the preferential
+      attachment creates MORE cross-community bridges than
+      intra-community ties. A true echo-chamber detector needs a
+      belief-isolation metric (low internal variance + large deviation
+      from global mean), not an edge-ratio metric. Tracked as a
+      follow-up in docs/USE_CASE_PILOTS.md.
     """
     viral_cascade_threshold: float = 0.15
     slow_adoption_threshold: float = 0.02  # per-step delta below which adoption is "slow"
     slow_adoption_steps: int = 5
-    polarization_variance_threshold: float = 0.4
+    polarization_variance_threshold: float = 0.05
     collapse_drop_rate: float = 0.20
     echo_chamber_ratio: float = 10.0
 

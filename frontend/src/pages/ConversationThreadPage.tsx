@@ -1,6 +1,6 @@
 /**
- * ConversationThreadPage — Agent conversation thread with reactions (UI-15).
- * @spec docs/spec/ui/UI_15_CONVERSATION_THREAD.md
+ * ConversationThreadPage — Agent conversation thread with reactions (Level 3).
+ * @spec docs/spec/27_OPINIONS_SPEC.md#opinions-l3
  */
 import { useMemo, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -8,6 +8,7 @@ import PageNav from "../components/shared/PageNav";
 import { useSimulationStore } from "../store/simulationStore";
 import { type ThreadDetail } from "../api/client";
 import { useCommunityThread } from "../api/queries";
+import { sentimentTextClass } from "../utils/sentiment";
 
 function useReactions() {
   const [reacted, setReacted] = useState<Record<string, string>>({});
@@ -194,7 +195,11 @@ export default function ConversationThreadPage() {
     );
   }
 
-  const sentColor = t.avg_sentiment > 0.1 ? "text-[var(--sentiment-positive)]" : t.avg_sentiment < -0.1 ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]";
+  const sentColor = sentimentTextClass(t.avg_sentiment);
+  // SPEC 27 §6.1 — middle breadcrumb entry MUST be the routed communityId,
+  // not a hard-coded "Alpha". We render the raw id so callers can deep-link
+  // by id and the breadcrumb stays in sync.
+  const breadcrumbCommunityLabel = communityId ?? "community";
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]">
@@ -202,7 +207,7 @@ export default function ConversationThreadPage() {
       <PageNav
         breadcrumbs={[
           { label: simulation?.name ?? "Simulation", href: "/projects/p1" },
-          { label: "Alpha", href: `/opinions/${communityId ?? "alpha"}` },
+          { label: breadcrumbCommunityLabel, href: `/opinions/${communityId ?? ""}` },
           { label: "Conversation" },
         ]}
         actions={

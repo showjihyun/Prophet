@@ -77,6 +77,7 @@ that combines LLM + GraphRAG + viral diffusion.
 | `22_CONVERSATION_THREAD_SPEC.md` | Real thread capture + storage + API | Current |
 | `23_EXPERT_LLM_SPEC.md` | Expert engine LLM integration (+ rule-based fallback) | Current |
 | `26_ANALYTICS_SPEC.md` | Post-Run Analytics page (as-built; replaces IP-protected `07_FRONTEND_SPEC.md#simulationsidanalytics`) | Current |
+| `27_OPINIONS_SPEC.md` | Three-level Opinions hierarchy (as-built; replaces IP-protected `ui/UI_13/14/15`) | Current |
 
 > **Consolidation history**: the three earlier files `19_SIMULATION_QUALITY_SPEC.md`,
 > `20_SIMULATION_QUALITY_P2_SPEC.md`, and `21_SIMULATION_QUALITY_P3_SPEC.md` were merged

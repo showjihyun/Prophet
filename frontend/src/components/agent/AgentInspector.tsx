@@ -210,7 +210,7 @@ export default function AgentInspector({
       <div
         ref={drawerRef}
         data-testid="agent-inspector"
-        className="fixed right-0 top-0 bottom-0 z-50 w-80 flex flex-col bg-[var(--card)] border-l border-[var(--border)] shadow-2xl overflow-hidden"
+        className="fixed right-0 top-0 bottom-0 z-50 w-[370px] flex flex-col bg-[var(--card)] border-l border-[var(--border)] shadow-2xl overflow-hidden"
         style={{ animation: "slideInRight 0.2s ease-out" }}
       >
         {/* Header */}
