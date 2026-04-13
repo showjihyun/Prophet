@@ -136,7 +136,7 @@ export default function SimulationPage() {
 
   if (!simulation) {
     return (
-      <div className="h-screen w-screen flex flex-col bg-[var(--background)]">
+      <div className="h-full w-full flex flex-col bg-[var(--background)]">
         <ControlPanel />
         <WorkflowStepper />
         <div className="flex-1 flex items-center justify-center">
@@ -170,7 +170,7 @@ export default function SimulationPage() {
   return (
     <div
       data-testid="simulation-page"
-      className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--background)]"
+      className="h-full w-full flex flex-col overflow-hidden bg-[var(--background)]"
     >
       {/* Zone 1: Simulation Control Bar — 56px */}
       <ControlPanel />

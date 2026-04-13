@@ -61,12 +61,14 @@ class ErrorBoundary extends Component<
   }
 }
 
-/** Layout with sidebar for all pages except SimulationPage */
-function SidebarLayout() {
+/** Layout with sidebar. Most pages mount with the sidebar expanded;
+ *  pass ``defaultCollapsed`` for pages that need more horizontal
+ *  room (the 3D simulation workspace starts with a 60px icon rail). */
+function SidebarLayout({ defaultCollapsed = false }: { defaultCollapsed?: boolean }) {
   return (
     <div className="flex h-screen bg-[var(--background)]">
-      <AppSidebar />
-      <main className="flex-1 overflow-auto">
+      <AppSidebar defaultCollapsed={defaultCollapsed} />
+      <main className="flex-1 overflow-auto min-w-0">
         <Outlet />
       </main>
     </div>
@@ -88,10 +90,15 @@ function App() {
             {/* Default: redirect to Projects */}
             <Route path="/" element={<Navigate to="/projects" replace />} />
 
-            {/* Simulation detail workspace — full screen, no sidebar */}
-            <Route path="/simulation/:simulationId" element={<SimulationPage />} />
-            {/* Legacy alias (plural) — keep for any external bookmarks */}
-            <Route path="/simulations/:simulationId" element={<SimulationPage />} />
+            {/* Simulation detail workspace — sidebar mounted collapsed
+                (60px icon rail) so the 3D graph keeps its horizontal
+                room; users click the hamburger to slide the full menu
+                open when they need to navigate away. */}
+            <Route element={<SidebarLayout defaultCollapsed />}>
+              <Route path="/simulation/:simulationId" element={<SimulationPage />} />
+              {/* Legacy alias (plural) — keep for any external bookmarks */}
+              <Route path="/simulations/:simulationId" element={<SimulationPage />} />
+            </Route>
 
             {/* Login — no sidebar */}
             <Route path="/login" element={<LoginPage />} />

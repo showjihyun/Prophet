@@ -24,6 +24,13 @@ import { LS_KEY_TOKEN, LS_KEY_USERNAME } from "@/config/constants";
 
 interface AppSidebarProps {
   activePath?: string;
+  /**
+   * Initial collapsed state. Defaults to `false` (256px expanded). Pages
+   * that need more horizontal room (e.g. SimulationPage's 3D workspace)
+   * pass `true` so the sidebar mounts as a 60px icon rail and expands
+   * on user click or hover.
+   */
+  defaultCollapsed?: boolean;
 }
 
 const NAV_ITEMS = [
@@ -48,11 +55,11 @@ function useIsMobile() {
   return isMobile;
 }
 
-export default function AppSidebar({ activePath }: AppSidebarProps) {
+export default function AppSidebar({ activePath, defaultCollapsed = false }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [username, setUsername] = useState<string | null>(() => localStorage.getItem(LS_KEY_USERNAME));
 
   const handleLogout = useCallback(() => {
@@ -62,9 +69,14 @@ export default function AppSidebar({ activePath }: AppSidebarProps) {
     navigate("/login");
   }, [navigate]);
 
-  // Auto-collapse on mobile
+  // Auto-collapse when the viewport enters the mobile breakpoint.
+  // Must not fire the `else` branch — doing so would stomp the
+  // `defaultCollapsed` prop on desktop the instant this component
+  // mounts (useEffect always runs once post-mount), silently
+  // defeating any page that asks for a collapsed-by-default sidebar
+  // (notably SimulationPage's 3D workspace).
   useEffect(() => {
-    setCollapsed(isMobile);
+    if (isMobile) setCollapsed(true);
   }, [isMobile]);
 
   const currentPath = activePath ?? location.pathname;
