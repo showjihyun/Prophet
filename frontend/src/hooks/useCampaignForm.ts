@@ -71,7 +71,11 @@ export function useCampaignForm({ urlProjectId }: UseCampaignFormArgs) {
   const [communityOpen, setCommunityOpen] = useState(false);
 
   // Advanced
-  const [maxSteps, setMaxSteps] = useState(365);
+  // Default 50 steps — matches backend CreateSimulationRequest.max_steps
+  // default (backend/app/api/schemas.py). 365 was a stale leftover from
+  // when "one step per day for a year" was the framing; in practice most
+  // runs are sized from the clone-fallback path below which also uses 50.
+  const [maxSteps, setMaxSteps] = useState(50);
   const [randomSeed, setRandomSeed] = useState(42);
   const [slmLlmRatio, setSlmLlmRatio] = useState(80);
   const [llmProvider, setLlmProvider] = useState("ollama");
