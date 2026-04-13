@@ -19,7 +19,7 @@ import { X, GitCompare, Dices, Download, Flame, TrendingUp } from "lucide-react"
 import {
   useSimulations,
   useRunMonteCarlo,
-  useExportSimulation,
+  exportSimulation,
 } from "../../api/queries";
 import { useSimulationStore } from "../../store/simulationStore";
 import type { MonteCarloResponse } from "../../types/api";
@@ -240,7 +240,7 @@ function PercentileCell({ label, value }: { label: string; value: number }) {
 function ExportTab({ onClose }: { onClose: () => void }) {
   const [format, setFormat] = useState<"json" | "csv">("json");
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id);
-  const triggerExport = useExportSimulation();
+  const triggerExport = exportSimulation();
 
   const handleExport = () => {
     if (!simulationId) return;

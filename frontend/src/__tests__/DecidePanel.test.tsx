@@ -46,7 +46,7 @@ vi.mock("@/api/queries", () => ({
     mutateAsync: mockMonteCarloMutateAsync,
     isPending: false,
   }),
-  useExportSimulation: () => mockExport,
+  exportSimulation: () => mockExport,
 }));
 
 function renderPanel() {

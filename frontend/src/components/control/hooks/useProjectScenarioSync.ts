@@ -106,7 +106,7 @@ export function useProjectScenarioSync() {
       useSimulationStore.getState().setScenarios(
         latest.map((s) =>
           s.scenario_id === scenarioId
-            ? { ...s, simulation_id: newSimId, status: "running" }
+            ? { ...s, simulation_id: newSimId, status: SIM_STATUS.RUNNING }
             : s,
         ),
       );

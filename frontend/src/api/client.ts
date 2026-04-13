@@ -7,10 +7,33 @@
  */
 
 import type { SimulationRun, StepResult } from '../types/simulation';
-import type { MemoryRecord } from '../types/api';
 import { API_VERSION_PREFIX, DEFAULT_API_BASE_URL, LS_KEY_TOKEN } from "@/config/constants";
 
-// Re-export API types so existing consumers don't break
+// Import only the types that are used locally in this file.
+// Types that are only re-exported live solely in the export type block below.
+import type {
+  CreateSimulationConfig,
+  SettingsResponse,
+  SettingsUpdateRequest,
+  AgentSummary,
+  AgentDetail,
+  MemoryRecord,
+  ProjectSummary,
+  ScenarioInfo,
+  ProjectDetail,
+  CommunityInfo,
+  CommunityOpinion,
+  OverallOpinion,
+  ThreadSummary,
+  ThreadDetail,
+  CommunityTemplate,
+  CommunityTemplateInput,
+  RunAllReport,
+  MonteCarloResponse,
+  CytoscapeGraph,
+  NetworkMetrics,
+} from '../types/api';
+
 export type {
   CommunityConfigInput,
   CreateSimulationConfig,
@@ -41,28 +64,6 @@ export type {
   NetworkMetrics,
 } from '../types/api';
 
-import type {
-  CreateSimulationConfig,
-  SettingsResponse,
-  SettingsUpdateRequest,
-  AgentSummary,
-  AgentDetail,
-  ProjectSummary,
-  ProjectDetail,
-  ScenarioInfo,
-  CommunityInfo,
-  CommunityOpinion,
-  OverallOpinion,
-  ThreadSummary,
-  ThreadDetail,
-  CommunityTemplate,
-  CommunityTemplateInput,
-  RunAllReport,
-  MonteCarloResponse,
-  CytoscapeGraph,
-  NetworkMetrics,
-} from '../types/api';
-
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}${API_VERSION_PREFIX}`
   : DEFAULT_API_BASE_URL;
@@ -75,7 +76,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers,
     ...options,
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? `API error: ${res.status}`);
+  }
   return res.json();
 }
 

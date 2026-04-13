@@ -407,8 +407,12 @@ export function useStopSimulation() {
 }
 
 export function useStepSimulation() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (simId: string) => apiClient.simulations.step(simId),
+    onSuccess: (_data, simId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.simulation(simId) });
+    },
   });
 }
 
@@ -425,13 +429,14 @@ export function useRunAllSimulation() {
 /**
  * Trigger a simulation export download.
  *
- * Not technically a mutation (it's a window.open() call that the browser
- * handles), but it's exposed here so components never import ``apiClient``
- * directly — they consume the hook instead. This keeps the
- * ``components/** must not import apiClient`` architectural invariant
- * passing.
+ * Not a hook — it's a plain factory function that returns a callback.
+ * Renamed from `useExportSimulation` to `exportSimulation` to correctly
+ * reflect that it does not call any React hooks internally.
+ * Exposed here so components never import `apiClient` directly — they
+ * consume this instead. This keeps the
+ * `components/** must not import apiClient` architectural invariant passing.
  */
-export function useExportSimulation() {
+export function exportSimulation() {
   return (simId: string, format: "json" | "csv" = "json") => {
     apiClient.simulations.export(simId, format);
   };

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { apiClient } from "../api/client";
 import type { ScenarioInfo } from "../api/client";
+import { SIM_STATUS } from "@/config/constants";
 import {
   useProject,
   useRunScenario,
@@ -261,7 +262,7 @@ export default function ProjectScenariosPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2">
-                      {scenario.status === "completed" && (
+                      {scenario.status === SIM_STATUS.COMPLETED && (
                         <button
                           onClick={() => handleResults(scenario)}
                           className="h-8 px-3 text-sm font-medium border border-[var(--border)] rounded-md bg-[var(--card)] hover:bg-[var(--secondary)] transition-colors"
@@ -269,7 +270,7 @@ export default function ProjectScenariosPage() {
                           Results
                         </button>
                       )}
-                      {scenario.status === "running" && (
+                      {scenario.status === SIM_STATUS.RUNNING && (
                         <button
                           onClick={() => handleStop(scenario)}
                           className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-[var(--destructive)] border border-[var(--destructive)]/30 rounded-md bg-[var(--destructive)]/10 hover:bg-[var(--destructive)]/15 transition-colors"
@@ -278,7 +279,8 @@ export default function ProjectScenariosPage() {
                           Stop
                         </button>
                       )}
-                      {(scenario.status === "draft" || scenario.status === "created") && (
+                      {/* "draft" is a scenario-specific status not in SIM_STATUS; "created" maps to SIM_STATUS.CREATED */}
+                      {(scenario.status === "draft" || scenario.status === SIM_STATUS.CREATED) && (
                         <button
                           onClick={() => handleRun(scenario)}
                           className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-[var(--primary-foreground)] bg-[var(--primary)] rounded-md hover:bg-[var(--primary)]/90 transition-colors"

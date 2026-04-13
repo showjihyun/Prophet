@@ -672,7 +672,7 @@ export default function AnalyticsPage() {
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] divide-y divide-[var(--border)] overflow-hidden">
                     {filteredEvents.map((e, i) => (
                       <div
-                        key={i}
+                        key={`${e.event_type}-${e.step}-${e.community_id ?? "sys"}-${i}`}
                         role="button"
                         tabIndex={0}
                         aria-label={`View step ${e.step} in simulation`}
