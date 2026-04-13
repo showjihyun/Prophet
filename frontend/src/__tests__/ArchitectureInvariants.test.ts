@@ -128,6 +128,10 @@ const COMMUNITY_HEX_BASELINE = new Set([
   "components/graph/FactionMapView.tsx",
   "components/graph/GraphLegend.tsx", // legend intentionally mirrors palette
   "components/graph/GraphPanel.tsx", // ADOPTED_GLOW_COLOR + fallback palette
+  "lib/communityColor.ts", // FALLBACK_COMMUNITY_PALETTE — the canonical
+  // home for the dynamic-id fallback palette extracted out of GraphPanel.
+  // Follow-up: lift these 10 swatches into COMMUNITY_PALETTE proper so the
+  // baseline can drop this entry too.
   "components/graph/MetricsPanel.tsx",
   "components/graph/propagationAnimationUtils.ts",
   "components/shared/AgentInterveneModal.tsx",

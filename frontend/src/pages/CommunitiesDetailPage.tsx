@@ -15,6 +15,7 @@ import {
 import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { useSimulationStore } from "../store/simulationStore";
 import { SIM_STATUS } from "@/config/constants";
+import { resolveCommunityColor } from "@/lib/communityColor";
 
 // COMMUNITIES mock array + CONNECTION_MATRIX removed — the page now renders
 // only real community data from the API (via useCommunities TanStack Query).
@@ -35,12 +36,17 @@ const emotionColors: Record<string, string> = {
   excitement: "var(--community-delta)",
 };
 
-const COMMUNITY_META: Record<string, { name: string; color: string }> = {
-  A: { name: "Alpha Community", color: "var(--community-alpha)" },
-  B: { name: "Beta Community", color: "var(--community-beta)" },
-  C: { name: "Gamma Community", color: "var(--community-gamma)" },
-  D: { name: "Delta Community", color: "var(--community-delta)" },
-  E: { name: "Bridge Community", color: "var(--community-bridge)" },
+// Display-name overrides for the canonical A/B/C/D/E community ids.
+// Color resolution lives in `@/lib/communityColor#resolveCommunityColor`
+// so this page paints the same swatch the 3D graph + legend use for the
+// same community — including dynamic ids like UUIDs from custom
+// templates that this map doesn't (and shouldn't) enumerate.
+const COMMUNITY_NAME: Record<string, string> = {
+  A: "Alpha Community",
+  B: "Beta Community",
+  C: "Gamma Community",
+  D: "Delta Community",
+  E: "Bridge Community",
 };
 
 interface LocalCommunity {
@@ -55,13 +61,13 @@ interface LocalCommunity {
 }
 
 function apiToLocal(c: CommunityInfo): LocalCommunity {
-  const meta = COMMUNITY_META[c.community_id] ?? { name: c.name || c.community_id, color: "var(--muted-foreground)" };
+  const name = COMMUNITY_NAME[c.community_id] ?? c.name ?? c.community_id;
   const sentPos = Math.round(Math.max(0, c.mean_belief) * 100);
   const sentNeg = Math.round(Math.max(0, -c.mean_belief) * 100);
   return {
     id: c.community_id.toLowerCase(),
-    name: meta.name,
-    color: meta.color,
+    name,
+    color: resolveCommunityColor(c.community_id),
     agents: c.size,
     sentiment: { positive: sentPos, neutral: 100 - sentPos - sentNeg, negative: sentNeg },
     influencers: [],

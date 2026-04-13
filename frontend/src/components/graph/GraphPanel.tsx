@@ -40,7 +40,7 @@ import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import { type CytoscapeGraph } from "../../api/client";
 import { useNetwork } from "../../api/queries";
 import { useSimulationStore } from "../../store/simulationStore";
-import { COMMUNITIES } from "@/config/constants";
+import { resolveCommunityColor } from "@/lib/communityColor";
 import type { PropagationPair } from "@/types/simulation";
 import {
   getAnimationTier,
@@ -96,43 +96,10 @@ interface GraphData {
 // only covered a single default profile and made every real simulation fall
 // through to the gray fallback color.
 //
-// The fallback color palette is used when a community has no entry in the
-// static `COMMUNITIES` table. We rotate through it in insertion order so the
-// assignment is stable across re-renders of the same graph.
-
-const FALLBACK_COMMUNITY_PALETTE: readonly string[] = [
-  "#3b82f6", // blue
-  "#22c55e", // green
-  "#f97316", // orange
-  "#a855f7", // purple
-  "#ef4444", // red
-  "#06b6d4", // cyan
-  "#ec4899", // pink
-  "#84cc16", // lime
-  "#eab308", // yellow
-  "#14b8a6", // teal
-];
-
-const STATIC_COMMUNITY_COLOR: Record<string, string> = Object.fromEntries(
-  COMMUNITIES.map((c) => [c.id, c.color]),
-);
-
-/**
- * Stable palette-slot assignment for communities that have no entry in the
- * static `COMMUNITIES` table. Hashes the community id (not the insertion
- * order) so the same community always picks the same fallback color across
- * graph re-fetches — otherwise pagination, reseeding, or backend node-order
- * changes would flip "mainstream" from blue to orange on refresh.
- */
-function fallbackColorFor(communityId: string): string {
-  let h = 0;
-  for (let i = 0; i < communityId.length; i++) {
-    h = (h * 31 + communityId.charCodeAt(i)) | 0;
-  }
-  return FALLBACK_COMMUNITY_PALETTE[
-    Math.abs(h) % FALLBACK_COMMUNITY_PALETTE.length
-  ];
-}
+// Color resolution moved to `@/lib/communityColor#resolveCommunityColor`
+// so the legend, the Communities sidebar page, and any other surface
+// share the same algorithm — without that, the same community renders
+// in a different color depending on which page you're looking at.
 
 const DEFAULT_NODE_COLOR = "#64748b";
 
@@ -508,7 +475,7 @@ export default function GraphPanel() {
     return order.map((id) => ({
       id,
       name: meta[id].name,
-      color: STATIC_COMMUNITY_COLOR[id] ?? fallbackColorFor(id),
+      color: resolveCommunityColor(id),
       count: meta[id].count,
     }));
   }, [graphData.nodes]);
