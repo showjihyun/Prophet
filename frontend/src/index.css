@@ -59,9 +59,12 @@
      Timeline shrunk from 120px → 72px when the Diffusion Wave moved
      from div bars to a compact sparkline — the ConversationPanel
      below auto-expands into the reclaimed 48px via
-     `calc(var(--bottom-area-height) - var(--timeline-height))`. */
-  --bottom-area-height: 240px;
+     `calc(var(--bottom-area-height) - var(--timeline-height))`.
+     Bumped 240 → 300 (SPEC 24 §2.2.5) so EmergentEventsPanel has
+     room for ~6 rows instead of ~3. */
+  --bottom-area-height: 300px;
   --timeline-height: 72px;
+  --emergent-panel-width: 360px;
   --panel-padding: 16px;
   --card-gap: 12px;
 

@@ -36,24 +36,24 @@ function EventRow({ event }: { event: EmergentEvent }) {
   return (
     <li
       data-testid={`emergent-event-row-${event.step}-${event.event_type}`}
-      className="flex items-start gap-3 px-3 py-2 border-b border-[var(--border)] hover:bg-[var(--secondary)]/50 transition-colors"
+      className="flex items-start gap-3 px-3 py-2.5 border-b border-[var(--border)] hover:bg-[var(--secondary)]/50 transition-colors"
     >
       <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${meta.color}`} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-[var(--foreground)]">
+          <span className="text-sm font-medium text-[var(--foreground)]">
             {meta.label}
           </span>
-          <span className="text-[10px] text-[var(--muted-foreground)] shrink-0">
+          <span className="text-[11px] text-[var(--muted-foreground)] shrink-0">
             Step {event.step}
           </span>
         </div>
-        <p className="text-[11px] text-[var(--muted-foreground)] truncate">
+        <p className="text-xs text-[var(--muted-foreground)] line-clamp-2">
           {event.description || meta.description}
         </p>
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-1.5 flex items-center gap-2">
           <div
-            className="h-1 flex-1 bg-[var(--secondary)] rounded-full overflow-hidden"
+            className="h-1.5 flex-1 bg-[var(--secondary)] rounded-full overflow-hidden"
             role="progressbar"
             aria-valuenow={Math.round(event.severity * 100)}
             aria-valuemin={0}
@@ -65,7 +65,7 @@ function EventRow({ event }: { event: EmergentEvent }) {
               style={{ width: severityToWidth(event.severity) }}
             />
           </div>
-          <span className="text-[10px] text-[var(--muted-foreground)] tabular-nums shrink-0 w-8 text-right">
+          <span className="text-[11px] text-[var(--muted-foreground)] tabular-nums shrink-0 w-8 text-right">
             {Math.round(event.severity * 100)}%
           </span>
         </div>
@@ -139,14 +139,14 @@ function EmergentEventsPanel() {
     <section
       data-testid="emergent-events-panel"
       aria-label="Emergent events detected during simulation"
-      className="flex flex-col h-full bg-[var(--card)] border-l border-[var(--border)]"
+      className="flex flex-col h-full w-full bg-[var(--card)] border-l border-[var(--border)]"
     >
       <header className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)]">
         <AlertTriangle className="w-4 h-4 text-amber-400" />
         <h3 className="text-sm font-semibold text-[var(--foreground)]">
           Emergent Events
         </h3>
-        <span className="ml-auto text-[10px] text-[var(--muted-foreground)] tabular-nums">
+        <span className="ml-auto text-[11px] text-[var(--muted-foreground)] tabular-nums">
           {emergentEvents.length} detected
         </span>
       </header>

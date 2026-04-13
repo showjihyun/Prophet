@@ -247,7 +247,13 @@ export default function SimulationPage() {
           <div className="flex-1 min-w-0">
             <ConversationPanel />
           </div>
-          <div className="w-[280px] shrink-0 hidden lg:flex">
+          {/* SPEC 24 §2.2.5 — widened from 280px → var(--emergent-panel-width)
+              (360px) and shown from md breakpoint so emergent events
+              are not clipped on common 13–14" laptops. */}
+          <div
+            className="shrink-0 hidden md:flex"
+            style={{ width: "var(--emergent-panel-width)" }}
+          >
             <EmergentEventsPanel />
           </div>
         </div>
