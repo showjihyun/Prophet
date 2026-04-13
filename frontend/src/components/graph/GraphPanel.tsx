@@ -182,7 +182,19 @@ const ACTIVE_AGENT_SIZE_MULTIPLIER = 2.2;
  * stay aligned.
  */
 const LEFT_LEGEND_OFFSET_PX = 200;
-const ADOPTED_GLOW_COLOR = "#22c55e";
+/**
+ * Amount (0–1) to blend an adopted node's base community color toward white.
+ * Produces a brighter/tinted version of the same hue — preserves community
+ * identity while still reading as "converted". 0.35 = ~35% white mix, which
+ * lifts saturation enough to pop against the un-adopted base without washing
+ * the hue into pastel.
+ *
+ * This replaces the old single-green `ADOPTED_GLOW_COLOR` (#22c55e). A
+ * single global green overrode every community's palette once
+ * `adoption_rate` approached 1.0, erasing polarization/faction signal from
+ * the 3D view. Tinting per community keeps that signal visible.
+ */
+const ADOPTED_GLOW_WHITE_MIX = 0.35;
 const HIGHLIGHT_DIM_COLOR = "#1e293b";
 
 // Neutral bridge/inter-community edge color. Muted so it reads as connective
@@ -202,6 +214,23 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/**
+ * Blend a `#rrggbb` color toward white by `amount` (0–1) and return a new
+ * hex string. `amount=0` returns the input unchanged; `amount=1` returns
+ * `#ffffff`. Used to derive a per-community "adopted" tint that is visibly
+ * brighter than the base community color without hiding its hue.
+ */
+function brightenHex(hex: string, amount: number): string {
+  if (!hex.startsWith("#") || hex.length !== 7) return hex;
+  const clamp = Math.max(0, Math.min(1, amount));
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * clamp);
+  const toHex = (c: number) => c.toString(16).padStart(2, "0");
+  return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
 }
 
 // --------------------------------------------------------------------------- //
@@ -492,6 +521,18 @@ export default function GraphPanel() {
     return m;
   }, [graphCommunities]);
 
+  // id → "adopted" tint lookup. A brightened version of each community
+  // color so adopted agents read as "converted" while keeping their
+  // community identity. Precomputed here (not in `nodeColorFn`) so the
+  // render callback stays O(1) per node on every frame.
+  const adoptedColorMap = useMemo<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const [id, hex] of Object.entries(communityColorMap)) {
+      m[id] = brightenHex(hex, ADOPTED_GLOW_WHITE_MIX);
+    }
+    return m;
+  }, [communityColorMap]);
+
   // id → display name lookup for hover tooltip and accessibility labels.
   const communityNameMap = useMemo<Record<string, string>>(() => {
     const m: Record<string, string> = {};
@@ -504,7 +545,7 @@ export default function GraphPanel() {
   // Precedence (highest wins):
   //   1. Dimmed (community filter active, not in the highlighted one)
   //   2. Active agent ON-phase (strobing amber + bigger)
-  //   3. Adopted (converted to the target belief) — green glow
+  //   3. Adopted (converted) — brightened community tint (per community)
   //   4. Default community color
   //
   // The strobe is realised by consulting `activeAgentsPhaseRef` — it
@@ -524,10 +565,16 @@ export default function GraphPanel() {
       ) {
         return ACTIVE_AGENT_GLOW_COLOR;
       }
-      if (adoptedSetRef.current.has(n.id)) return ADOPTED_GLOW_COLOR;
+      if (adoptedSetRef.current.has(n.id)) {
+        return (
+          adoptedColorMap[n.community] ??
+          communityColorMap[n.community] ??
+          DEFAULT_NODE_COLOR
+        );
+      }
       return communityColorMap[n.community] ?? DEFAULT_NODE_COLOR;
     },
-    [highlightedCommunity, communityColorMap],
+    [highlightedCommunity, communityColorMap, adoptedColorMap],
   );
 
   const nodeValFn = useCallback((node: object): number => {
