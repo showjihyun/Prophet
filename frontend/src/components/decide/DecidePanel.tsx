@@ -15,13 +15,14 @@
  */
 import { memo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, GitCompare, Dices, Download } from "lucide-react";
+import { X, GitCompare, Dices, Download, Flame, TrendingUp } from "lucide-react";
 import {
   useSimulations,
-  useRunAllSimulation,
+  useRunMonteCarlo,
   useExportSimulation,
 } from "../../api/queries";
 import { useSimulationStore } from "../../store/simulationStore";
+import type { MonteCarloResponse } from "../../types/api";
 
 type Tab = "compare" | "monte_carlo" | "export";
 
@@ -100,26 +101,37 @@ function CompareTab({ onClose }: { onClose: () => void }) {
 // Monte Carlo tab                                                             //
 // --------------------------------------------------------------------------- //
 
+/**
+ * Monte Carlo tab.
+ * @spec docs/spec/29_MONTE_CARLO_SPEC.md#33-decidepanel-mc-tab-ux-mc-fe-03
+ *
+ * Calls POST /simulations/{id}/monte-carlo and renders the aggregate
+ * (viral probability + reach percentiles) inline. The earlier `run-all`
+ * fallback was a lie — it ran a single seed and called it MC.
+ */
 function MonteCarloTab() {
   const [runs, setRuns] = useState<number>(10);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<MonteCarloResponse | null>(null);
   const simulationId = useSimulationStore((s) => s.simulation?.simulation_id);
-  const runAll = useRunAllSimulation();
+  const monteCarlo = useRunMonteCarlo();
 
   const handleRun = async () => {
     if (!simulationId) return;
     setError(null);
+    setResult(null);
     try {
-      // Backend endpoint for MC sweep is a follow-up. We surface the
-      // intent here (so users stop thinking it's missing) and fall back
-      // to the proven run-all path as a best effort.
-      await runAll.mutateAsync(simulationId);
+      const data = await monteCarlo.mutateAsync({
+        simId: simulationId,
+        n_runs: runs,
+      });
+      setResult(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Monte Carlo run failed");
     }
   };
 
-  const running = runAll.isPending;
+  const running = monteCarlo.isPending;
 
   return (
     <div className="p-4 space-y-3">
@@ -130,19 +142,20 @@ function MonteCarloTab() {
       <label className="block text-xs font-medium text-[var(--foreground)]">
         Number of runs: <span className="tabular-nums">{runs}</span>
       </label>
+      {/* SPEC 29 §3.3 — slider range is [2, 50] (was 5–50; single seed is not MC) */}
       <input
         data-testid="decide-mc-runs-slider"
         type="range"
-        min={5}
+        min={2}
         max={50}
-        step={5}
+        step={1}
         value={runs}
         onChange={(e) => setRuns(Number(e.target.value))}
         className="w-full accent-[var(--primary)]"
       />
       <div className="flex justify-between text-[10px] text-[var(--muted-foreground)]">
-        <span>5</span>
-        <span>25</span>
+        <span>2</span>
+        <span>26</span>
         <span>50</span>
       </div>
       {error && (
@@ -157,12 +170,64 @@ function MonteCarloTab() {
         disabled={!simulationId || running}
         className="w-full h-9 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
       >
-        {running ? "Running…" : `Run ${runs} Scenarios`}
+        {running ? `Running ${runs} sweeps…` : `Run ${runs} Scenarios`}
       </button>
-      <p className="text-[10px] text-[var(--muted-foreground)] italic">
-        Note: full parallel Monte Carlo sweep endpoint is on the backend
-        roadmap — current implementation uses run-all as a single-seed
-        baseline.
+      {running && (
+        <p className="text-[10px] text-[var(--muted-foreground)] italic">
+          Each run is a full N-step replay with a fresh seed. Expect
+          ~30–90s wall time depending on tier-3 cache hits.
+        </p>
+      )}
+
+      {result && !running && (
+        <div
+          data-testid="decide-mc-result"
+          className="mt-3 p-3 rounded-md bg-[var(--secondary)] border border-[var(--border)] space-y-2"
+        >
+          <div className="flex items-center gap-2">
+            <Flame className="w-4 h-4 text-amber-400" aria-hidden="true" />
+            <span className="text-xs text-[var(--muted-foreground)]">
+              Viral probability
+            </span>
+            <span
+              data-testid="decide-mc-viral-prob"
+              className="ml-auto text-base font-semibold tabular-nums text-[var(--foreground)]"
+            >
+              {(result.viral_probability * 100).toFixed(0)}%
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-[var(--primary)]" aria-hidden="true" />
+            <span className="text-xs text-[var(--muted-foreground)]">
+              Expected reach
+            </span>
+            <span
+              data-testid="decide-mc-expected"
+              className="ml-auto text-base font-semibold tabular-nums text-[var(--foreground)]"
+            >
+              {result.expected_reach.toFixed(0)}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-[var(--border)]">
+            <PercentileCell label="P5" value={result.p5_reach} />
+            <PercentileCell label="P50" value={result.p50_reach} />
+            <PercentileCell label="P95" value={result.p95_reach} />
+          </div>
+          <p className="text-[10px] text-[var(--muted-foreground)] italic">
+            Aggregated over {result.n_runs} runs · seeds offset from base
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PercentileCell({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-[10px] text-[var(--muted-foreground)]">{label}</p>
+      <p className="text-sm font-mono tabular-nums text-[var(--foreground)]">
+        {value.toFixed(0)}
       </p>
     </div>
   );

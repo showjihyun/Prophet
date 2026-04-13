@@ -725,7 +725,14 @@ class SimulationPersistence:
     async def load_steps(
         self, session: AsyncSession, sim_id: uuid.UUID, limit: int = 2000,
     ) -> list[dict]:
-        """Load step history from DB (capped at `limit` rows to prevent unbounded queries)."""
+        """Load step history from DB (capped at `limit` rows to prevent unbounded queries).
+
+        FIX (2026-04-13): also fetches `EmergentEvent` rows for the
+        simulation and groups them by step into each step dict's
+        `emergent_events` list. Previously this method dropped events on
+        the floor, so historical sims (loaded from DB after restart)
+        showed an empty timeline.
+        """
         try:
             result = await session.execute(
                 select(SimStep)
@@ -734,6 +741,23 @@ class SimulationPersistence:
                 .limit(limit)
             )
             rows = result.scalars().all()
+
+            # Fetch all emergent events for this sim, group by step.
+            ev_result = await session.execute(
+                select(EmergentEventORM)
+                .where(EmergentEventORM.simulation_id == sim_id)
+                .order_by(EmergentEventORM.step)
+            )
+            events_by_step: dict[int, list[dict]] = {}
+            for ev in ev_result.scalars().all():
+                events_by_step.setdefault(ev.step, []).append({
+                    "event_type": ev.event_type,
+                    "step": ev.step,
+                    "community_id": str(ev.community_id) if ev.community_id else None,
+                    "severity": ev.severity,
+                    "description": ev.description,
+                })
+
             return [
                 {
                     "step": r.step,
@@ -746,6 +770,7 @@ class SimulationPersistence:
                     "community_metrics": r.community_metrics or {},
                     "llm_calls_this_step": r.llm_calls_count,
                     "step_duration_ms": r.step_duration_ms or 0,
+                    "emergent_events": events_by_step.get(r.step, []),
                 }
                 for r in rows
             ]

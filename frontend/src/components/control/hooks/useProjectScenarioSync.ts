@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../../api/client";
 import { useProjects } from "../../../api/queries";
 import { useSimulationStore } from "../../../store/simulationStore";
-import { SIM_STATUS } from "@/config/constants";
+import { SIM_STATUS, getDefaultMaxSteps } from "@/config/constants";
 
 export function useProjectScenarioSync() {
   const navigate = useNavigate();
@@ -151,7 +151,7 @@ export function useProjectScenarioSync() {
           message: "Default campaign message",
           target_communities: [],
         },
-        max_steps: 365,
+        max_steps: getDefaultMaxSteps(),
       });
       useSimulationStore.getState().setSimulation(sim);
       useSimulationStore.getState().setStatus(SIM_STATUS.CONFIGURED);

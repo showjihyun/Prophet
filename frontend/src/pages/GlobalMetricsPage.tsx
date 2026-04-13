@@ -16,10 +16,12 @@ import {
 } from "recharts";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
+import HelpTooltip from "../components/shared/HelpTooltip";
 import { apiClient } from "../api/client";
 import { useSimulationSteps } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
 import type { CommunityStepMetrics } from "../types/simulation";
+import { DEFAULT_MAX_STEPS } from "@/config/constants";
 
 const COMMUNITY_COLORS = [
   "var(--community-alpha)", "var(--community-beta)", "var(--community-gamma)",
@@ -183,7 +185,7 @@ export default function GlobalMetricsPage() {
   }, [latestStep, stepsLength]);
 
   const currentStep = latestStep?.step ?? 0;
-  const maxSteps = simulation?.max_steps ?? 365;
+  const maxSteps = simulation?.max_steps ?? DEFAULT_MAX_STEPS;
   const polarization = latestStep?.sentiment_variance ?? 0;
   // prevPol: read from store lazily — only changes when latestStep changes
   const prevPol = useMemo(() => {
@@ -219,7 +221,10 @@ export default function GlobalMetricsPage() {
   return (
     <div data-testid="global-metrics-page" className="min-h-screen bg-[var(--background)] flex flex-col">
       <PageNav
-        breadcrumbs={[{ label: "Back to Simulation", href: "/" }, { label: "Global Insight & Metrics" }]}
+        breadcrumbs={[
+          { label: "Back to Simulation", href: "/" },
+          { label: "Global Insight & Metrics", tooltipTerm: "pageGlobalMetrics" },
+        ]}
         actions={
           <div className="relative" ref={exportRef}>
             <button
@@ -266,11 +271,11 @@ export default function GlobalMetricsPage() {
 
         {/* Summary Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Total Agents" value={hasData ? totalAgents.toLocaleString() : "—"} change={hasData ? "active" : "no data"} changeType="positive" icon={<UsersIcon />} changeTestId="total-agents-delta" />
-          <StatCard label="Active Cascades" value={hasData ? activeCascades.toLocaleString() : "—"} change={hasData ? `step ${currentStep}` : "no data"} changeType="positive" icon={<ZapIcon />} changeTestId="cascades-delta" />
-          <StatCard label="Polarization" value={hasData ? polarization.toFixed(2) : "—"} change={hasData ? `${polDelta >= 0 ? "+" : ""}${polDelta.toFixed(2)} from prev` : "no data"} changeType={polDelta > 0 ? "negative" : "positive"} icon={<ActivityIcon />} changeTestId="polarization-delta" />
+          <StatCard label="Total Agents" value={hasData ? totalAgents.toLocaleString() : "—"} change={hasData ? "active" : "no data"} changeType="positive" icon={<UsersIcon />} changeTestId="total-agents-delta" term="totalAgents" />
+          <StatCard label="Active Cascades" value={hasData ? activeCascades.toLocaleString() : "—"} change={hasData ? `step ${currentStep}` : "no data"} changeType="positive" icon={<ZapIcon />} changeTestId="cascades-delta" term="globalActiveCascades" />
+          <StatCard label="Polarization" value={hasData ? polarization.toFixed(2) : "—"} change={hasData ? `${polDelta >= 0 ? "+" : ""}${polDelta.toFixed(2)} from prev` : "no data"} changeType={polDelta > 0 ? "negative" : "positive"} icon={<ActivityIcon />} changeTestId="polarization-delta" term="polarization" />
           <div>
-            <StatCard label="Simulation Step" value={hasData ? `Step ${currentStep}` : "—"} change={`of ${maxSteps} steps`} changeType="neutral" icon={<StepIcon />} />
+            <StatCard label="Simulation Step" value={hasData ? `Step ${currentStep}` : "—"} change={`of ${maxSteps} steps`} changeType="neutral" icon={<StepIcon />} term="globalSimulationStep" tooltipAlign="right" />
             <div data-testid="sim-day-progress" className="mt-2 h-1.5 rounded-full" style={{ backgroundColor: 'var(--muted)' }}>
               <div className="h-full rounded-full" style={{ width: `${(currentStep / maxSteps) * 100}%`, backgroundColor: 'var(--primary)' }} />
             </div>
@@ -282,7 +287,10 @@ export default function GlobalMetricsPage() {
           <div className="grid grid-cols-2 gap-6">
             {/* Polarization Trend */}
             <div data-testid="polarization-trend-chart" className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
-              <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">Polarization Trend</h3>
+              <h3 className="text-base font-semibold text-[var(--foreground)] mb-4 inline-flex items-center gap-1.5">
+                Polarization Trend
+                <HelpTooltip term="globalPolarizationTrend" size="sm" />
+              </h3>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={polarizationData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <XAxis dataKey="day" tick={{ fontSize: 11 }} />
@@ -299,7 +307,10 @@ export default function GlobalMetricsPage() {
 
             {/* Sentiment by Community */}
             <div data-testid="sentiment-community-chart" className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
-              <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">Sentiment by Community</h3>
+              <h3 className="text-base font-semibold text-[var(--foreground)] mb-4 inline-flex items-center gap-1.5">
+                Sentiment by Community
+                <HelpTooltip term="globalSentimentByCommunity" size="sm" />
+              </h3>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={sentimentByCommunity} layout="vertical" margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} />
@@ -319,7 +330,10 @@ export default function GlobalMetricsPage() {
           <div className="grid grid-cols-2 gap-6">
             {/* Prophet 3-Tier Cost Optimization */}
             <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
-              <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">Prophet 3-Tier Cost Optimization</h3>
+              <h3 className="text-base font-semibold text-[var(--foreground)] mb-4 inline-flex items-center gap-1.5">
+                Prophet 3-Tier Cost Optimization
+                <HelpTooltip term="globalThreeTierCost" size="sm" />
+              </h3>
               <div className="space-y-3">
                 <TierCard testId="tier1-card" tier="Tier 1: Mass SLM" count={`${tierStats.t1.toLocaleString()} agents`} description="Rule-based + local SLM inference" color="var(--community-alpha)" icon={<CpuIcon />} />
                 <TierCard testId="tier2-card" tier="Tier 2: Semantic" count={`${tierStats.t2.toLocaleString()} agents`} description="Heuristic + semantic analysis" color="var(--sentiment-warning)" icon={<BrainIcon />} />
@@ -341,7 +355,10 @@ export default function GlobalMetricsPage() {
 
             {/* Cascade Analytics */}
             <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] shadow-sm p-4">
-              <h3 className="text-base font-semibold text-[var(--foreground)] mb-4">Cascade Analytics</h3>
+              <h3 className="text-base font-semibold text-[var(--foreground)] mb-4 inline-flex items-center gap-1.5">
+                Cascade Analytics
+                <HelpTooltip term="globalCascadeAnalytics" size="sm" align="right" />
+              </h3>
               <div className="grid grid-cols-2 gap-3">
                 <CascadeStat testId="avg-cascade-depth" label="Avg Cascade Depth" value={cascadeStats.depth} color="var(--community-alpha)" icon={<GitBranchIcon />} />
                 <CascadeStat testId="max-cascade-width" label="Max Cascade Width" value={cascadeStats.width} color="var(--community-beta)" icon={<GitMergeIcon />} />

@@ -82,6 +82,19 @@ export interface SettingsLlm {
   vllm_base_url: string;
   vllm_model: string;
   vllm_max_concurrent: number;
+  // Chinese Top 3 (2026, OpenAI-compatible)
+  deepseek_base_url: string;
+  deepseek_model: string;
+  deepseek_api_key_set: boolean;
+  qwen_base_url: string;
+  qwen_model: string;
+  qwen_api_key_set: boolean;
+  moonshot_base_url: string;
+  moonshot_model: string;
+  moonshot_api_key_set: boolean;
+  glm_base_url: string;
+  glm_model: string;
+  glm_api_key_set: boolean;
 }
 
 export interface SettingsSimulation {
@@ -112,6 +125,18 @@ export interface SettingsUpdateRequest {
     vllm_base_url: string;
     vllm_model: string;
     vllm_max_concurrent: number;
+    deepseek_api_key: string;
+    deepseek_base_url: string;
+    deepseek_model: string;
+    qwen_api_key: string;
+    qwen_base_url: string;
+    qwen_model: string;
+    moonshot_api_key: string;
+    moonshot_base_url: string;
+    moonshot_model: string;
+    glm_api_key: string;
+    glm_base_url: string;
+    glm_model: string;
   }>;
   simulation?: Partial<SettingsSimulation>;
 }
@@ -283,6 +308,27 @@ export interface RunAllReport {
   community_summary: Array<Record<string, unknown>>;
   emergent_events_count: number;
   duration_ms: number;
+}
+
+// ── Monte Carlo (SPEC 29) ─────────────────────────────────────────────
+
+export interface RunSummaryItem {
+  run_id: number;
+  final_adoption: number;
+  viral_detected: boolean;
+  steps_completed: number;
+}
+
+export interface MonteCarloResponse {
+  simulation_id: string;
+  n_runs: number;
+  viral_probability: number;
+  expected_reach: number;
+  p5_reach: number;
+  p50_reach: number;
+  p95_reach: number;
+  community_adoption: Record<string, number>;
+  run_summaries: RunSummaryItem[];
 }
 
 // ── Network ───────────────────────────────────────────────────────────

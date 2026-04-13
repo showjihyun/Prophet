@@ -17,6 +17,7 @@ import { Area, AreaChart, ResponsiveContainer, YAxis } from "recharts";
 import { useSimulationStore } from "../../store/simulationStore";
 import HelpTooltip from "../shared/HelpTooltip";
 import { EVENT_TYPE_META } from "../emergent/emergentEventsUtils";
+import { DEFAULT_MAX_STEPS } from "@/config/constants";
 
 /** Window of recent steps plotted on the sparkline. */
 const WAVE_WINDOW = 100;
@@ -40,7 +41,7 @@ export default function TimelinePanel() {
   // counter on the left of this panel shows "Step N (focused)" instead
   // of the live "Step {currentStep} of {maxSteps}".
   const focusedStep = useSimulationStore((s) => s.focusedStep);
-  const maxSteps = simulation?.max_steps ?? 365;
+  const maxSteps = simulation?.max_steps ?? DEFAULT_MAX_STEPS;
 
   // Real-data-only: derive wave data from actual steps (cap at
   // WAVE_WINDOW). Each data point carries the absolute `step` number

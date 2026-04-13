@@ -194,6 +194,41 @@ class ScenarioComparisonResponse(BaseModel):
     comparison: dict[str, Any] = Field(default_factory=dict)
 
 
+# --- Monte Carlo (SPEC 29) ---
+
+class MonteCarloRequest(BaseModel):
+    """Body for POST /simulations/{id}/monte-carlo.
+    SPEC: docs/spec/29_MONTE_CARLO_SPEC.md#21-endpoint-mc-api-01
+    """
+    n_runs: int = Field(default=10, ge=2, le=50)
+    max_concurrency: int = Field(default=3, ge=1, le=10)
+
+
+class RunSummaryItem(BaseModel):
+    """Per-run terminal stats.
+    SPEC: docs/spec/29_MONTE_CARLO_SPEC.md#11-result-dataclasses-mc-eng-01
+    """
+    run_id: int
+    final_adoption: int
+    viral_detected: bool
+    steps_completed: int
+
+
+class MonteCarloResponse(BaseModel):
+    """Aggregate result of a Monte Carlo sweep.
+    SPEC: docs/spec/29_MONTE_CARLO_SPEC.md#21-endpoint-mc-api-01
+    """
+    simulation_id: str
+    n_runs: int
+    viral_probability: float
+    expected_reach: float
+    p5_reach: float
+    p50_reach: float
+    p95_reach: float
+    community_adoption: dict[str, float] = Field(default_factory=dict)
+    run_summaries: list[RunSummaryItem] = Field(default_factory=list)
+
+
 # --- Engine Control ---
 
 class TierDistribution(BaseModel):

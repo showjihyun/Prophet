@@ -21,7 +21,17 @@ vi.mock("react-router-dom", async () => {
 
 // Mock queries.ts (DecidePanel consumes hooks, not raw apiClient)
 const mockExport = vi.fn();
-const mockRunAllMutateAsync = vi.fn().mockResolvedValue({ status: "completed" });
+const mockMonteCarloMutateAsync = vi.fn().mockResolvedValue({
+  simulation_id: "sim-current",
+  n_runs: 10,
+  viral_probability: 0.7,
+  expected_reach: 412.3,
+  p5_reach: 280,
+  p50_reach: 415,
+  p95_reach: 612,
+  community_adoption: {},
+  run_summaries: [],
+});
 vi.mock("@/api/queries", () => ({
   useSimulations: () => ({
     data: {
@@ -32,8 +42,8 @@ vi.mock("@/api/queries", () => ({
     },
     isLoading: false,
   }),
-  useRunAllSimulation: () => ({
-    mutateAsync: mockRunAllMutateAsync,
+  useRunMonteCarlo: () => ({
+    mutateAsync: mockMonteCarloMutateAsync,
     isPending: false,
   }),
   useExportSimulation: () => mockExport,
@@ -56,7 +66,7 @@ describe("<DecidePanel />", () => {
   beforeEach(() => {
     mockNavigate.mockClear();
     mockExport.mockClear();
-    mockRunAllMutateAsync.mockClear();
+    mockMonteCarloMutateAsync.mockClear();
     useSimulationStore.setState({
       simulation: {
         simulation_id: "sim-current",
@@ -104,5 +114,50 @@ describe("<DecidePanel />", () => {
     renderPanel();
     const submit = screen.getByTestId("decide-compare-submit") as HTMLButtonElement;
     expect(submit).toBeDisabled();
+  });
+
+  /** @spec 24_UI_WORKFLOW_SPEC.md#2.3.4 — DP-AC-07 */
+  it("compare navigates to /simulation/:simulationId/compare/:otherId (both IDs in URL)", () => {
+    renderPanel();
+    fireEvent.change(screen.getByTestId("decide-compare-select"), {
+      target: { value: "sim-other" },
+    });
+    fireEvent.click(screen.getByTestId("decide-compare-submit"));
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/simulation/sim-current/compare/sim-other",
+    );
+  });
+
+  /** @spec 29_MONTE_CARLO_SPEC.md — MC-AC-06 */
+  it("Monte Carlo slider min=2 max=50 (single-seed is not MC)", () => {
+    renderPanel();
+    fireEvent.click(screen.getByTestId("decide-tab-monte_carlo"));
+    const slider = screen.getByTestId("decide-mc-runs-slider") as HTMLInputElement;
+    expect(slider.min).toBe("2");
+    expect(slider.max).toBe("50");
+  });
+
+  /** @spec 29_MONTE_CARLO_SPEC.md — MC-AC-07 */
+  it("Monte Carlo Run calls the real /monte-carlo endpoint, not run-all", async () => {
+    renderPanel();
+    fireEvent.click(screen.getByTestId("decide-tab-monte_carlo"));
+    fireEvent.click(screen.getByTestId("decide-mc-run"));
+    expect(mockMonteCarloMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ simId: "sim-current", n_runs: 10 }),
+    );
+  });
+
+  /** @spec 29_MONTE_CARLO_SPEC.md — MC-AC-08 */
+  it("renders viral probability + expected reach after a successful sweep", async () => {
+    renderPanel();
+    fireEvent.click(screen.getByTestId("decide-tab-monte_carlo"));
+    fireEvent.click(screen.getByTestId("decide-mc-run"));
+    // Mutation resolves synchronously in our mock; flush microtasks.
+    await Promise.resolve();
+    await Promise.resolve();
+    const result = await screen.findByTestId("decide-mc-result");
+    expect(result).toBeInTheDocument();
+    expect(screen.getByTestId("decide-mc-viral-prob")).toHaveTextContent("70%");
+    expect(screen.getByTestId("decide-mc-expected")).toHaveTextContent("412");
   });
 });

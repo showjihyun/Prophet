@@ -14,6 +14,12 @@ import {
 import { apiClient } from "../api/client";
 import type { SettingsResponse } from "../api/client";
 import HelpTooltip from "../components/shared/HelpTooltip";
+import {
+  DEFAULT_MAX_STEPS,
+  LS_KEY_DEFAULT_MAX_STEPS,
+  MAX_SIMULATION_STEPS,
+  getDefaultMaxSteps,
+} from "@/config/constants";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -61,10 +67,40 @@ export default function SettingsPage() {
   const [vllmModel, setVllmModel] = useState("meta-llama/Llama-3.1-8B-Instruct");
   const [vllmMaxConcurrent, setVllmMaxConcurrent] = useState(64);
 
+  // Chinese Top 3 (2026, OpenAI-compatible)
+  const [deepseekApiKey, setDeepseekApiKey] = useState("");
+  const [deepseekKeySet, setDeepseekKeySet] = useState(false);
+  const [deepseekBaseUrl, setDeepseekBaseUrl] = useState("https://api.deepseek.com");
+  const [deepseekModel, setDeepseekModel] = useState("deepseek-chat");
+  const [showDeepseekKey, setShowDeepseekKey] = useState(false);
+  const [qwenApiKey, setQwenApiKey] = useState("");
+  const [qwenKeySet, setQwenKeySet] = useState(false);
+  const [qwenBaseUrl, setQwenBaseUrl] = useState(
+    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  );
+  const [qwenModel, setQwenModel] = useState("qwen3-max");
+  const [showQwenKey, setShowQwenKey] = useState(false);
+  const [moonshotApiKey, setMoonshotApiKey] = useState("");
+  const [moonshotKeySet, setMoonshotKeySet] = useState(false);
+  const [moonshotBaseUrl, setMoonshotBaseUrl] = useState("https://api.moonshot.ai/v1");
+  const [moonshotModel, setMoonshotModel] = useState("kimi-k2.5");
+  const [showMoonshotKey, setShowMoonshotKey] = useState(false);
+  const [glmApiKey, setGlmApiKey] = useState("");
+  const [glmKeySet, setGlmKeySet] = useState(false);
+  const [glmBaseUrl, setGlmBaseUrl] = useState("https://open.bigmodel.cn/api/paas/v4/");
+  const [glmModel, setGlmModel] = useState("glm-5.1");
+  const [showGlmKey, setShowGlmKey] = useState(false);
+
   // Simulation
   const [slmLlmRatio, setSlmLlmRatio] = useState(0.5);
   const [tier3Ratio, setTier3Ratio] = useState(0.1);
   const [cacheTtl, setCacheTtl] = useState(3600);
+  // Default max_steps for new simulations — stored client-side in
+  // localStorage (the backend exposes this via SIM_DEFAULT_MAX_STEPS
+  // but the GET /settings endpoint does not surface it yet, so we
+  // override per-workstation). Initial read happens once in useEffect
+  // below so SSR/test envs with stubbed `window` don't crash here.
+  const [defaultMaxSteps, setDefaultMaxSteps] = useState<number>(DEFAULT_MAX_STEPS);
 
   // Ollama models list
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
@@ -98,6 +134,19 @@ export default function SettingsPage() {
       setVllmBaseUrl(data.llm.vllm_base_url);
       setVllmModel(data.llm.vllm_model);
       setVllmMaxConcurrent(data.llm.vllm_max_concurrent);
+      // Chinese Top 3
+      setDeepseekBaseUrl(data.llm.deepseek_base_url);
+      setDeepseekModel(data.llm.deepseek_model);
+      setDeepseekKeySet(data.llm.deepseek_api_key_set);
+      setQwenBaseUrl(data.llm.qwen_base_url);
+      setQwenModel(data.llm.qwen_model);
+      setQwenKeySet(data.llm.qwen_api_key_set);
+      setMoonshotBaseUrl(data.llm.moonshot_base_url);
+      setMoonshotModel(data.llm.moonshot_model);
+      setMoonshotKeySet(data.llm.moonshot_api_key_set);
+      setGlmBaseUrl(data.llm.glm_base_url);
+      setGlmModel(data.llm.glm_model);
+      setGlmKeySet(data.llm.glm_api_key_set);
       setSlmLlmRatio(data.simulation.slm_llm_ratio);
       setTier3Ratio(data.simulation.llm_tier3_ratio);
       setCacheTtl(data.simulation.llm_cache_ttl);
@@ -120,6 +169,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchOllamaModels();
+    setDefaultMaxSteps(getDefaultMaxSteps());
   }, [fetchSettings, fetchOllamaModels]);
 
   /* ---------- actions ---------- */
@@ -141,11 +191,24 @@ export default function SettingsPage() {
           vllm_base_url: vllmBaseUrl,
           vllm_model: vllmModel,
           vllm_max_concurrent: vllmMaxConcurrent,
+          // Chinese Top 3
+          deepseek_base_url: deepseekBaseUrl,
+          deepseek_model: deepseekModel,
+          qwen_base_url: qwenBaseUrl,
+          qwen_model: qwenModel,
+          moonshot_base_url: moonshotBaseUrl,
+          moonshot_model: moonshotModel,
+          glm_base_url: glmBaseUrl,
+          glm_model: glmModel,
           // Secrets are write-only — only send when the user typed a new
           // value. An empty string would wipe the stored key.
           ...(anthropicApiKey ? { anthropic_api_key: anthropicApiKey } : {}),
           ...(openaiApiKey ? { openai_api_key: openaiApiKey } : {}),
           ...(geminiApiKey ? { gemini_api_key: geminiApiKey } : {}),
+          ...(deepseekApiKey ? { deepseek_api_key: deepseekApiKey } : {}),
+          ...(qwenApiKey ? { qwen_api_key: qwenApiKey } : {}),
+          ...(moonshotApiKey ? { moonshot_api_key: moonshotApiKey } : {}),
+          ...(glmApiKey ? { glm_api_key: glmApiKey } : {}),
         },
         simulation: {
           slm_llm_ratio: slmLlmRatio,
@@ -154,6 +217,15 @@ export default function SettingsPage() {
         },
       };
       await apiClient.settings.update(payload as never);
+      // Persist the frontend-only simulation default (max_steps).
+      try {
+        window.localStorage.setItem(
+          LS_KEY_DEFAULT_MAX_STEPS,
+          String(defaultMaxSteps),
+        );
+      } catch {
+        /* localStorage unavailable (private mode, quota) — non-fatal */
+      }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(null), 3000);
     } catch {
@@ -240,6 +312,10 @@ export default function SettingsPage() {
               <option value="claude">Claude API</option>
               <option value="openai">OpenAI API</option>
               <option value="gemini">Gemini API</option>
+              <option value="deepseek">DeepSeek (CN)</option>
+              <option value="qwen">Qwen / Alibaba (CN)</option>
+              <option value="moonshot">Moonshot Kimi (CN)</option>
+              <option value="glm">Zhipu GLM (CN)</option>
             </select>
           </div>
 
@@ -507,6 +583,286 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* ---- Chinese Top 3 (2026, OpenAI-compatible) ---- */}
+        <section className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 mb-6">
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-1">
+            Chinese LLM APIs (2026)
+          </h2>
+          <p className="text-[12px] text-[var(--muted-foreground)] mb-4">
+            All four (DeepSeek / Qwen / Moonshot / Zhipu GLM) expose
+            OpenAI-compatible chat endpoints, so they reuse the same adapter
+            path with only the base URL swapped. Override base URL if you
+            need the mainland-CN endpoint variant.
+          </p>
+
+          {/* --- DeepSeek --- */}
+          <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
+            DeepSeek
+          </h3>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label htmlFor="deepseek-api-key" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                API Key
+              </label>
+              <div className="relative">
+                <input
+                  id="deepseek-api-key"
+                  data-testid="deepseek-api-key"
+                  type={showDeepseekKey ? "text" : "password"}
+                  autoComplete="off"
+                  value={deepseekApiKey}
+                  onChange={(e) => setDeepseekApiKey(e.target.value)}
+                  placeholder={deepseekKeySet ? "sk-*******" : "Not set"}
+                  className="w-full h-9 rounded-md border border-[var(--border)] px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowDeepseekKey((v) => !v)}
+                  aria-label={showDeepseekKey ? "Hide API key" : "Show API key"}
+                  className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                >
+                  {showDeepseekKey ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="deepseek-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Model
+              </label>
+              <input
+                id="deepseek-model"
+                data-testid="deepseek-model"
+                type="text"
+                value={deepseekModel}
+                onChange={(e) => setDeepseekModel(e.target.value)}
+                placeholder="deepseek-chat"
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                2026-04: <span className="font-mono">deepseek-chat</span> auto-routes to V3.2 non-thinking; <span className="font-mono">deepseek-reasoner</span> for thinking mode. V4 (2026-03 flagship) coming to the same aliases.
+              </p>
+            </div>
+            <div className="col-span-2">
+              <label htmlFor="deepseek-base-url" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Base URL
+              </label>
+              <input
+                id="deepseek-base-url"
+                data-testid="deepseek-base-url"
+                type="url"
+                value={deepseekBaseUrl}
+                onChange={(e) => setDeepseekBaseUrl(e.target.value)}
+                placeholder="https://api.deepseek.com"
+                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+            </div>
+          </div>
+
+          <hr className="my-5 border-[var(--border)]" />
+
+          {/* --- Qwen --- */}
+          <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
+            Qwen (Alibaba DashScope)
+          </h3>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label htmlFor="qwen-api-key" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                API Key
+              </label>
+              <div className="relative">
+                <input
+                  id="qwen-api-key"
+                  data-testid="qwen-api-key"
+                  type={showQwenKey ? "text" : "password"}
+                  autoComplete="off"
+                  value={qwenApiKey}
+                  onChange={(e) => setQwenApiKey(e.target.value)}
+                  placeholder={qwenKeySet ? "sk-*******" : "Not set"}
+                  className="w-full h-9 rounded-md border border-[var(--border)] px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowQwenKey((v) => !v)}
+                  aria-label={showQwenKey ? "Hide API key" : "Show API key"}
+                  className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                >
+                  {showQwenKey ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="qwen-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Model
+              </label>
+              <input
+                id="qwen-model"
+                data-testid="qwen-model"
+                type="text"
+                value={qwenModel}
+                onChange={(e) => setQwenModel(e.target.value)}
+                placeholder="qwen3-max"
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                2026-04: <span className="font-mono">qwen3-max</span> (flagship, 2026-01-23 snapshot), <span className="font-mono">qwen3.5-plus</span> (1M ctx, 2026-02-15), <span className="font-mono">qwen3.5-flash</span>.
+              </p>
+            </div>
+            <div className="col-span-2">
+              <label htmlFor="qwen-base-url" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Base URL
+              </label>
+              <input
+                id="qwen-base-url"
+                data-testid="qwen-base-url"
+                type="url"
+                value={qwenBaseUrl}
+                onChange={(e) => setQwenBaseUrl(e.target.value)}
+                placeholder="https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                Mainland CN: swap host to <span className="font-mono">dashscope.aliyuncs.com</span>.
+              </p>
+            </div>
+          </div>
+
+          <hr className="my-5 border-[var(--border)]" />
+
+          {/* --- Moonshot Kimi --- */}
+          <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
+            Moonshot (Kimi)
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="moonshot-api-key" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                API Key
+              </label>
+              <div className="relative">
+                <input
+                  id="moonshot-api-key"
+                  data-testid="moonshot-api-key"
+                  type={showMoonshotKey ? "text" : "password"}
+                  autoComplete="off"
+                  value={moonshotApiKey}
+                  onChange={(e) => setMoonshotApiKey(e.target.value)}
+                  placeholder={moonshotKeySet ? "sk-*******" : "Not set"}
+                  className="w-full h-9 rounded-md border border-[var(--border)] px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowMoonshotKey((v) => !v)}
+                  aria-label={showMoonshotKey ? "Hide API key" : "Show API key"}
+                  className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                >
+                  {showMoonshotKey ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="moonshot-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Model
+              </label>
+              <input
+                id="moonshot-model"
+                data-testid="moonshot-model"
+                type="text"
+                value={moonshotModel}
+                onChange={(e) => setMoonshotModel(e.target.value)}
+                placeholder="kimi-k2.5"
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                2026-04: <span className="font-mono">kimi-k2.5</span> (flagship, 256K ctx, Agent Swarm — 2026-01), legacy <span className="font-mono">moonshot-v1-8k / 32k / 128k</span>.
+              </p>
+            </div>
+            <div className="col-span-2">
+              <label htmlFor="moonshot-base-url" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Base URL
+              </label>
+              <input
+                id="moonshot-base-url"
+                data-testid="moonshot-base-url"
+                type="url"
+                value={moonshotBaseUrl}
+                onChange={(e) => setMoonshotBaseUrl(e.target.value)}
+                placeholder="https://api.moonshot.ai/v1"
+                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                Mainland CN: swap host to <span className="font-mono">api.moonshot.cn</span>.
+              </p>
+            </div>
+          </div>
+
+          <hr className="my-5 border-[var(--border)]" />
+
+          {/* --- Zhipu GLM --- */}
+          <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">
+            Zhipu GLM (BigModel / Z.ai)
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="glm-api-key" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                API Key
+              </label>
+              <div className="relative">
+                <input
+                  id="glm-api-key"
+                  data-testid="glm-api-key"
+                  type={showGlmKey ? "text" : "password"}
+                  autoComplete="off"
+                  value={glmApiKey}
+                  onChange={(e) => setGlmApiKey(e.target.value)}
+                  placeholder={glmKeySet ? "****.*******" : "Not set"}
+                  className="w-full h-9 rounded-md border border-[var(--border)] px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowGlmKey((v) => !v)}
+                  aria-label={showGlmKey ? "Hide API key" : "Show API key"}
+                  className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                >
+                  {showGlmKey ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="glm-model" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Model
+              </label>
+              <input
+                id="glm-model"
+                data-testid="glm-model"
+                type="text"
+                value={glmModel}
+                onChange={(e) => setGlmModel(e.target.value)}
+                placeholder="glm-5.1"
+                className="w-full h-9 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                2026-04: <span className="font-mono">glm-5.1</span> (flagship, 200K ctx, #1 SWE-Bench Pro — 2026-04), <span className="font-mono">glm-5</span>, <span className="font-mono">glm-4.6</span>, <span className="font-mono">glm-4-flash</span>.
+              </p>
+            </div>
+            <div className="col-span-2">
+              <label htmlFor="glm-base-url" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">
+                Base URL
+              </label>
+              <input
+                id="glm-base-url"
+                data-testid="glm-base-url"
+                type="url"
+                value={glmBaseUrl}
+                onChange={(e) => setGlmBaseUrl(e.target.value)}
+                placeholder="https://open.bigmodel.cn/api/paas/v4/"
+                className="w-full h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                International: <span className="font-mono">https://api.z.ai/api/paas/v4/</span>.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* ---- Self-Hosted Inference: vLLM ---- */}
         <section className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 mb-6">
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
@@ -578,6 +934,40 @@ export default function SettingsPage() {
           </h2>
 
           <div className="space-y-4">
+            {/* Default Max Steps */}
+            <div>
+              <label
+                htmlFor="default-max-steps"
+                className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1"
+              >
+                Default Max Steps
+              </label>
+              <input
+                id="default-max-steps"
+                data-testid="default-max-steps"
+                type="number"
+                min={1}
+                max={MAX_SIMULATION_STEPS}
+                step={1}
+                value={defaultMaxSteps}
+                onChange={(e) => {
+                  const parsed = Number.parseInt(e.target.value, 10);
+                  if (!Number.isFinite(parsed)) return;
+                  const clamped = Math.max(
+                    1,
+                    Math.min(MAX_SIMULATION_STEPS, parsed),
+                  );
+                  setDefaultMaxSteps(clamped);
+                }}
+                className="w-32 h-9 rounded-md border border-[var(--border)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                Number of ticks a new simulation runs by default (1–
+                {MAX_SIMULATION_STEPS}). A step is one full agent cycle, not a
+                calendar day. Backend default: {DEFAULT_MAX_STEPS}.
+              </p>
+            </div>
+
             {/* SLM/LLM Ratio */}
             <div>
               <label htmlFor="slm-llm-ratio" className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] mb-1">

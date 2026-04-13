@@ -109,6 +109,67 @@ def _build_llm_stack():
         except Exception as exc:
             logger.warning("LLM: Gemini adapter failed: %s", exc)
 
+    # Chinese Top 3 (OpenAI-compatible, all tier-3 capable)
+    if settings.deepseek_api_key:
+        try:
+            from app.llm.openai_compat import DeepSeekAdapter
+            registry.register_adapter(
+                "deepseek",
+                DeepSeekAdapter(
+                    api_key=settings.deepseek_api_key,
+                    base_url=settings.deepseek_base_url,
+                    default_model=settings.deepseek_default_model,
+                ),
+            )
+            logger.info("LLM: DeepSeek adapter registered")
+        except Exception as exc:
+            logger.warning("LLM: DeepSeek adapter failed: %s", exc)
+
+    if settings.qwen_api_key:
+        try:
+            from app.llm.openai_compat import QwenAdapter
+            registry.register_adapter(
+                "qwen",
+                QwenAdapter(
+                    api_key=settings.qwen_api_key,
+                    base_url=settings.qwen_base_url,
+                    default_model=settings.qwen_default_model,
+                ),
+            )
+            logger.info("LLM: Qwen adapter registered")
+        except Exception as exc:
+            logger.warning("LLM: Qwen adapter failed: %s", exc)
+
+    if settings.moonshot_api_key:
+        try:
+            from app.llm.openai_compat import MoonshotAdapter
+            registry.register_adapter(
+                "moonshot",
+                MoonshotAdapter(
+                    api_key=settings.moonshot_api_key,
+                    base_url=settings.moonshot_base_url,
+                    default_model=settings.moonshot_default_model,
+                ),
+            )
+            logger.info("LLM: Moonshot adapter registered")
+        except Exception as exc:
+            logger.warning("LLM: Moonshot adapter failed: %s", exc)
+
+    if settings.glm_api_key:
+        try:
+            from app.llm.openai_compat import ZhipuGLMAdapter
+            registry.register_adapter(
+                "glm",
+                ZhipuGLMAdapter(
+                    api_key=settings.glm_api_key,
+                    base_url=settings.glm_base_url,
+                    default_model=settings.glm_default_model,
+                ),
+            )
+            logger.info("LLM: Zhipu GLM adapter registered")
+        except Exception as exc:
+            logger.warning("LLM: Zhipu GLM adapter failed: %s", exc)
+
     # Build gateway with registry
     gateway = LLMGateway(registry=registry)
     logger.info("LLMGateway initialized with %d providers", len(registry._adapters))

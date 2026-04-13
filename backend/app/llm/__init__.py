@@ -22,6 +22,13 @@ from app.llm.ollama_client import OllamaAdapter
 from app.llm.claude_client import ClaudeAdapter
 from app.llm.gemini_client import GeminiAdapter
 from app.llm.openai_client import OpenAIAdapter
+from app.llm.openai_compat import (
+    OpenAICompatibleAdapter,
+    DeepSeekAdapter,
+    QwenAdapter,
+    MoonshotAdapter,
+    ZhipuGLMAdapter,
+)
 from app.llm.vllm_client import VLLMAdapter
 from app.llm.slm_batch import SLMBatchInferencer
 from app.llm.prompt_builder import PromptBuilder
@@ -55,6 +62,11 @@ __all__ = [
     "ClaudeAdapter",
     "GeminiAdapter",
     "OpenAIAdapter",
+    "OpenAICompatibleAdapter",
+    "DeepSeekAdapter",
+    "QwenAdapter",
+    "MoonshotAdapter",
+    "ZhipuGLMAdapter",
     "VLLMAdapter",
     "SLMBatchInferencer",
     # Services

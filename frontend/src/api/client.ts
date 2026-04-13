@@ -36,6 +36,7 @@ export type {
   CommunityTemplate,
   CommunityTemplateInput,
   RunAllReport,
+  MonteCarloResponse,
   CytoscapeGraph,
   NetworkMetrics,
 } from '../types/api';
@@ -57,6 +58,7 @@ import type {
   CommunityTemplate,
   CommunityTemplateInput,
   RunAllReport,
+  MonteCarloResponse,
   CytoscapeGraph,
   NetworkMetrics,
 } from '../types/api';
@@ -102,6 +104,14 @@ export const apiClient = {
       request<Record<string, unknown>>(`/simulations/${id}/engine-control`, { method: "POST", body: JSON.stringify(body) }),
     runAll: (id: string) =>
       request<RunAllReport>(`/simulations/${id}/run-all`, { method: "POST" }),
+    runMonteCarlo: (
+      id: string,
+      body: { n_runs: number; max_concurrency?: number },
+    ) =>
+      request<MonteCarloResponse>(
+        `/simulations/${id}/monte-carlo`,
+        { method: "POST", body: JSON.stringify(body) },
+      ),
     recommendEngine: (body: { agent_count: number; budget_usd: number; max_steps?: number }) =>
       request<Record<string, unknown>>("/simulations/recommend-engine", { method: "POST", body: JSON.stringify(body) }),
     export: (id: string, format: 'json' | 'csv' = 'json') => {

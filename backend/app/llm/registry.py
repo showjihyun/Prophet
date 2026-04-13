@@ -321,8 +321,15 @@ class LLMAdapterRegistry:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    # Elite providers preferred for Tier 3 (in priority order)
-    _ELITE_PROVIDERS = ["claude", "openai", "gemini"]
+    # Elite providers preferred for Tier 3 (in priority order).
+    # 2026-04: added DeepSeek / Qwen / Moonshot (Chinese Top 3) as
+    # lower-priority fallbacks. Western providers still win when both
+    # are configured, matching most users' expectations; change the
+    # ordering if you want Chinese providers preferred.
+    _ELITE_PROVIDERS = [
+        "claude", "openai", "gemini",
+        "deepseek", "qwen", "moonshot", "glm",
+    ]
 
     def _pick_adapter(
         self, tier: int, preferred: str | None = None

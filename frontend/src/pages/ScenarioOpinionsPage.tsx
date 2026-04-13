@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
 import StatCard from "../components/shared/StatCard";
+import HelpTooltip from "../components/shared/HelpTooltip";
 import OverallOpinionPanel from "../components/community/OverallOpinionPanel";
 import { useSimulationSteps } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
@@ -249,7 +250,7 @@ export default function ScenarioOpinionsPage() {
       <PageNav
         breadcrumbs={[
           { label: simulation?.name ?? "Simulation", href: "/projects/p1" },
-          { label: "Agent Opinion" },
+          { label: "Agent Opinion", tooltipTerm: "pageOpinions" },
         ]}
         actions={
           <div className="flex items-center gap-2">
@@ -304,31 +305,37 @@ export default function ScenarioOpinionsPage() {
             value={`${s.avg_sentiment >= 0 ? "+" : ""}${s.avg_sentiment.toFixed(2)}`}
             change={statDeltas.sentiment}
             changeType={statDeltas.sentimentType}
+            term="opinionsAvgSentiment"
           />
           <StatCard
             label="Polarization"
             value={s.polarization.toFixed(2)}
             change={statDeltas.polarization}
             changeType={statDeltas.polarizationType}
+            term="polarization"
           />
           <StatCard
             label="Total Conversations"
             value={s.total_conversations.toLocaleString()}
             change={statDeltas.conversations}
             changeType={statDeltas.conversationsType}
+            term="opinionsTotalConversations"
           />
           <StatCard
             label="Active Cascades"
             value={s.active_cascades.toLocaleString()}
             change={statDeltas.cascades}
             changeType={statDeltas.cascadesType}
+            term="globalActiveCascades"
+            tooltipAlign="right"
           />
         </div>
 
         {/* Section title */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+          <h2 className="text-lg font-semibold text-[var(--foreground)] inline-flex items-center gap-1.5">
             Community Opinion Breakdown
+            <HelpTooltip term="opinionsCommunityBreakdown" size="sm" />
           </h2>
           <button
             onClick={() => setViewMode(viewMode === "data" ? "faction" : "data")}

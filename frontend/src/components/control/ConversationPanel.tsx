@@ -107,10 +107,16 @@ export default function ConversationPanel() {
           });
         }
 
-        // Emergent events from this step
-        for (const event of stepData.emergent_events) {
+        // Emergent events from this step.
+        // Key includes the event-loop index `ei` so the row stays unique
+        // even if a step emits two events of the same type (e.g. viral
+        // cascades in two communities at once). The 2026-04 root fix at
+        // backend `/steps` (event_type was emitted as `type`, hiding the
+        // real names) means `event.event_type` should always be defined
+        // for fresh runs — `?? "unknown"` only triggers on legacy data.
+        for (const [ei, event] of stepData.emergent_events.entries()) {
           insightItems.push({
-            id: `step-${stepData.step}-${si}-event-${event.event_type ?? "unknown"}`,
+            id: `step-${stepData.step}-${si}-event-${ei}-${event.event_type ?? "unknown"}`,
             agentId: event.community_id ?? "System",
             community: event.community_id ?? "Alert",
             communityColor: EVENT_COMMUNITY_COLORS[event.community_id?.toLowerCase() ?? ""] ?? "var(--destructive)",

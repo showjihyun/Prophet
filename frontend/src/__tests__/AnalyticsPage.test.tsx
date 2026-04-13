@@ -264,13 +264,15 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
 
   /** @spec 26_ANALYTICS_SPEC.md#analytics-summary-cards */
   describe('Summary Cards', () => {
+    // HelpTooltip duplicates the label text inside a hidden tooltip <span>.
+    // Use getAllByText to tolerate the duplicate.
     it('renders Total Steps card', async () => {
       useSimulationStore.setState({
         simulation: MOCK_SIMULATION as any,
         steps: MOCK_STEPS as any,
       });
       renderPage();
-      await waitFor(() => expect(screen.getByText('Total Steps')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getAllByText('Total Steps').length).toBeGreaterThanOrEqual(1));
     });
 
     it('renders Final Adoption card', async () => {
@@ -279,7 +281,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
         steps: MOCK_STEPS as any,
       });
       renderPage();
-      await waitFor(() => expect(screen.getByText('Final Adoption')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getAllByText('Final Adoption').length).toBeGreaterThanOrEqual(1));
     });
 
     it('renders Final Sentiment card', async () => {
@@ -288,7 +290,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
         steps: MOCK_STEPS as any,
       });
       renderPage();
-      await waitFor(() => expect(screen.getByText('Final Sentiment')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getAllByText('Final Sentiment').length).toBeGreaterThanOrEqual(1));
     });
 
     it('renders Emergent Events card', async () => {
@@ -297,7 +299,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
         steps: MOCK_STEPS as any,
       });
       renderPage();
-      await waitFor(() => expect(screen.getByText('Emergent Events')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getAllByText('Emergent Events').length).toBeGreaterThanOrEqual(1));
     });
 
     it('shows correct final adoption percentage', async () => {
@@ -321,8 +323,9 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
         steps: MOCK_STEPS as any,
       });
       renderPage();
-      const label = await screen.findByText('Total Steps');
-      const card = label.closest('div')!;
+      // HelpTooltip duplicates label — pick the first match (the visible <p>).
+      const labels = await screen.findAllByText('Total Steps');
+      const card = labels[0].closest('div')!;
       expect(within(card).getByText('2')).toBeInTheDocument();
     });
 
@@ -348,8 +351,8 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
         steps: MOCK_STEPS as any,
       });
       renderPage();
-      const label = await screen.findByText('Emergent Events');
-      const card = label.closest('div')!;
+      const labels = await screen.findAllByText('Emergent Events');
+      const card = labels[0].closest('div')!;
       expect(within(card).getByText('1')).toBeInTheDocument();
     });
   });
@@ -661,8 +664,8 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
         steps: MOCK_STEPS_MULTI_EVENT as any,
       });
       renderPage();
-      const label = await screen.findByText('Emergent Events');
-      const card = label.closest('div')!;
+      const labels = await screen.findAllByText('Emergent Events');
+      const card = labels[0].closest('div')!;
       // Unfiltered: 2 events
       expect(within(card).getByText('2')).toBeInTheDocument();
       // Filter to just polarization

@@ -121,6 +121,16 @@ function App() {
               <Route path="/opinions" element={<ScenarioOpinionsPage />} />
               <Route path="/opinions/:communityId" element={<CommunityOpinionPage />} />
               <Route path="/opinions/:communityId/thread/:threadId" element={<ConversationThreadPage />} />
+              {/* SPEC 24 §2.3 — DecidePanel navigates with both sim IDs in
+                  the URL so the comparison link is shareable and survives a
+                  page refresh. The legacy `/compare/:otherId` route is kept
+                  so existing bookmarks still resolve (ComparisonPage falls
+                  back to the active simulation from the Zustand store when
+                  simulationId is absent from the URL). */}
+              <Route
+                path="/simulation/:simulationId/compare/:otherId"
+                element={<ComparisonPage />}
+              />
               <Route path="/compare/:otherId" element={<ComparisonPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
             </Route>

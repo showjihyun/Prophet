@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import PageNav from "../components/shared/PageNav";
+import HelpTooltip from "../components/shared/HelpTooltip";
 import EliteLLMNarrativePanel from "../components/community/EliteLLMNarrativePanel";
 import { useSimulationSteps, useCommunityThreads } from "../api/queries";
 import { useSimulationStore } from "../store/simulationStore";
@@ -199,7 +200,7 @@ export default function CommunityOpinionPage() {
         breadcrumbs={[
           { label: simulation?.name ?? "Simulation", href: "/projects/p1" },
           { label: meta.name.replace("Community ", ""), href: `/opinions` },
-          { label: "Opinion" },
+          { label: "Opinion", tooltipTerm: "pageCommunityOpinion" },
         ]}
         actions={
           <div className="flex items-center gap-2">
@@ -268,7 +269,10 @@ export default function CommunityOpinionPage() {
         {/* Left: Opinion Clusters */}
         <div className="flex-1 overflow-y-auto px-8 py-5 border-r border-[var(--border)]">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-[var(--foreground)]">Opinion Clusters</h2>
+            <h2 className="text-base font-semibold text-[var(--foreground)] inline-flex items-center gap-1.5">
+              Opinion Clusters
+              <HelpTooltip term="opinionClusters" size="sm" />
+            </h2>
             <select
               value={sortMode}
               onChange={(e) => setSortMode(e.target.value as SortMode)}
@@ -309,7 +313,10 @@ export default function CommunityOpinionPage() {
         {/* Right: Recent Conversations */}
         <div className="overflow-y-auto py-5 px-6" style={{ width: 460 }}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-[var(--foreground)]">Recent Conversations</h2>
+            <h2 className="text-base font-semibold text-[var(--foreground)] inline-flex items-center gap-1.5">
+              Recent Conversations
+              <HelpTooltip term="recentConversations" size="sm" />
+            </h2>
             <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)]">
               {conversations.length}
             </span>

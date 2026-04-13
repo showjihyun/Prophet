@@ -186,9 +186,9 @@ describe('FLOW-09: Campaign Setup Validation', () => {
     expect(MAX_COMMUNITY_SIZE).toBe(5000);
   });
 
-  it('should use 365 as default max steps', async () => {
-    const { DEFAULT_SIMULATION_DAYS } = await import('@/config/constants');
-    expect(DEFAULT_SIMULATION_DAYS).toBe(365);
+  it('should use 50 as default max steps (aligned with backend)', async () => {
+    const { DEFAULT_MAX_STEPS } = await import('@/config/constants');
+    expect(DEFAULT_MAX_STEPS).toBe(50);
   });
 
   it('should use 42 as default random seed', async () => {

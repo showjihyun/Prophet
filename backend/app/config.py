@@ -48,6 +48,28 @@ class Settings(BaseSettings):
     vllm_base_url: str = ""  # empty = not configured
     vllm_default_model: str = "meta-llama/Llama-3.1-8B-Instruct"
     vllm_max_concurrent: int = 64
+    # ── Chinese LLM providers (2026 Top 3, OpenAI-compatible) ──
+    # All three default to cloud endpoints; override base_url if you're
+    # running a private gateway or need the mainland CN endpoint variant.
+    # 2026-04 defaults — verified against each provider's docs:
+    #   - DeepSeek V3.2 auto-aliased behind `deepseek-chat` (V4 launched
+    #     2026-03, override model name manually if you want to pin it).
+    #   - Qwen3-Max is the current flagship snapshot (2026-01-23).
+    #   - Moonshot Kimi K2.5 shipped 2026-01 with 256K context + Agent
+    #     Swarm; model ID is `kimi-k2.5`.
+    #   - Zhipu GLM-5.1 released 2026-04, #1 on SWE-Bench Pro.
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_default_model: str = "deepseek-chat"
+    qwen_api_key: str = ""
+    qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    qwen_default_model: str = "qwen3-max"
+    moonshot_api_key: str = ""
+    moonshot_base_url: str = "https://api.moonshot.ai/v1"
+    moonshot_default_model: str = "kimi-k2.5"
+    glm_api_key: str = ""
+    glm_base_url: str = "https://open.bigmodel.cn/api/paas/v4/"
+    glm_default_model: str = "glm-5.1"
 
     # ── Distributed execution ───────────────────────────────────────────────
     ray_enabled: bool = False

@@ -182,6 +182,39 @@ class TestStepHistory:
         data = resp.json()
         assert len(data["steps"]) == 2
 
+    async def test_emergent_events_serialization_contract(
+        self, client: AsyncClient, sim_id: str,
+    ):
+        """Regression — REST and WS payloads MUST agree on the EmergentEvent
+        field shape. The FE EmergentEvent type uses `event_type`, not `type`,
+        and includes `severity` + `description`. A 2026-04 audit found this
+        endpoint emitting `{type, step, community_id}` only — every event
+        on the FE became `event_type: undefined → "unknown"` and React keys
+        collided whenever a single step had >1 event.
+        """
+        await client.post(f"/api/v1/simulations/{sim_id}/start")
+        # Run a few steps to coax detectors into firing.
+        for _ in range(8):
+            await client.post(f"/api/v1/simulations/{sim_id}/step")
+        resp = await client.get(f"/api/v1/simulations/{sim_id}/steps")
+        steps = resp.json()["steps"]
+        for s in steps:
+            for e in s["emergent_events"]:
+                # Required keys must exist (typo regression check).
+                assert "event_type" in e, (
+                    f"missing 'event_type' (was bug: emitted as 'type'): {e}"
+                )
+                assert "severity" in e
+                assert "description" in e
+                # 'type' is the buggy old name; must NOT appear.
+                assert "type" not in e, (
+                    f"forbidden legacy 'type' key still present: {e}"
+                )
+                assert e["event_type"] in {
+                    "viral_cascade", "slow_adoption",
+                    "polarization", "collapse", "echo_chamber",
+                }
+
 
 @pytest.mark.phase6
 class TestInjectEvent:

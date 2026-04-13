@@ -25,10 +25,17 @@ interface ComparisonData {
 }
 
 export default function ComparisonPage() {
-  const { otherId } = useParams<{ otherId: string }>();
+  // SPEC 24 §2.3 — DecidePanel routes with both IDs in the URL
+  // (`/simulation/:simulationId/compare/:otherId`). The legacy
+  // `/compare/:otherId` route omits simulationId, so fall back to the
+  // active simulation in the Zustand store to keep old links working.
+  const { simulationId: urlSimId, otherId } = useParams<{
+    simulationId?: string;
+    otherId: string;
+  }>();
   const navigate = useNavigate();
   const simulation = useSimulationStore((s) => s.simulation);
-  const simulationId = simulation?.simulation_id ?? null;
+  const simulationId = urlSimId ?? simulation?.simulation_id ?? null;
 
   // Derive error when required params are missing (pure derivation, no effect needed).
   const missingError = !simulationId

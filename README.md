@@ -273,6 +273,155 @@ Open-source. Reproducible. Runs on a laptop. Built-in cascade detection. If you'
 
 ---
 
+## 📐 The math & social science under the hood
+
+Prophet isn't a "vibes" simulator. Every layer is a published, peer-reviewed model — wired together so you can change one knob and see the rest react. This section names the techniques and the academic lineage so reviewers, grad students, and skeptical CMOs can audit it.
+
+> Every claim below cites the source file. Search the repo for `SPEC:` docstrings to trace each technique back to its formal contract.
+
+### 🌐 Network structure
+
+| Technique | What it does in Prophet | Source |
+|-----------|------------------------|--------|
+| **Watts-Strogatz small-world** | Per-community local clustering with rewiring `p` — captures the "friend of a friend" structure of real social ties | [`network/community_graph.py`](backend/app/engine/network/community_graph.py) |
+| **Barabási-Albert preferential attachment** | Generates the influencer/hub layer with a power-law degree distribution — a few accounts hold most of the reach | [`network/influencer_layer.py`](backend/app/engine/network/influencer_layer.py) |
+| **Hybrid hub-merging + bridge edges** | BA hubs are spliced into WS communities; cross-community bridges are degree-weighted (preferential) so brokers form realistically | [`network/generator.py`](backend/app/engine/network/generator.py) |
+| **Personality homophily** | Edge weights boosted by Manhattan-distance similarity across 5 traits — likes attract, but not exclusively | [`network/generator.py:390`](backend/app/engine/network/generator.py) |
+| **Validation: clustering coefficient · modularity · degree assortativity** | Generated networks are rejected unless `0.2 ≤ CC ≤ 0.6` and modularity is non-trivial — guarantees real-network character | [`network/generator.py:486`](backend/app/engine/network/generator.py) |
+
+> Why this matters: random graphs (Erdős-Rényi) systematically underestimate cascade behavior because they have no clustering and no hubs. Prophet's hybrid generator is calibrated to reproduce the structural signatures of empirical online communities (Watts 1998; Barabási-Albert 1999; Newman 2003).
+
+### 🧠 Opinion & belief dynamics
+
+<details>
+<summary><strong>Deffuant bounded-confidence model</strong> — agents only listen to neighbors whose belief is within an "open mind" radius</summary>
+
+`belief_i(t+1) = belief_i(t) + μ · (belief_j(t) − belief_i(t))` only if `|belief_i − belief_j| < ε` (default `ε = 0.3`, `μ = 0.5`).
+This is the canonical mechanism that allows **polarization to emerge endogenously** — without it, every model collapses to consensus. (Deffuant, Neau, Amblard, Weisbuch 2000.) → [`opinion_dynamics.py`](backend/app/engine/diffusion/opinion_dynamics.py)
+</details>
+
+<details>
+<summary><strong>Friedkin-style stubbornness</strong> — convergence rate is dampened by an agent's stubbornness trait</summary>
+
+`μ' = μ · (1 − stubbornness)` so loyal-to-prior agents barely move even when exposed to contrary views. Generalizes Friedkin-Johnsen by tying anchor weight to a trait. → [`opinion_dynamics.py:36`](backend/app/engine/diffusion/opinion_dynamics.py)
+</details>
+
+<details>
+<summary><strong>Expert influence (sentiment shift)</strong> — credentialed agents nudge community sentiment with a configurable α</summary>
+
+`E_community(t+1) = clamp(E_community(t) + α · O_expert)` with `α = 0.3`. Lets you study the asymmetry between official sources and grassroots voices. → [`sentiment_model.py:64`](backend/app/engine/diffusion/sentiment_model.py)
+</details>
+
+### 🌊 Diffusion & contagion
+
+| Technique | Implementation |
+|-----------|----------------|
+| **SIR-inspired state machine** | Agents transition `SUSCEPTIBLE → EXPOSED → ADOPTED/REJECTED` — the canonical epidemic model adapted for information goods | [`agent/schema.py:76`](backend/app/engine/agent/schema.py) |
+| **Calibrated propagation probability** | `P = max(0.1, I)·T·σ(−4·E)·MS` where I=influence, T=trust, E=emotion, MS=message strength — a logistic-modulated multiplicative form | [`diffusion/propagation_calibration.py`](backend/app/engine/diffusion/propagation_calibration.py) |
+| **RecSys-inspired exposure** | Two-phase candidate-gen + ranking: `score = w₁·recency + w₂·social_affinity + w₃·interest_match + w₄·engagement + w₅·ad_boost − diversity_penalty` (top-K feed). Mirrors industry recommender-system practice | [`diffusion/exposure_model.py`](backend/app/engine/diffusion/exposure_model.py) |
+| **Negative-cascade amplification** | Negative events trigger asymmetric (≤ 0) sentiment deltas — operationalizes the "bad-news-travels-faster" finding (Vosoughi, Roy, Aral 2018) | [`diffusion/negative_cascade.py`](backend/app/engine/diffusion/negative_cascade.py) |
+| **Reddit-style hot score (optional)** | `h = sign(net) · log₁₀(max(|net|, 1)) + age_seconds/45000` — included for users simulating link-aggregator platforms | [`platform/recsys.py:50`](backend/app/engine/platform/recsys.py) |
+
+### 🔥 Emergent-behavior detection
+
+Five auto-detectors fire as the simulation runs and surface on the timeline:
+
+| Event | Trigger formula | File |
+|-------|----------------|------|
+| **Viral cascade** | `adoption_rate ≥ 0.15` in one step OR step-delta ≥ 0.15 | [`cascade_detector.py:109`](backend/app/engine/diffusion/cascade_detector.py) |
+| **Slow adoption** | `adoption_rate < 0.02` for ≥ 5 consecutive steps (fires once, resets on recovery) | [`cascade_detector.py:155`](backend/app/engine/diffusion/cascade_detector.py) |
+| **Polarization** | community `sentiment_variance > 0.05` (sample variance, n−1 Bessel correction) | [`cascade_detector.py:210`](backend/app/engine/diffusion/cascade_detector.py) |
+| **Collapse** | adoption drops ≥ 20% over 3 steps | [`cascade_detector.py:235`](backend/app/engine/diffusion/cascade_detector.py) |
+| **Echo chamber** | `internal_links / external_links > 10` (returns max ratio across communities) | [`cascade_detector.py:275`](backend/app/engine/diffusion/cascade_detector.py) |
+
+### 🎲 Monte Carlo & uncertainty
+
+| Aggregate | Formula | File |
+|-----------|---------|------|
+| **Viral probability** | fraction of N runs that fire ≥ 1 viral cascade | [`simulation/monte_carlo.py:149`](backend/app/engine/simulation/monte_carlo.py) |
+| **Expected reach** | mean final adoption across runs | line 152 |
+| **P5 / P50 / P95 reach** | sorted-index percentile lookup (no interpolation — stable for small N) | line 154 |
+
+Each MC run replays the same `SimulationConfig` with `seed = base_seed + run_id × 1000` for full reproducibility.
+
+### 🤖 Cognition cost-control (LLM tier routing)
+
+```
+Phase 1: experts ∪ {agents with influence > 0.7} ∪ critical-decision agents → Tier 3 (Elite LLM)
+Phase 2: {influence > 0.5} ∪ {skeptic_skepticism > 0.7}                     → Tier 2 (heuristic + LLM blend)
+Otherwise                                                                    → Tier 1 (local SLM)
+Caps: max_tier3_ratio ≤ 10%, max_tier2_ratio ≤ 10%
+```
+
+This is what keeps a 10K-agent run **under \$5** while keeping the high-leverage decisions on a frontier model. → [`agent/tier_selector.py`](backend/app/engine/agent/tier_selector.py)
+
+---
+
+## 🔬 What this means for social science
+
+Prophet is, in academic terms, an **agent-based model (ABM) of opinion dynamics on a generative social network with calibrated viral-diffusion mechanics**. Three traditions converge:
+
+1. **Bounded-confidence opinion dynamics** (Deffuant 2000, Hegselmann-Krause 2002) — the "open-minded radius" mechanism that produces clustering rather than consensus.
+2. **Generative network models** (Watts-Strogatz 1998, Barabási-Albert 1999) — the structural backbone that lets micro-rules produce macro-patterns matching real platforms.
+3. **Computational diffusion** (Kempe-Kleinberg-Tardos 2003 cascade models, plus modern RecSys-augmented exposure) — the pipeline a message follows from impression to adoption.
+
+### Why it's useful
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**🎓 For researchers**
+- A reproducible substrate for replicating ABM papers without writing your own simulator
+- Built-in cascade / polarization / echo-chamber detectors mean you can study **macro-patterns**, not just micro-mechanics
+- Per-step JSON export → drop straight into pandas / R / Jupyter
+- LLM-driven cognition lets you study message *content* effects, not just topology — a frontier ABMs have struggled with
+
+</td>
+<td width="50%" valign="top">
+
+**📣 For practitioners**
+- Pre-test message variants against synthetic populations whose composition you control
+- Quantify uncertainty (P5 / P50 / P95 reach) before you spend
+- Identify which communities will polarize *before* the campaign hits them
+- Study counterfactuals — "what if we removed this influencer?" / "what if the message was 0.2 less controversial?" — at zero risk
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**🏛️ For policy & public health**
+- Pre-screen public-health messaging for asymmetric uptake across communities
+- Test crisis-comms variants under simulated information shocks
+- Forecast the polarization risk of contested policy announcements
+- Compare *informational* interventions (transparency, framing) against *structural* ones (network seeding)
+
+</td>
+<td valign="top">
+
+**🧪 For social-science pedagogy**
+- A live ABM students can *run* and *break* — the textbook diagrams come alive
+- The 6-step UI maps cleanly to a research workflow (Generate → Inject → Simulate → Detect → Visualize → Decide)
+- Open source means students can read the equations *in the same place* the simulator runs them
+
+</td>
+</tr>
+</table>
+
+### Honest limitations
+
+Prophet is a model — and all models are wrong, some are useful. Things to be honest about:
+
+- **Calibration is structural, not empirical.** Network statistics (clustering, modularity) are validated against ranges from the literature — not against your specific platform's logs.
+- **LLM agents inherit LLM biases.** Tier 3 cognition uses general-purpose LLMs; their persona play is consistent but is not a substitute for actual human focus-group data.
+- **Bounded-confidence dynamics are a theory, not a measurement.** Different opinion-dynamics models (DeGroot, voter, Hegselmann-Krause) produce different predictions; we picked Deffuant for its empirical track record on polarization, but reasonable researchers disagree.
+- **Five emergent-behavior detectors do not exhaust the space.** We picked the five most common in the diffusion literature; novel patterns will need custom detectors (PRs welcome).
+
+In other words: **use Prophet to generate hypotheses, narrow your search space, and rule out obvious failure modes — not to replace empirical validation on real audiences.**
+
+---
+
 ## 🏗️ Architecture
 
 ```

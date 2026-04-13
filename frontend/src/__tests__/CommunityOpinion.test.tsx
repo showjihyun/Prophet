@@ -139,7 +139,11 @@ describe('CommunityOpinionPage (UI-14)', () => {
   describe('Opinion Clusters', () => {
     it('renders "Opinion Clusters" section title', () => {
       renderPage();
-      expect(screen.getByText('Opinion Clusters')).toBeInTheDocument();
+      // The HelpTooltip alongside the heading also renders the same label
+      // text inside its (visually hidden) tooltip body, so query by role.
+      expect(
+        screen.getByRole('heading', { name: /Opinion Clusters/ }),
+      ).toBeInTheDocument();
     });
 
     it('renders cluster cards derived from step data', () => {
@@ -159,7 +163,9 @@ describe('CommunityOpinionPage (UI-14)', () => {
   describe('Recent Conversations', () => {
     it('renders "Recent Conversations" section', () => {
       renderPage();
-      expect(screen.getByText('Recent Conversations')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: /Recent Conversations/ }),
+      ).toBeInTheDocument();
     });
 
     it('renders conversation items with message counts', () => {

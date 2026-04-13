@@ -7,11 +7,15 @@
  */
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import HelpTooltip from "./HelpTooltip";
+import type { GlossaryTerm } from "@/config/glossary";
 
 interface BreadcrumbItem {
   label: string;
   href?: string;
   testId?: string;
+  /** Glossary term — renders a HelpCircle next to this crumb's label. */
+  tooltipTerm?: GlossaryTerm;
 }
 
 interface PageNavProps {
@@ -65,13 +69,16 @@ export default function PageNav({ breadcrumbs, actions }: PageNavProps) {
                 ) : (
                   <span
                     data-testid={item.testId}
-                    className={
+                    className={`inline-flex items-center gap-1.5 ${
                       isLast
                         ? "text-[var(--foreground)] font-semibold"
                         : "text-[var(--muted-foreground)]"
-                    }
+                    }`}
                   >
                     {item.label}
+                    {item.tooltipTerm && (
+                      <HelpTooltip term={item.tooltipTerm} size="sm" />
+                    )}
                   </span>
                 )}
               </li>

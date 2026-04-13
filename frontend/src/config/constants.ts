@@ -23,6 +23,7 @@ export const LS_KEY_THEME = "prophet-theme";
 export const LS_KEY_SIMULATION_ID = "prophet-simulation-id";
 export const LS_KEY_USERNAME = "prophet-username";
 export const LS_KEY_PROJECT_ID = "prophet-project-id";
+export const LS_KEY_DEFAULT_MAX_STEPS = "prophet-default-max-steps";
 // ── WebSocket ──────────────────────────────────────────────────────────────
 
 export const WS_MAX_RETRIES = 5;
@@ -40,9 +41,35 @@ export const QUERY_RETRY_COUNT = 1;
 
 // ── Simulation Defaults ────────────────────────────────────────────────────
 
-export const DEFAULT_SIMULATION_DAYS = 365;
+/**
+ * Default number of simulation steps (ticks).
+ *
+ * A "step" is one full tick of the engine (every active agent perceives,
+ * updates memory/emotion, decides, and propagates). It is **not** a
+ * calendar day — an earlier `DEFAULT_SIMULATION_DAYS = 365` constant
+ * leaked that misnomer into fixtures. Aligned 2026-04-13 with the
+ * backend default (`SIM_DEFAULT_MAX_STEPS=50`, `backend/app/config.py`).
+ *
+ * Runtime override: users can change the default per-workstation via
+ * Settings → Simulation Defaults → "Default Max Steps", persisted to
+ * `LS_KEY_DEFAULT_MAX_STEPS` in localStorage. Use `getDefaultMaxSteps()`
+ * (below) instead of reading this constant directly when creating a
+ * new simulation.
+ */
 export const DEFAULT_MAX_STEPS = 50;
 export const MAX_SIMULATION_STEPS = 1000;
+
+/** Read the user's configured default max steps (or fallback to 50). */
+export function getDefaultMaxSteps(): number {
+  if (typeof window === "undefined") return DEFAULT_MAX_STEPS;
+  const raw = window.localStorage.getItem(LS_KEY_DEFAULT_MAX_STEPS);
+  if (!raw) return DEFAULT_MAX_STEPS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > MAX_SIMULATION_STEPS) {
+    return DEFAULT_MAX_STEPS;
+  }
+  return parsed;
+}
 export const MIN_COMMUNITY_SIZE = 10;
 export const MAX_COMMUNITY_SIZE = 5000;
 export const DEFAULT_SLM_LLM_RATIO = 0.5;

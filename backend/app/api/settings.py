@@ -62,6 +62,19 @@ async def get_settings() -> dict[str, Any]:
             "vllm_base_url": settings.vllm_base_url,
             "vllm_model": settings.vllm_default_model,
             "vllm_max_concurrent": settings.vllm_max_concurrent,
+            # Chinese Top 3 (OpenAI-compatible)
+            "deepseek_api_key_set": bool(settings.deepseek_api_key),
+            "deepseek_base_url": settings.deepseek_base_url,
+            "deepseek_model": settings.deepseek_default_model,
+            "qwen_api_key_set": bool(settings.qwen_api_key),
+            "qwen_base_url": settings.qwen_base_url,
+            "qwen_model": settings.qwen_default_model,
+            "moonshot_api_key_set": bool(settings.moonshot_api_key),
+            "moonshot_base_url": settings.moonshot_base_url,
+            "moonshot_model": settings.moonshot_default_model,
+            "glm_api_key_set": bool(settings.glm_api_key),
+            "glm_base_url": settings.glm_base_url,
+            "glm_model": settings.glm_default_model,
         },
         "simulation": {
             "slm_llm_ratio": settings.slm_llm_ratio,
@@ -144,6 +157,31 @@ async def update_settings(body: dict[str, Any]) -> dict[str, str]:
                 detail="vllm_max_concurrent must be in [1, 512]",
             )
         settings.vllm_max_concurrent = val
+    # Chinese Top 3 (OpenAI-compatible)
+    if "deepseek_api_key" in llm:
+        settings.deepseek_api_key = llm["deepseek_api_key"]
+    if "deepseek_base_url" in llm:
+        settings.deepseek_base_url = llm["deepseek_base_url"]
+    if "deepseek_model" in llm:
+        settings.deepseek_default_model = llm["deepseek_model"]
+    if "qwen_api_key" in llm:
+        settings.qwen_api_key = llm["qwen_api_key"]
+    if "qwen_base_url" in llm:
+        settings.qwen_base_url = llm["qwen_base_url"]
+    if "qwen_model" in llm:
+        settings.qwen_default_model = llm["qwen_model"]
+    if "moonshot_api_key" in llm:
+        settings.moonshot_api_key = llm["moonshot_api_key"]
+    if "moonshot_base_url" in llm:
+        settings.moonshot_base_url = llm["moonshot_base_url"]
+    if "moonshot_model" in llm:
+        settings.moonshot_default_model = llm["moonshot_model"]
+    if "glm_api_key" in llm:
+        settings.glm_api_key = llm["glm_api_key"]
+    if "glm_base_url" in llm:
+        settings.glm_base_url = llm["glm_base_url"]
+    if "glm_model" in llm:
+        settings.glm_default_model = llm["glm_model"]
 
     sim = body.get("simulation", {})
     if "slm_llm_ratio" in sim:

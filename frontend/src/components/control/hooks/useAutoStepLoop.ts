@@ -7,7 +7,7 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { apiClient } from "../../../api/client";
 import { useSimulationStore } from "../../../store/simulationStore";
-import { SIM_STATUS } from "@/config/constants";
+import { SIM_STATUS, DEFAULT_MAX_STEPS } from "@/config/constants";
 
 export function useAutoStepLoop(
   runAllLoading: boolean,
@@ -26,10 +26,10 @@ export function useAutoStepLoop(
   // Stable refs for simulation ID and max_steps — updated on every render so
   // the interval callback sees current values without being a dependency.
   const simIdRef = useRef(simulation?.simulation_id);
-  const maxStepsRef = useRef(simulation?.max_steps ?? 365);
+  const maxStepsRef = useRef(simulation?.max_steps ?? DEFAULT_MAX_STEPS);
   useEffect(() => {
     simIdRef.current = simulation?.simulation_id;
-    maxStepsRef.current = simulation?.max_steps ?? 365;
+    maxStepsRef.current = simulation?.max_steps ?? DEFAULT_MAX_STEPS;
   });
 
   useEffect(() => {

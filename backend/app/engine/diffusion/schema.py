@@ -241,6 +241,40 @@ class ExpertOpinion:
     confidence: float
 
 
+# --------------------------------------------------------------------------- #
+# Monte Carlo aggregates                                                       #
+# SPEC: docs/spec/29_MONTE_CARLO_SPEC.md#11-result-dataclasses-mc-eng-01       #
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class RunSummary:
+    """Terminal stats for a single Monte Carlo run.
+
+    SPEC: docs/spec/29_MONTE_CARLO_SPEC.md#11-result-dataclasses-mc-eng-01
+    """
+    run_id: int
+    final_adoption: int
+    viral_detected: bool
+    steps_completed: int
+
+
+@dataclass
+class MonteCarloResult:
+    """Aggregate over N runs of the same SimulationConfig with different seeds.
+
+    SPEC: docs/spec/29_MONTE_CARLO_SPEC.md#11-result-dataclasses-mc-eng-01
+    """
+    n_runs: int
+    viral_probability: float
+    expected_reach: float
+    p5_reach: float
+    p50_reach: float
+    p95_reach: float
+    community_adoption: dict[str, float] = field(default_factory=dict)
+    run_summaries: list[RunSummary] = field(default_factory=list)
+
+
 __all__ = [
     "RecSysConfig",
     "FeedItem",
@@ -253,4 +287,6 @@ __all__ = [
     "CommunitySentiment",
     "NegativeEvent",
     "ExpertOpinion",
+    "RunSummary",
+    "MonteCarloResult",
 ]

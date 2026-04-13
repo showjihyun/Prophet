@@ -437,6 +437,24 @@ export function useExportSimulation() {
   };
 }
 
+/** Monte Carlo sweep — explicit user trigger, never auto-fires.
+ *  SPEC: docs/spec/29_MONTE_CARLO_SPEC.md#32-hook-mc-fe-02
+ */
+export function useRunMonteCarlo() {
+  return useMutation({
+    mutationFn: ({
+      simId,
+      n_runs,
+      max_concurrency,
+    }: {
+      simId: string;
+      n_runs: number;
+      max_concurrency?: number;
+    }) =>
+      apiClient.simulations.runMonteCarlo(simId, { n_runs, max_concurrency }),
+  });
+}
+
 // ───────── Campaign / intervention dispatches ─────────
 
 export function useInjectEvent() {

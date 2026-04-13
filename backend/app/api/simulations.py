@@ -43,8 +43,11 @@ from app.api.schemas import (
     PaginatedResponse,
     RecommendEngineRequest,
     RecommendEngineResponse,
+    MonteCarloRequest,
+    MonteCarloResponse,
     ReplayResponse,
     RunAllResponse,
+    RunSummaryItem,
     ScenarioComparisonResponse,
     SimulationDetailResponse,
     SimulationResponse,
@@ -388,7 +391,18 @@ async def step_simulation(
         llm_calls_this_step=result.llm_calls_this_step,
         step_duration_ms=result.step_duration_ms,
         emergent_events=[
-            {"type": e.event_type, "step": e.step, "community_id": str(e.community_id) if e.community_id else None}
+            {
+                # FIX (2026-04-13): was "type" — FE EmergentEvent type uses
+                # "event_type" (matches WS broadcast shape in
+                # simulation_service._broadcast_step_result). Severity +
+                # description were also dropped, causing the React-key
+                # collision when ConversationPanel saw "unknown" types.
+                "event_type": e.event_type,
+                "step": e.step,
+                "community_id": str(e.community_id) if e.community_id else None,
+                "severity": e.severity,
+                "description": e.description,
+            }
             for e in result.emergent_events
         ] if result.emergent_events else [],
     )
@@ -582,7 +596,13 @@ async def get_steps(
                 llm_calls_this_step=sr.llm_calls_this_step,
                 step_duration_ms=sr.step_duration_ms,
                 emergent_events=[
-                    {"type": e.event_type, "step": e.step, "community_id": str(e.community_id) if e.community_id else None}
+                    {
+                        "event_type": e.event_type,
+                        "step": e.step,
+                        "community_id": str(e.community_id) if e.community_id else None,
+                        "severity": e.severity,
+                        "description": e.description,
+                    }
                     for e in sr.emergent_events
                 ] if sr.emergent_events else [],
             ))
@@ -606,7 +626,7 @@ async def get_steps(
                 action_distribution=sr.get("action_distribution", {}),
                 llm_calls_this_step=sr.get("llm_calls_this_step", 0),
                 step_duration_ms=sr.get("step_duration_ms", 0.0),
-                emergent_events=[],
+                emergent_events=sr.get("emergent_events", []),
             ))
 
     return StepHistoryResponse(steps=steps)
@@ -766,6 +786,66 @@ async def compare_simulations(
         simulation_a=simulation_id,
         simulation_b=other_id,
         comparison=comparison,
+    )
+
+
+@router.post(
+    "/{simulation_id}/monte-carlo",
+    response_model=MonteCarloResponse,
+)
+async def run_monte_carlo(
+    simulation_id: str,
+    body: MonteCarloRequest,
+    orchestrator: Any = Depends(get_orchestrator),
+) -> MonteCarloResponse:
+    """Run an N-seed Monte Carlo sweep over the simulation's config.
+
+    SPEC: docs/spec/29_MONTE_CARLO_SPEC.md#21-endpoint-mc-api-01
+
+    Reads the existing simulation's config (does not touch its history),
+    runs N replicas with seeds offset from `config.random_seed`, aggregates
+    viral probability + reach percentiles + per-community adoption.
+
+    Synchronous in this cycle — see SPEC §2.2 for the latency ceiling and
+    the rationale for capping `n_runs` at 50.
+    """
+    from app.engine.simulation.monte_carlo import MonteCarloRunner
+
+    _sim_id_to_uuid(simulation_id)
+    state = _get_state_or_404(orchestrator, simulation_id)
+
+    runner = MonteCarloRunner(llm_adapter=getattr(orchestrator, "llm_adapter", None))
+    try:
+        result = await runner.run(
+            simulation_config=state.config,
+            n_runs=body.n_runs,
+            parallel=True,
+            max_concurrency=body.max_concurrency,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Monte Carlo sweep failed: {exc}",
+        ) from exc
+
+    return MonteCarloResponse(
+        simulation_id=simulation_id,
+        n_runs=result.n_runs,
+        viral_probability=result.viral_probability,
+        expected_reach=result.expected_reach,
+        p5_reach=result.p5_reach,
+        p50_reach=result.p50_reach,
+        p95_reach=result.p95_reach,
+        community_adoption=result.community_adoption,
+        run_summaries=[
+            RunSummaryItem(
+                run_id=s.run_id,
+                final_adoption=s.final_adoption,
+                viral_detected=s.viral_detected,
+                steps_completed=s.steps_completed,
+            )
+            for s in result.run_summaries
+        ],
     )
 
 
