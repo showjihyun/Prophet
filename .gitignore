@@ -62,11 +62,3 @@ skills-lock.json
 mcasp_pencil
 mcasp_pencil.pen
 *.pen
-
-# Internal documentation — kept local, not pushed to public GitHub
-# (SPEC documents are the project's IP/moat — see CLAUDE.md coding rules)
-docs/spec/
-docs/init/
-docs/BUSINESS_REPORT.md
-docs/MARKETING_STRATEGY.md
-docs/OASIS_vs_Prophet.md

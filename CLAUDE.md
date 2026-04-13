@@ -17,9 +17,7 @@ that combines LLM + GraphRAG + viral diffusion.
 - Master SPEC: `docs/spec/MASTER_SPEC.md` (index)
 - **Context strategy**: `HARNESS.md` (six principles — hierarchy / contract / verification / cognitive allocation / parallel decomposition / decay prevention)
 
-> **Note:** Core SPECs (00-09, UI) are managed via `.gitignore` for IP protection.
-> If they have been removed locally, treat the `SPEC:` references in code docstrings
-> as historical pointers.
+> **Note:** All SPECs are public and version-controlled in `docs/spec/`.
 
 ---
 
@@ -84,8 +82,8 @@ that combines LLM + GraphRAG + viral diffusion.
 > into `21_SIMULATION_QUALITY_SPEC.md` on 2026-04-10. All original anchor IDs (`SQ-`,
 > `EC-`, `BC-`, `CG-`, `RF-`, `HM-`, `MP-`) are preserved.
 >
-> Core engine SPECs (00-09) and UI SPECs (16 files) are `.gitignore`-protected for IP.
-> The `SPEC: docs/spec/01_AGENT_SPEC.md#...` references in code docstrings are historical.
+> All SPECs are now public. The `SPEC: docs/spec/01_AGENT_SPEC.md#...` references
+> in code docstrings link directly to the checked-in files.
 
 ### SPEC Change → Test Auto-Generation Rule
 
@@ -387,12 +385,6 @@ Prophet/
 
 - **⛔ Never implement without a SPEC** — if `docs/spec/` has no SPEC, write the SPEC first. Never generate code without a SPEC.
 - **⛔ SPEC change requires test update** — whenever a Backend/Frontend SPEC changes, the relevant tests must be created or updated.
-- **⛔ SPECs are private assets — never commit to public** — `docs/spec/`, `docs/init/`,
-  `docs/BUSINESS_REPORT.md`, `docs/MARKETING_STRATEGY.md`, and `docs/OASIS_vs_Prophet.md`
-  are the project's IP/moat and are listed in `.gitignore`. Keep these files local and
-  never push them to GitHub. When writing public documents like README.md, never quote
-  or link to SPEC documents or their contents — anyone with the SPEC alone can
-  reproduce Prophet.
 - **⛔ No pip** — `uv` only
 - **SLM fallback required** — every Tier 3 (Elite LLM) feature must have a Tier 1 (Mass SLM) fallback
 - **Harness first** — write harness fixtures/mocks before the implementation
