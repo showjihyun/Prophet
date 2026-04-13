@@ -234,6 +234,63 @@ class TestInjectEvent:
         )
         assert resp.status_code == 400
 
+    async def test_inject_roundtrip_content_reaches_agents(
+        self, client: AsyncClient, sim_id: str
+    ):
+        """End-to-end: verify the documented Inject Event flow.
+
+        This is the round-trip test behind the docstring claim:
+          1. POST /inject-event → 200 with event_id + effective_step
+          2. Event queued on state.injected_events with the typed content
+             visible in its `message` field
+          3. Next step consumes the queue (len → 0) and routes it through
+             perception so agents' exposure_count bumps
+          4. effective_step matches the step that actually processes it
+        """
+        from app.api import deps as deps_mod
+
+        await client.post(f"/api/v1/simulations/{sim_id}/start")
+        orch = deps_mod.get_orchestrator()
+        from uuid import UUID
+        state = orch.get_state(UUID(sim_id))
+
+        step_before = state.current_step
+        exposure_before = sum(a.exposure_count for a in state.agents)
+
+        unique_content = "Battery explosion reported in 47 units — E2E marker"
+        resp = await client.post(
+            f"/api/v1/simulations/{sim_id}/inject-event",
+            json={
+                "event_type": "controversy",
+                "content": unique_content,
+                "controversy": 0.9,
+            },
+        )
+        # 1. API contract
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "event_id" in data
+        assert data["effective_step"] == step_before + 1
+
+        # 2. Queued + content survives into the message
+        assert len(state.injected_events) == 1
+        queued = state.injected_events[0]
+        assert queued.event_type == "community_discussion"  # controversy → mapped
+        assert unique_content in queued.message
+
+        # 3. Next step consumes the queue + agents perceive it
+        step_resp = await client.post(f"/api/v1/simulations/{sim_id}/step")
+        assert step_resp.status_code == 200
+        assert len(state.injected_events) == 0
+        exposure_after = sum(a.exposure_count for a in state.agents)
+        assert exposure_after > exposure_before, (
+            f"No agent saw the injected event "
+            f"(exposure {exposure_before} → {exposure_after})"
+        )
+
+        # 4. The consuming step matches effective_step
+        assert state.current_step == data["effective_step"]
+
 
 @pytest.mark.phase6
 class TestReplayAndCompare:
