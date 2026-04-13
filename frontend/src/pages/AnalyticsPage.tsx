@@ -10,6 +10,7 @@ import {
   Line,
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -28,15 +29,17 @@ import {
 import { useSimulationStore } from "../store/simulationStore";
 import { useSimulationSteps } from "../api/queries";
 import type { StepResult, EmergentEvent } from "../types/simulation";
+import HelpTooltip from "../components/shared/HelpTooltip";
+import type { GlossaryTerm } from "@/config/glossary";
+import { resolveCommunityColor } from "@/lib/communityColor";
 
 // ----- Colour palette for communities -----
-const COMMUNITY_COLORS = [
-  "var(--community-alpha)",
-  "var(--community-beta)",
-  "var(--community-gamma)",
-  "var(--community-delta)",
-  "var(--community-bridge)",
-];
+// All community swatches resolve through `resolveCommunityColor(id)` so
+// the Analytics charts, the 3D graph, the legend, and the Communities
+// sidebar page paint the same community with the same hex. The old
+// `var(--community-*)` CSS-var array is gone — it was both theme-dim
+// (bar chart read as near-black in dark mode) AND out of sync with the
+// rest of the app after the 2026-04 color-resolver consolidation.
 
 // ----- Helpers -----
 
@@ -66,10 +69,10 @@ function buildSentimentData(steps: StepResult[]) {
 function buildCommunityAdoption(steps: StepResult[]) {
   if (steps.length === 0) return [];
   const last = steps[steps.length - 1];
-  return Object.entries(last.community_metrics ?? {}).map(([cid, m], idx) => ({
+  return Object.entries(last.community_metrics ?? {}).map(([cid, m]) => ({
     community: cid,
     rate: parseFloat(((m.adoption_rate ?? 0) * 100).toFixed(1)),
-    color: COMMUNITY_COLORS[idx % COMMUNITY_COLORS.length],
+    color: resolveCommunityColor(cid),
   }));
 }
 
@@ -180,10 +183,14 @@ const EVENT_ICONS: Record<string, string> = {
 function Section({
   title,
   icon,
+  term,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
+  /** Glossary key — renders a ❓ help icon next to the title so users
+   *  can hover for a plain-English explanation of what the chart means. */
+  term?: GlossaryTerm;
   children: React.ReactNode;
 }) {
   return (
@@ -191,6 +198,7 @@ function Section({
       <div className="flex items-center gap-2">
         {icon}
         <h2 className="text-sm font-semibold text-[var(--foreground)]">{title}</h2>
+        {term && <HelpTooltip term={term} />}
       </div>
       {children}
     </section>
@@ -293,7 +301,10 @@ export default function AnalyticsPage() {
         <div className="flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-[var(--primary)]" />
           <div>
-            <h1 className="text-base font-semibold leading-tight">Post-Run Analytics</h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-base font-semibold leading-tight">Post-Run Analytics</h1>
+              <HelpTooltip term="pageAnalytics" size="sm" align="right" />
+            </div>
             {simulation && (
               <p className="text-xs text-[var(--muted-foreground)] truncate max-w-xs">
                 {simulation.name}
@@ -354,26 +365,32 @@ export default function AnalyticsPage() {
             <SummaryCard
               label="Total Steps"
               value={String(steps[steps.length - 1].step)}
+              term="totalSteps"
             />
             <SummaryCard
               label="Final Adoption"
               value={`${(steps[steps.length - 1].adoption_rate * 100).toFixed(1)}%`}
               accent="positive"
+              term="finalAdoption"
             />
             <SummaryCard
               label="Final Sentiment"
               value={steps[steps.length - 1].mean_sentiment.toFixed(3)}
               accent={steps[steps.length - 1].mean_sentiment >= 0 ? "positive" : "negative"}
+              term="finalSentiment"
             />
             <SummaryCard
               label="Emergent Events"
               value={String(emergentEvents.length)}
               accent={emergentEvents.length > 0 ? "warning" : undefined}
+              term="emergentEvents"
+              tooltipAlign="right"
             />
           </div>
 
           {/* Adoption Rate Over Time */}
           <Section
+            term="analyticsAdoptionChart"
             title="Adoption Rate Over Time"
             icon={<TrendingUp className="w-4 h-4 text-[var(--primary)]" />}
           >
@@ -425,14 +442,16 @@ export default function AnalyticsPage() {
                     dot={false}
                     activeDot={{ r: 4 }}
                   />
-                  {/* Per-community lines */}
-                  {communityKeys.map((cid, idx) => (
+                  {/* Per-community lines — same resolver the 3D graph
+                      uses so a single community reads the same color
+                      across every surface. */}
+                  {communityKeys.map((cid) => (
                     <Line
                       key={cid}
                       type="monotone"
                       dataKey={cid}
                       name={cid}
-                      stroke={COMMUNITY_COLORS[idx % COMMUNITY_COLORS.length]}
+                      stroke={resolveCommunityColor(cid)}
                       strokeWidth={1.5}
                       strokeDasharray="4 2"
                       dot={false}
@@ -450,6 +469,7 @@ export default function AnalyticsPage() {
 
           {/* Sentiment Over Time */}
           <Section
+            term="analyticsSentimentChart"
             title="Mean Sentiment Over Time"
             icon={<BarChart3 className="w-4 h-4 text-[var(--community-alpha)]" />}
           >
@@ -502,6 +522,7 @@ export default function AnalyticsPage() {
 
           {/* Community Adoption Comparison */}
           <Section
+            term="analyticsCommunityComparison"
             title="Community Adoption Comparison (Final Step)"
             icon={<BarChart3 className="w-4 h-4 text-[var(--community-delta)]" />}
           >
@@ -536,22 +557,27 @@ export default function AnalyticsPage() {
                     }}
                     formatter={(v) => [`${v}%`, "Adoption"]}
                   />
+                  {/* Recharts requires <Cell> children on <Bar> to vary fill
+                      per row — raw <rect> is silently ignored, which made
+                      every bar fall back to the (nearly invisible) default
+                      fill in dark mode. */}
                   <Bar dataKey="rate" name="Adoption Rate" radius={[4, 4, 0, 0]}>
-                    {communityAdoption.map((entry, idx) => (
-                      <rect key={idx} fill={entry.color} />
+                    {communityAdoption.map((entry) => (
+                      <Cell key={entry.community} fill={entry.color} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            {/* Fallback: simple bar divs if recharts bar color doesn't work */}
-            <div className="flex flex-col gap-2">
-              {communityAdoption.map((entry, idx) => (
+            {/* Per-row fallback list beneath the chart — same colors as
+                the bars, same colors as the graph. */}
+            <div className="flex flex-col gap-2 mt-3">
+              {communityAdoption.map((entry) => (
                 <div key={entry.community} className="flex items-center gap-3">
                   <div
                     className="w-3 h-3 rounded-sm shrink-0"
-                    style={{ backgroundColor: COMMUNITY_COLORS[idx % COMMUNITY_COLORS.length] }}
+                    style={{ backgroundColor: entry.color }}
                   />
                   <span className="text-xs text-[var(--muted-foreground)] w-32 truncate">
                     {entry.community}
@@ -561,7 +587,7 @@ export default function AnalyticsPage() {
                       className="h-full rounded-full"
                       style={{
                         width: `${entry.rate}%`,
-                        backgroundColor: COMMUNITY_COLORS[idx % COMMUNITY_COLORS.length],
+                        backgroundColor: entry.color,
                       }}
                     />
                   </div>
@@ -575,6 +601,7 @@ export default function AnalyticsPage() {
 
           {/* Cascade Analytics (SPEC 26 §4.6, v0.2.0) */}
           <Section
+            term="analyticsCascadeAnalytics"
             title="Cascade Analytics"
             icon={<GitBranch className="w-4 h-4 text-[var(--community-gamma)]" />}
           >
@@ -604,6 +631,7 @@ export default function AnalyticsPage() {
 
           {/* Emergent Event Timeline */}
           <Section
+            term="analyticsEventTimeline"
             title="Emergent Event Timeline"
             icon={<AlertTriangle className="w-4 h-4 text-[var(--sentiment-warning)]" />}
           >
@@ -694,10 +722,15 @@ function SummaryCard({
   label,
   value,
   accent,
+  term,
+  tooltipAlign,
 }: {
   label: string;
   value: string;
   accent?: "positive" | "negative" | "warning";
+  /** Optional glossary term — surfaces a help icon next to the label. */
+  term?: GlossaryTerm;
+  tooltipAlign?: "left" | "center" | "right";
 }) {
   const valueClass =
     accent === "positive"
@@ -710,8 +743,9 @@ function SummaryCard({
 
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3 flex flex-col gap-1">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)] flex items-center gap-1">
         {label}
+        {term && <HelpTooltip term={term} align={tooltipAlign} />}
       </p>
       <p className={`text-xl font-bold ${valueClass}`}>{value}</p>
     </div>

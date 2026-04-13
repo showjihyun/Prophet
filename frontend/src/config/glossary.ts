@@ -174,6 +174,28 @@ export const GLOSSARY = {
     text: "Notable behavioral patterns detected during the run, in chronological order. Each event includes its step number and a short description of what happened.",
   },
 
+  // ───────── Analytics page charts ─────────
+  analyticsAdoptionChart: {
+    label: "Adoption Rate Over Time",
+    text: "Fraction of the population that adopted the campaign, step by step. The curve's shape is the headline: an S-curve means healthy viral spread, a linear slope means steady push-based growth, and a flat line means the message is stalling. Delta vs. baseline (the dashed line, when a comparison scenario is loaded) shows what THIS run changed.",
+  },
+  analyticsSentimentChart: {
+    label: "Mean Sentiment Over Time",
+    text: "Average belief across all agents, from -1 (hostile) to +1 (enthusiastic), per step. Tracks whether the campaign is winning hearts or hardening opposition. Sudden drops mark injected shocks (negative PR, controversies); sustained climbs mark successful reframing.",
+  },
+  analyticsCommunityComparison: {
+    label: "Community Adoption Comparison",
+    text: "Bar chart of per-community adoption at the final step. Tells you WHO adopted and who didn't — a 70% overall adoption rate means nothing if one community is at 95% and another at 20%. Use this to spot segments the campaign failed to reach.",
+  },
+  analyticsCascadeAnalytics: {
+    label: "Cascade Analytics",
+    text: "Summary of viral cascades detected during the run: how many fired, how deep (node hops from source to farthest adopter), how wide (total nodes touched), and which communities they propagated through. Cascades are the engine of viral growth — their absence usually explains a flat adoption curve.",
+  },
+  analyticsEventTimeline: {
+    label: "Emergent Event Timeline",
+    text: "Chronological list of every emergent event the detectors flagged — viral cascades, polarization, echo chambers, collapse, slow adoption. Click a row to jump to that step. Filter by type to study a specific dynamic without the noise of others.",
+  },
+
   // ───────── Settings — LLM providers ─────────
   settingsDefaultProvider: {
     label: "Default Provider",
@@ -208,6 +230,72 @@ export const GLOSSARY = {
   settingsCacheTtl: {
     label: "LLM Cache TTL",
     text: "How long (in seconds) the backend keeps an LLM response cached before re-calling. Default 3600 (1 hour). Prophet caches by prompt fingerprint, so two agents asking the exact same question share one call. Raise it for long batch runs to save money; lower it if you're tuning prompts and need fresh output.",
+  },
+
+  // ───────── Page-level overviews ─────────
+  pageGlobalMetrics: {
+    label: "Global Insight & Metrics",
+    text: "A scenario-wide dashboard that summarizes what happened across the whole simulated population — total agents, polarization trend, sentiment by community, the 3-tier LLM cost split, and the cascade analytics. Use this to answer 'in aggregate, how did the run go?' before drilling into per-community detail.",
+  },
+  pageAnalytics: {
+    label: "Post-Run Analytics",
+    text: "A read-only deep-dive into a completed simulation: adoption curve, sentiment trajectory, per-community comparison, cascade analytics, and the full emergent-event timeline. Open this after a run finishes; click any timeline row to deep-link back to that step on the Simulation page.",
+  },
+  pageOpinions: {
+    label: "Opinion Landscape",
+    text: "A three-level hierarchy that lets you read the simulation as if it were public discourse. Level 1 (this page) is the scenario-wide opinion landscape; Level 2 zooms into one community's opinion clusters; Level 3 surfaces individual conversation threads. Use this to answer what the population is talking about and how they feel.",
+  },
+  pageCommunityOpinion: {
+    label: "Community Opinion (L2)",
+    text: "Per-community deep-dive: the dominant opinion clusters within this community, the support/neutral/oppose split per topic, and the most recent agent conversations. Click an opinion cluster or conversation to drill further (Level 3).",
+  },
+
+  // ───────── Global Metrics — section headers ─────────
+  globalPolarizationTrend: {
+    label: "Polarization Trend",
+    text: "Belief variance across the population over the last 10 simulation steps. Bars rising means the population is splitting into camps; bars falling means belief is converging. Color: green (low, <0.3), amber (mid), red (high, ≥0.6 — fragmentation risk).",
+  },
+  globalSentimentByCommunity: {
+    label: "Sentiment by Community",
+    text: "Stacked bar showing each community's positive / neutral / negative split at the latest step. Lets you spot which segments the campaign won and which it lost — even when the global average looks healthy. Long red bands flag at-risk communities.",
+  },
+  globalThreeTierCost: {
+    label: "Prophet 3-Tier Cost Optimization",
+    text: "Live breakdown of which inference tier each agent ran on this step. Tier 1 (~80%) is local SLM (free). Tier 2 (~10%) is heuristic (free). Tier 3 (~10%) is the elite cloud LLM (paid per call). The closer the split stays to the 80/10/10 default, the closer your run cost stays to the under-$5 target.",
+  },
+  globalCascadeAnalytics: {
+    label: "Cascade Analytics",
+    text: "Four summary numbers about cascades fired during this run: average depth (hops from origin), max width (largest one-step jump in adoption), critical paths (number of cascade events), and decay rate (how fast peak diffusion fell off). Together they tell you whether the campaign achieved viral spread or merely a one-step push.",
+  },
+  globalActiveCascades: {
+    label: "Active Cascades",
+    text: "Number of agents currently in an actively-propagating state at the latest step. Derived as adoption_rate × total_agents — a rough proxy for how many agents are actively carrying the message right now (not just have seen it).",
+  },
+  globalSimulationStep: {
+    label: "Simulation Step",
+    text: "Current tick of the simulation engine, out of the configured maximum. A step is one full round where every active agent perceives, decides, and acts. The progress bar shows how far through the configured run you are.",
+  },
+
+  // ───────── Opinions — section headers ─────────
+  opinionsAvgSentiment: {
+    label: "Avg Sentiment",
+    text: "Population-wide mean belief at the current step, on a -1.0 (strongly hostile) to +1.0 (strongly enthusiastic) scale. The delta below shows how much it moved from the previous step — a sustained climb signals successful framing.",
+  },
+  opinionsTotalConversations: {
+    label: "Total Conversations",
+    text: "Number of agent-to-agent message threads recorded so far in the simulation. Higher means more discourse activity — useful proxy for engagement separate from adoption (people can talk about something without adopting it).",
+  },
+  opinionsCommunityBreakdown: {
+    label: "Community Opinion Breakdown",
+    text: "Per-community summary cards showing the dominant stance (positive / negative / mixed), conversation count, and sentiment distribution. Click any card to drill into that community's opinion clusters and recent conversations.",
+  },
+  opinionClusters: {
+    label: "Opinion Clusters",
+    text: "Topics this community is currently debating, ranked by mention count. Each cluster shows the support / neutral / oppose split — the percentages reflect actual agent stances, not poll responses. A high contested ratio (Support ≈ Oppose) flags a polarizing topic.",
+  },
+  recentConversations: {
+    label: "Recent Conversations",
+    text: "Latest agent-generated message threads from this community, in reverse chronological order. Each entry is real LLM output produced during the simulation — click to read the full thread. Useful for understanding the *why* behind the sentiment numbers.",
   },
 
   // ───────── Settings — vLLM ─────────

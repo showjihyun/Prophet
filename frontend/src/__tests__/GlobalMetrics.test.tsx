@@ -106,7 +106,12 @@ describe('GlobalMetrics (UI-05)', () => {
 
     it('renders "Global Insight & Metrics" page title', () => {
       renderPage();
-      expect(screen.getByText('Global Insight & Metrics')).toBeInTheDocument();
+      // PageNav renders the title as a <span> (last breadcrumb), and the
+      // attached HelpTooltip keeps a hidden copy of the label in DOM
+      // (anti-flicker opacity-toggle design) — assert at least one match.
+      expect(
+        screen.getAllByText('Global Insight & Metrics').length,
+      ).toBeGreaterThanOrEqual(1);
     });
 
     it('renders "Export Data" button', () => {
@@ -121,13 +126,13 @@ describe('GlobalMetrics (UI-05)', () => {
   describe('Summary Stats', () => {
     it('renders Total Agents card with delta indicator', () => {
       renderPage();
-      expect(screen.getByText('Total Agents')).toBeInTheDocument();
+      expect(screen.getAllByText('Total Agents').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('total-agents-delta')).toBeInTheDocument();
     });
 
     it('renders Active Cascades card with today delta', () => {
       renderPage();
-      expect(screen.getByText('Active Cascades')).toBeInTheDocument();
+      expect(screen.getAllByText('Active Cascades').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('cascades-delta')).toBeInTheDocument();
     });
 
@@ -139,7 +144,7 @@ describe('GlobalMetrics (UI-05)', () => {
 
     it('renders Simulation Step card with progress bar', () => {
       renderPage();
-      expect(screen.getByText('Simulation Step')).toBeInTheDocument();
+      expect(screen.getAllByText('Simulation Step').length).toBeGreaterThanOrEqual(1);
       // test-id `sim-day-progress` is preserved for backwards compat
       // with bookmarks/analytics even though the label renamed.
       expect(screen.getByTestId('sim-day-progress')).toBeInTheDocument();
@@ -150,13 +155,13 @@ describe('GlobalMetrics (UI-05)', () => {
   describe('Charts Area', () => {
     it('renders "Polarization Trend" bar chart', () => {
       renderPage();
-      expect(screen.getByText('Polarization Trend')).toBeInTheDocument();
+      expect(screen.getAllByText('Polarization Trend').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('polarization-trend-chart')).toBeInTheDocument();
     });
 
     it('renders "Sentiment by Community" stacked bar chart', () => {
       renderPage();
-      expect(screen.getByText('Sentiment by Community')).toBeInTheDocument();
+      expect(screen.getAllByText('Sentiment by Community').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('sentiment-community-chart')).toBeInTheDocument();
     });
   });
@@ -165,7 +170,7 @@ describe('GlobalMetrics (UI-05)', () => {
   describe('Prophet 3-Tier Cost Optimization', () => {
     it('renders section title', () => {
       renderPage();
-      expect(screen.getByText('Prophet 3-Tier Cost Optimization')).toBeInTheDocument();
+      expect(screen.getAllByText('Prophet 3-Tier Cost Optimization').length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders Tier 1: Mass SLM card with agent count', () => {
@@ -191,7 +196,7 @@ describe('GlobalMetrics (UI-05)', () => {
   describe('Cascade Analytics', () => {
     it('renders section title', () => {
       renderPage();
-      expect(screen.getByText('Cascade Analytics')).toBeInTheDocument();
+      expect(screen.getAllByText('Cascade Analytics').length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders Avg Cascade Depth stat', () => {

@@ -167,7 +167,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
 
     it('renders the Post-Run Analytics header', () => {
       renderPage();
-      expect(screen.getByText('Post-Run Analytics')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Post-Run Analytics' })).toBeInTheDocument();
     });
 
     it('renders a back button with aria-label', () => {
@@ -363,7 +363,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
       });
       renderPage();
       await waitFor(() =>
-        expect(screen.getByText('Adoption Rate Over Time')).toBeInTheDocument(),
+        expect(screen.getByRole('heading', { name: 'Adoption Rate Over Time' })).toBeInTheDocument(),
       );
     });
 
@@ -374,7 +374,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
       });
       renderPage();
       await waitFor(() =>
-        expect(screen.getByText('Mean Sentiment Over Time')).toBeInTheDocument(),
+        expect(screen.getByRole('heading', { name: 'Mean Sentiment Over Time' })).toBeInTheDocument(),
       );
     });
 
@@ -385,7 +385,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
       });
       renderPage();
       await waitFor(() =>
-        expect(screen.getByText(/Community Adoption Comparison/i)).toBeInTheDocument(),
+        expect(screen.getByRole('heading', { name: /Community Adoption Comparison/i })).toBeInTheDocument(),
       );
     });
 
@@ -419,7 +419,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
       });
       renderPage();
       await waitFor(() =>
-        expect(screen.getByText('Adoption Rate Over Time')).toBeInTheDocument(),
+        expect(screen.getByRole('heading', { name: 'Adoption Rate Over Time' })).toBeInTheDocument(),
       );
       expect(
         screen.queryByText(/Dashed vertical lines indicate emergent events/i),
@@ -437,7 +437,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
       });
       renderPage();
       await waitFor(() =>
-        expect(screen.getByText('Emergent Event Timeline')).toBeInTheDocument(),
+        expect(screen.getByRole('heading', { name: 'Emergent Event Timeline' })).toBeInTheDocument(),
       );
     });
 
@@ -681,7 +681,7 @@ describe('AnalyticsPage (26_ANALYTICS_SPEC)', () => {
       });
       renderPage();
       await waitFor(() =>
-        expect(screen.getByText('Cascade Analytics')).toBeInTheDocument(),
+        expect(screen.getByRole('heading', { name: 'Cascade Analytics' })).toBeInTheDocument(),
       );
     });
 

@@ -139,10 +139,11 @@ describe('ScenarioOpinionsPage (UI-13)', () => {
 
     it('renders 4 stat cards', () => {
       renderPage();
-      expect(screen.getByText('Avg Sentiment')).toBeInTheDocument();
-      expect(screen.getByText('Polarization')).toBeInTheDocument();
-      expect(screen.getByText('Total Conversations')).toBeInTheDocument();
-      expect(screen.getByText('Active Cascades')).toBeInTheDocument();
+      // HelpTooltip duplicates labels in DOM (anti-flicker design)
+      expect(screen.getAllByText('Avg Sentiment').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Polarization').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Total Conversations').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Active Cascades').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -172,7 +173,7 @@ describe('ScenarioOpinionsPage (UI-13)', () => {
 
     it('renders section title "Community Opinion Breakdown"', () => {
       renderPage();
-      expect(screen.getByText('Community Opinion Breakdown')).toBeInTheDocument();
+      expect(screen.getAllByText('Community Opinion Breakdown').length).toBeGreaterThanOrEqual(1);
     });
   });
 

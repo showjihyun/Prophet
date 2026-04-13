@@ -30,14 +30,22 @@ export function useSimulationSocket(simulationId: string | null) {
 
     let retryCount = 0;
     let retryTimeout: ReturnType<typeof setTimeout>;
+    // StrictMode / fast-nav guard: after cleanup runs, any in-flight
+    // `onclose` must NOT schedule a reconnect. Without this, closing
+    // a CONNECTING socket inside cleanup fires `onclose`, which in
+    // turn calls `setTimeout(connect, …)` that opens a zombie socket
+    // and races with the next effect run.
+    let didCancel = false;
 
     function connect() {
+      if (didCancel) return;
       const ws = new WebSocket(`${WS_BASE}/ws/${simulationId}`);
       wsRef.current = ws;
 
       let heartbeatInterval: ReturnType<typeof setInterval>;
 
       ws.onopen = () => {
+        if (didCancel) { ws.close(); return; }
         setConnected(true);
         setRetryExhausted(false);
         retryCount = 0;
@@ -51,6 +59,7 @@ export function useSimulationSocket(simulationId: string | null) {
 
       ws.onclose = () => {
         clearInterval(heartbeatInterval);
+        if (didCancel) return;
         setConnected(false);
         if (retryCount < MAX_RETRIES) {
           const delay = Math.min(BASE_DELAY * Math.pow(2, retryCount), WS_MAX_RECONNECT_DELAY_MS);
@@ -77,8 +86,21 @@ export function useSimulationSocket(simulationId: string | null) {
     connect();
 
     return () => {
+      didCancel = true;
       clearTimeout(retryTimeout);
-      wsRef.current?.close();
+      const ws = wsRef.current;
+      if (ws) {
+        // Strip listeners so the cleanup's close() doesn't fire onclose
+        // → schedule retry → open a zombie socket after unmount.
+        // Browser still logs "closed before connection established" for
+        // a CONNECTING socket we close here, but that's informational —
+        // the retry leak was the real bug.
+        ws.onopen = null;
+        ws.onclose = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.close();
+      }
       wsRef.current = null;
     };
   }, [simulationId, reconnectTick]);
