@@ -47,11 +47,10 @@ class MonteCarloRunner:
         async with semaphore:
             orch = SimulationOrchestrator(llm_adapter=self._llm_adapter)
             state = orch.create_simulation(run_config)
-            # `start` is async — failure to await silently kept earlier
-            # MC sweeps in CONFIGURED state and leaked a coroutine.
-            start_result = orch.start(state.simulation_id)
-            if asyncio.iscoroutine(start_result):
-                await start_result
+            # `orch.start()` is async — must be awaited. An earlier version
+            # forgot the `await`, silently leaking a coroutine and leaving
+            # the simulation in CONFIGURED state.
+            await orch.start(state.simulation_id)
 
             viral_detected = False
             steps_completed = 0

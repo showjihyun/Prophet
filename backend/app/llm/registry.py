@@ -373,8 +373,26 @@ class LLMAdapterRegistry:
         prompt: str,
         memories: list[str] | None = None,
     ) -> str:
-        """Call adapter.complete() and return content string."""
-        response = await adapter.complete(prompt, memories)
+        """Call adapter.complete() and return content string.
+
+        The public adapter ABC declares ``complete(prompt: LLMPrompt, ...)``
+        but this internal helper receives a plain *str* from the higher-level
+        ``evaluate()`` path. We wrap it in an ``LLMPrompt`` so adapters that
+        follow the ABC contract (e.g. ``OpenAICompatibleAdapter``) don't get
+        a bare string where they expect ``.system`` / ``.user`` attributes.
+        """
+        from app.llm.schema import LLMPrompt
+
+        # Build a proper LLMPrompt when the caller passed a raw string.
+        if isinstance(prompt, str):
+            llm_prompt = LLMPrompt(
+                system="You are a helpful assistant.",
+                user=prompt,
+            )
+        else:
+            llm_prompt = prompt  # already an LLMPrompt
+
+        response = await adapter.complete(llm_prompt, None)
         # Support both LLMResponse objects and plain mocks
         if hasattr(response, "content"):
             return response.content

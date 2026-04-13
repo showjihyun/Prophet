@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+import dataclasses
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -39,6 +40,14 @@ if TYPE_CHECKING:
     from app.engine.simulation.schema import SimulationConfig, StepResult
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_uuid(value: str) -> uuid.UUID:
+    """Parse *value* as UUID, falling back to a fresh random UUID on failure."""
+    try:
+        return uuid.UUID(value)
+    except (ValueError, AttributeError):
+        return uuid.uuid4()
 
 
 def _node_id_to_int(node_id: Any) -> int:
@@ -177,7 +186,7 @@ class SimulationPersistence:
 
                 community_values = [
                     {
-                        "community_id": uuid.UUID(cid) if len(cid) > 8 else uuid.uuid4(),
+                        "community_id": _safe_uuid(cid),
                         "simulation_id": sim_id,
                         "name": cid[:8],
                         "community_key": cid[:10],
@@ -435,6 +444,67 @@ class SimulationPersistence:
                     step_duration_ms=result.step_duration_ms,
                 )
                 session.add(step_row)
+                # Re-persist emergent events that were lost on rollback.
+                for event in result.emergent_events:
+                    session.add(EmergentEventORM(
+                        event_id=uuid.uuid4(),
+                        simulation_id=sim_id,
+                        step=result.step,
+                        event_type=event.event_type,
+                        community_id=str(event.community_id) if event.community_id else None,
+                        severity=event.severity,
+                        description=event.description,
+                    ))
+                # Re-persist agent states (were also lost on rollback).
+                if agents:
+                    retry_states: list[dict] = []
+                    for agent in agents:
+                        try:
+                            retry_states.append({
+                                "state_id": uuid.uuid4(),
+                                "simulation_id": sim_id,
+                                "agent_id": agent.agent_id,
+                                "step": result.step,
+                                "openness": agent.personality.openness,
+                                "skepticism": agent.personality.skepticism,
+                                "trend_following": agent.personality.trend_following,
+                                "brand_loyalty": agent.personality.brand_loyalty,
+                                "social_influence": agent.personality.social_influence,
+                                "emotion_interest": agent.emotion.interest,
+                                "emotion_trust": agent.emotion.trust,
+                                "emotion_skepticism": agent.emotion.skepticism,
+                                "emotion_excitement": agent.emotion.excitement,
+                                "community_id": agent.community_id,
+                                "belief": agent.belief,
+                                "action": (
+                                    agent.action.value
+                                    if hasattr(agent.action, "value")
+                                    else str(agent.action)
+                                ),
+                                "adopted": agent.adopted,
+                                "exposure_count": agent.exposure_count,
+                                "llm_tier_used": agent.llm_tier_used,
+                            })
+                        except (AttributeError, TypeError, ValueError):
+                            pass  # skip malformed — already warned on first attempt
+                    if retry_states:
+                        await session.execute(insert(AgentStateORM), retry_states)
+                # Re-persist propagation events.
+                if propagation_pairs:
+                    retry_props = [
+                        {
+                            "propagation_id": uuid.uuid4(),
+                            "simulation_id": sim_id,
+                            "step": result.step,
+                            "source_agent_id": src_id,
+                            "target_agent_id": tgt_id,
+                            "action_type": action,
+                            "probability": prob,
+                        }
+                        for src_id, tgt_id, action, prob in propagation_pairs
+                    ]
+                    if retry_props:
+                        await session.execute(insert(PropagationEvent), retry_props)
                 await session.commit()
                 logger.info("persist_step retry %d succeeded for step %d sim %s", attempt, result.step, sim_id)
                 return
@@ -742,11 +812,16 @@ class SimulationPersistence:
             )
             rows = result.scalars().all()
 
-            # Fetch all emergent events for this sim, group by step.
+            # Fetch emergent events for the steps we actually loaded.
+            # Bounded by the same step range to avoid unbounded memory on
+            # long-running simulations with many detector firings.
+            max_step = rows[-1].step if rows else 0
             ev_result = await session.execute(
                 select(EmergentEventORM)
                 .where(EmergentEventORM.simulation_id == sim_id)
+                .where(EmergentEventORM.step <= max_step)
                 .order_by(EmergentEventORM.step)
+                .limit(limit * 5)  # generous cap; ~5 events/step worst case
             )
             events_by_step: dict[int, list[dict]] = {}
             for ev in ev_result.scalars().all():
@@ -861,7 +936,12 @@ def _config_to_dict(config: SimulationConfig) -> dict:
             "max_steps": config.max_steps,
             "random_seed": config.random_seed,
             "slm_llm_ratio": config.slm_llm_ratio,
-            "communities": [c if isinstance(c, str) else str(c) for c in config.communities],
+            "communities": [
+                c if isinstance(c, dict)
+                else dataclasses.asdict(c) if dataclasses.is_dataclass(c)
+                else str(c)
+                for c in config.communities
+            ],
         }
     except Exception as exc:
         logger.error("Failed to serialize SimulationConfig: %s", exc)

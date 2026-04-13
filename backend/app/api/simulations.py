@@ -815,12 +815,23 @@ async def run_monte_carlo(
     state = _get_state_or_404(orchestrator, simulation_id)
 
     runner = MonteCarloRunner(llm_adapter=getattr(orchestrator, "llm_adapter", None))
+    # Guard against unbounded wall-clock time (SPEC 29 §2.2).
+    MC_TIMEOUT_SECONDS = 300.0
     try:
-        result = await runner.run(
-            simulation_config=state.config,
-            n_runs=body.n_runs,
-            parallel=True,
-            max_concurrency=body.max_concurrency,
+        result = await asyncio.wait_for(
+            runner.run(
+                simulation_config=state.config,
+                n_runs=body.n_runs,
+                parallel=True,
+                max_concurrency=body.max_concurrency,
+            ),
+            timeout=MC_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Monte Carlo sweep timed out after {MC_TIMEOUT_SECONDS}s. "
+                   "Reduce n_runs or max_steps and try again.",
         )
     except Exception as exc:
         raise HTTPException(

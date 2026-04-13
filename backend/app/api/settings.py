@@ -123,20 +123,20 @@ async def update_settings(body: dict[str, Any]) -> dict[str, str]:
     if "ollama_embed_model" in llm:
         settings.ollama_embed_model = llm["ollama_embed_model"]  # type: ignore[attr-defined]
     if "anthropic_api_key" in llm:
-        settings.anthropic_api_key = llm["anthropic_api_key"]
+        settings.anthropic_api_key = str(llm["anthropic_api_key"])
     if "anthropic_model" in llm:
-        settings.anthropic_default_model = llm["anthropic_model"]
+        settings.anthropic_default_model = str(llm["anthropic_model"])
     if "openai_api_key" in llm:
-        settings.openai_api_key = llm["openai_api_key"]
+        settings.openai_api_key = str(llm["openai_api_key"])
     if "openai_model" in llm:
-        settings.openai_default_model = llm["openai_model"]
+        settings.openai_default_model = str(llm["openai_model"])
     # Gemini
     if "gemini_api_key" in llm:
-        settings.gemini_api_key = llm["gemini_api_key"]
+        settings.gemini_api_key = str(llm["gemini_api_key"])
     if "gemini_model" in llm:
-        settings.gemini_default_model = llm["gemini_model"]
+        settings.gemini_default_model = str(llm["gemini_model"])
     if "gemini_embed_model" in llm:
-        settings.gemini_embed_model = llm["gemini_embed_model"]
+        settings.gemini_embed_model = str(llm["gemini_embed_model"])
     # vLLM
     if "vllm_base_url" in llm:
         settings.vllm_base_url = llm["vllm_base_url"]
@@ -157,31 +157,19 @@ async def update_settings(body: dict[str, Any]) -> dict[str, str]:
                 detail="vllm_max_concurrent must be in [1, 512]",
             )
         settings.vllm_max_concurrent = val
-    # Chinese Top 3 (OpenAI-compatible)
-    if "deepseek_api_key" in llm:
-        settings.deepseek_api_key = llm["deepseek_api_key"]
-    if "deepseek_base_url" in llm:
-        settings.deepseek_base_url = llm["deepseek_base_url"]
-    if "deepseek_model" in llm:
-        settings.deepseek_default_model = llm["deepseek_model"]
-    if "qwen_api_key" in llm:
-        settings.qwen_api_key = llm["qwen_api_key"]
-    if "qwen_base_url" in llm:
-        settings.qwen_base_url = llm["qwen_base_url"]
-    if "qwen_model" in llm:
-        settings.qwen_default_model = llm["qwen_model"]
-    if "moonshot_api_key" in llm:
-        settings.moonshot_api_key = llm["moonshot_api_key"]
-    if "moonshot_base_url" in llm:
-        settings.moonshot_base_url = llm["moonshot_base_url"]
-    if "moonshot_model" in llm:
-        settings.moonshot_default_model = llm["moonshot_model"]
-    if "glm_api_key" in llm:
-        settings.glm_api_key = llm["glm_api_key"]
-    if "glm_base_url" in llm:
-        settings.glm_base_url = llm["glm_base_url"]
-    if "glm_model" in llm:
-        settings.glm_default_model = llm["glm_model"]
+    # Chinese Top 3 + GLM (OpenAI-compatible) — coerce to str for safety.
+    for prefix, attr_key, attr_url, attr_model in [
+        ("deepseek", "deepseek_api_key", "deepseek_base_url", "deepseek_default_model"),
+        ("qwen", "qwen_api_key", "qwen_base_url", "qwen_default_model"),
+        ("moonshot", "moonshot_api_key", "moonshot_base_url", "moonshot_default_model"),
+        ("glm", "glm_api_key", "glm_base_url", "glm_default_model"),
+    ]:
+        if f"{prefix}_api_key" in llm:
+            setattr(settings, attr_key, str(llm[f"{prefix}_api_key"]))
+        if f"{prefix}_base_url" in llm:
+            setattr(settings, attr_url, str(llm[f"{prefix}_base_url"]))
+        if f"{prefix}_model" in llm:
+            setattr(settings, attr_model, str(llm[f"{prefix}_model"]))
 
     sim = body.get("simulation", {})
     if "slm_llm_ratio" in sim:

@@ -53,6 +53,9 @@ logger = logging.getLogger(__name__)
 # agent cognition uses, rather than building a second isolated stack.
 _orchestrator: SimulationOrchestrator | None = None
 _gateway: LLMGateway | None = None
+# Guard against concurrent construction under multi-request cold start.
+import threading as _threading
+_init_lock = _threading.Lock()
 
 # Shared persistence + repository instances
 _persistence = SimulationPersistence()
@@ -181,10 +184,16 @@ def get_orchestrator() -> SimulationOrchestrator:
     """Return the SimulationOrchestrator singleton.
 
     Automatically wires LLMGateway + Registry so the 3-tier cache chain
-    and LLM cognition are active from the start.
+    and LLM cognition are active from the start. Thread-safe via
+    ``_init_lock`` so concurrent requests during cold start don't race.
     """
     global _orchestrator, _gateway
-    if _orchestrator is None:
+    if _orchestrator is not None:
+        return _orchestrator
+    with _init_lock:
+        # Double-check after acquiring the lock.
+        if _orchestrator is not None:
+            return _orchestrator
         try:
             gateway, registry = _build_llm_stack()
             _gateway = gateway
@@ -205,17 +214,18 @@ def get_llm_gateway() -> LLMGateway:
 
     Builds the orchestrator lazily on first call so the gateway and
     orchestrator always share one adapter registry + cache chain.
+    Thread-safe — delegates to ``get_orchestrator()`` which holds the lock.
     """
     global _gateway
+    if _gateway is not None:
+        return _gateway
+    # Force orchestrator construction — also populates _gateway.
+    get_orchestrator()
     if _gateway is None:
-        # Force orchestrator construction — also populates _gateway.
-        get_orchestrator()
-    if _gateway is None:
-        # Orchestrator fell through to the no-LLM path. Build a standalone
-        # gateway so community-opinion synthesis can still run (even if it
-        # just returns a fallback stub).
-        gateway, _ = _build_llm_stack()
-        _gateway = gateway
+        with _init_lock:
+            if _gateway is None:
+                gateway, _ = _build_llm_stack()
+                _gateway = gateway
     return _gateway
 
 
