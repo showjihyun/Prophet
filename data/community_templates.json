@@ -2048,5 +2048,41 @@
     "default_size": 99,
     "description": "",
     "personality_profile": {}
+  },
+  "7ab2af25-f4e9-4cf5-a67e-82197fbc7090": {
+    "template_id": "7ab2af25-f4e9-4cf5-a67e-82197fbc7090",
+    "name": "Test Community",
+    "agent_type": "test_type",
+    "default_size": 50,
+    "description": "Test description",
+    "personality_profile": {
+      "openness": 0.5
+    }
+  },
+  "8d8c92c7-d544-41b3-ae34-ad04e467ddcc": {
+    "template_id": "8d8c92c7-d544-41b3-ae34-ad04e467ddcc",
+    "name": "Updated Name",
+    "agent_type": "updated_type",
+    "default_size": 99,
+    "description": "",
+    "personality_profile": {}
+  },
+  "c371e2fb-de90-423d-9c91-e52c00984cb2": {
+    "template_id": "c371e2fb-de90-423d-9c91-e52c00984cb2",
+    "name": "Test Community",
+    "agent_type": "test_type",
+    "default_size": 50,
+    "description": "Test description",
+    "personality_profile": {
+      "openness": 0.5
+    }
+  },
+  "7f8590a1-1fc2-446f-90f0-6f383c786072": {
+    "template_id": "7f8590a1-1fc2-446f-90f0-6f383c786072",
+    "name": "Updated Name",
+    "agent_type": "updated_type",
+    "default_size": 99,
+    "description": "",
+    "personality_profile": {}
   }
 }
