@@ -146,8 +146,14 @@ def _svc_state_or_404(service: SimulationService, simulation_id: str) -> Any:
 
     Clean Architecture version of ``_get_state_or_404``: the caller
     depends on ``SimulationService`` only, never on the raw
-    ``SimulationOrchestrator``. Used by the 5 mutation routes
-    (start/step/pause/resume/stop) after the Round 8-8 refactor.
+    ``SimulationOrchestrator``. Used by mutation routes that need only
+    a state-fetch + 404 gate: start/step/pause/resume/stop, run-all,
+    engine-control, group-chat (create/add-message), interview.
+
+    Still on ``_get_state_or_404``: inject-event and replay (pending a
+    corresponding ``SimulationService`` method), plus read-only GETs
+    (compare, group-chat read) where the orchestrator dependency is
+    acceptable.
     """
     sim_uuid = _sim_id_to_uuid(simulation_id)
     try:
@@ -391,14 +397,13 @@ async def step_simulation(
 @router.post("/{simulation_id}/run-all", response_model=RunAllResponse)
 async def run_all_simulation(
     simulation_id: str,
-    orchestrator: Any = Depends(get_orchestrator),
     session: AsyncSession = Depends(get_session),
     service: SimulationService = Depends(get_simulation_service),
 ) -> RunAllResponse:
     """Run all remaining steps to completion and return a report.
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idrun-all
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    state = _svc_state_or_404(service, simulation_id)
     _require_status(state, SimulationStatus.CONFIGURED, SimulationStatus.RUNNING)
     sim_uuid = _sim_id_to_uuid(simulation_id)
 
@@ -768,12 +773,12 @@ async def compare_simulations(
 async def engine_control(
     simulation_id: str,
     body: EngineControlRequest,
-    orchestrator: Any = Depends(get_orchestrator),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> EngineControlResponse:
     """Adjust SLM/LLM ratio at runtime (simulation must be PAUSED).
     SPEC: docs/spec/06_API_SPEC.md#post-simulationssimulation_idengine-control
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    state = _svc_state_or_404(service, simulation_id)
     _require_status(state, SimulationStatus.PAUSED)
 
     controller = EngineController()
@@ -886,12 +891,12 @@ def _get_group_chat_manager(simulation_id: str) -> GroupChatManager:
 async def create_group_chat(
     simulation_id: str,
     body: dict,
-    orchestrator: Any = Depends(get_orchestrator),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> dict:
     """Create a group chat session within a simulation.
     SPEC: docs/spec/platform/13_SCALE_VALIDATION_SPEC.md#group-chat-action
     """
-    _get_state_or_404(orchestrator, simulation_id)
+    _svc_state_or_404(service, simulation_id)
     mgr = _get_group_chat_manager(simulation_id)
 
     member_ids = [UUID(m) for m in body.get("members", [])]
@@ -943,12 +948,12 @@ async def add_group_chat_message(
     simulation_id: str,
     group_id: str,
     body: dict,
-    orchestrator: Any = Depends(get_orchestrator),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> dict:
     """Add a message to a group chat.
     SPEC: docs/spec/platform/13_SCALE_VALIDATION_SPEC.md#group-chat-action
     """
-    _get_state_or_404(orchestrator, simulation_id)
+    _svc_state_or_404(service, simulation_id)
     mgr = _get_group_chat_manager(simulation_id)
     try:
         msg = mgr.add_message(
@@ -976,12 +981,12 @@ async def interview_agent(
     simulation_id: str,
     agent_id: str,
     body: dict,
-    orchestrator: Any = Depends(get_orchestrator),
+    service: SimulationService = Depends(get_simulation_service),
 ) -> dict:
     """Interview an agent about their current state.
     SPEC: docs/spec/platform/13_SCALE_VALIDATION_SPEC.md#interview-action
     """
-    state = _get_state_or_404(orchestrator, simulation_id)
+    state = _svc_state_or_404(service, simulation_id)
     target_uuid = UUID(agent_id)
 
     # Find the agent in the simulation
