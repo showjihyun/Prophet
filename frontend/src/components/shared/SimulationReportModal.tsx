@@ -55,14 +55,15 @@ function deriveReport(steps: StepResult[]) {
       rate: Math.round((s.adoption_rate ?? 0) * 100),
     }));
 
-  // Key events timeline: first 5 emergent events
+  // Key events timeline: every emergent event, in step order. No cap —
+  // the UI scrolls (see the Key Events section below). A 5-event cap was
+  // hiding 90%+ of the timeline on realistic runs; users asked for the
+  // full list with overflow scroll instead.
   const keyEvents: Array<{ step: number; type: string; description: string }> = [];
   for (const s of steps) {
     for (const e of s.emergent_events ?? []) {
-      if (keyEvents.length >= 5) break;
       keyEvents.push({ step: s.step, type: e.event_type, description: e.description });
     }
-    if (keyEvents.length >= 5) break;
   }
 
   return {
@@ -191,14 +192,22 @@ export default function SimulationReportModal({ onClose }: Props) {
             </div>
           </div>
 
-          {/* Key Events Timeline */}
+          {/* Key Events Timeline — scrollable when overflowing.
+              max-h ~11rem ≈ 7 rows; anything beyond scrolls within this
+              container instead of pushing the rest of the report down. */}
           {report.keyEvents.length > 0 && (
             <div>
               <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2 flex items-center gap-1.5">
-                Key Events
+                <span>Key Events</span>
+                <span className="text-[10px] font-normal text-[var(--muted-foreground)]">
+                  ({report.keyEvents.length})
+                </span>
                 <HelpTooltip term="keyEvents" />
               </p>
-              <div className="flex flex-col gap-2">
+              <div
+                data-testid="key-events-list"
+                className="flex flex-col gap-2 max-h-44 overflow-y-auto pr-2 rounded-md border border-[var(--border)] bg-[var(--background)] p-2"
+              >
                 {report.keyEvents.map((e, i) => (
                   <div
                     key={i}
@@ -210,7 +219,7 @@ export default function SimulationReportModal({ onClose }: Props) {
                     <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--secondary)] text-[var(--foreground)] uppercase">
                       {(e.type ?? "event").replace(/_/g, " ")}
                     </span>
-                    <span className="text-[var(--muted-foreground)] line-clamp-1">
+                    <span className="text-[var(--muted-foreground)] break-words min-w-0 flex-1">
                       {e.description}
                     </span>
                   </div>
