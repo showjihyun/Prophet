@@ -12,7 +12,10 @@
  * (opinion clusters, conversations) is untouched. This is the "why did
  * the community behave this way" explainer that sits above them.
  */
-import { useCommunityOpinionSynthesis } from "@/api/queries";
+import {
+  useCommunityOpinionSynthesis,
+  useCommunityOpinionQuery,
+} from "@/api/queries";
 import type { CommunityOpinion } from "@/types/api";
 
 interface Props {
@@ -38,8 +41,11 @@ export default function EliteLLMNarrativePanel({
   simulationId,
   communityId,
 }: Props) {
+  const cachedQuery = useCommunityOpinionQuery(simulationId, communityId);
   const mutation = useCommunityOpinionSynthesis(simulationId);
-  const opinion = mutation.data ?? null;
+  // Prefer fresh mutation result; fall back to TanStack cache (survives
+  // page navigation so users don't re-click after a round-trip).
+  const opinion = (mutation.data ?? cachedQuery.data ?? null) as CommunityOpinion | null;
 
   const canRun = Boolean(simulationId && communityId) && !mutation.isPending;
 

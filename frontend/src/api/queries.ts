@@ -56,6 +56,12 @@ export const queryKeys = {
     ["simulation", simId, "llm", "stats"] as const,
   llmImpact: (simId: string | null) =>
     ["simulation", simId, "llm", "impact"] as const,
+
+  // Opinion synthesis (EliteLLM)
+  communityOpinion: (simId: string | null, communityId: string | null) =>
+    ["simulation", simId, "community", communityId, "opinion"] as const,
+  overallOpinion: (simId: string | null) =>
+    ["simulation", simId, "overall-opinion"] as const,
 } as const;
 
 // ───────── Projects ─────────
@@ -293,10 +299,28 @@ export function useCommunityThread(
 // pays for only one LLM call.
 // @spec docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
 
+/** Read cached community opinion — populated by the synthesis mutation.
+ *  staleTime=Infinity: opinion is immutable at a given (sim, community, step). */
+export function useCommunityOpinionQuery(
+  simId: string | null,
+  communityId: string | null,
+) {
+  return useQuery({
+    queryKey: queryKeys.communityOpinion(simId, communityId),
+    queryFn: () => Promise.resolve(null),
+    enabled: false,        // never auto-fetches — cache-only
+    staleTime: Infinity,
+  });
+}
+
 export function useCommunityOpinionSynthesis(simId: string | null) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (communityId: string) =>
       apiClient.communityOpinion.synthesize(simId!, communityId),
+    onSuccess: (data, communityId) => {
+      qc.setQueryData(queryKeys.communityOpinion(simId, communityId), data);
+    },
   });
 }
 
@@ -306,9 +330,34 @@ export function useCommunityOpinionSynthesis(simId: string | null) {
  * the response always ships the breakdown alongside the headline.
  * @spec docs/spec/25_COMMUNITY_INSIGHT_SPEC.md#5-elitellm-opinion-synthesis
  */
+/** Read cached overall opinion — populated by the synthesis mutation. */
+export function useOverallOpinionQuery(simId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.overallOpinion(simId),
+    queryFn: () => Promise.resolve(null),
+    enabled: false,
+    staleTime: Infinity,
+  });
+}
+
 export function useOverallOpinionSynthesis(simId: string | null) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: () => apiClient.communityOpinion.synthesizeOverall(simId!),
+    onSuccess: (data) => {
+      // Cache the overall narrative
+      qc.setQueryData(queryKeys.overallOpinion(simId), data);
+      // Distribute per-community opinions into their individual cache slots
+      // so EliteLLMNarrativePanel shows data without a second round-trip.
+      if (data?.communities) {
+        for (const c of data.communities) {
+          qc.setQueryData(
+            queryKeys.communityOpinion(simId, c.community_id),
+            c,
+          );
+        }
+      }
+    },
   });
 }
 

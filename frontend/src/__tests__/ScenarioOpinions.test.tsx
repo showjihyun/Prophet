@@ -25,6 +25,7 @@ vi.mock('@/api/queries', () => ({
     isError: false,
     error: null,
   }),
+  useOverallOpinionQuery: () => ({ data: null }),
 }));
 
 // 5 communities: alpha, beta, gamma, delta, bridge

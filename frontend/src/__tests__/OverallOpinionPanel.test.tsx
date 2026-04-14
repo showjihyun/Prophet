@@ -30,6 +30,7 @@ const mutationState: MutationState = {
 
 vi.mock('@/api/queries', () => ({
   useOverallOpinionSynthesis: () => mutationState,
+  useOverallOpinionQuery: () => ({ data: null }),
 }));
 
 const MOCK_COMMUNITY: CommunityOpinion = {

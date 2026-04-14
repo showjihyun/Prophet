@@ -12,7 +12,10 @@
  * clicking into each community individually.
  */
 import { useState } from "react";
-import { useOverallOpinionSynthesis } from "@/api/queries";
+import {
+  useOverallOpinionSynthesis,
+  useOverallOpinionQuery,
+} from "@/api/queries";
 import type { CommunityOpinion, OverallOpinion } from "@/types/api";
 
 interface Props {
@@ -34,8 +37,9 @@ const SENTIMENT_COLOR: Record<string, string> = {
 };
 
 export default function OverallOpinionPanel({ simulationId }: Props) {
+  const cachedQuery = useOverallOpinionQuery(simulationId);
   const mutation = useOverallOpinionSynthesis(simulationId);
-  const data: OverallOpinion | undefined = mutation.data;
+  const data = (mutation.data ?? cachedQuery.data ?? undefined) as OverallOpinion | undefined;
   const canRun = Boolean(simulationId) && !mutation.isPending;
 
   return (

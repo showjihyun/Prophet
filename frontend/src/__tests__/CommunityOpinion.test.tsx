@@ -32,6 +32,7 @@ vi.mock('@/api/queries', () => ({
     isError: false,
     error: null,
   }),
+  useCommunityOpinionQuery: () => ({ data: null }),
 }));
 
 const MOCK_STEP = {
